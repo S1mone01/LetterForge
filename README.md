@@ -6,7 +6,7 @@
 
 **LetterForge Pro** è un editor tipografico SVG desktop per creare, manipolare ed esportare lettere e logo personalizzati. Costruito con Electron per un'esperienza cross-platform.
 
-![LetterForge Pro](https://via.placeholder.com/800x450/0d0d0f/c8ff00?text=LetterForge+Pro+Screenshot)
+> 💾 **Esportazione veloce e semplice**
 
 ---
 
