@@ -9,7 +9,18 @@
       "Bash(npm install)",
       "Bash(git init)",
       "Bash(git remote *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git config *)",
+      "Bash(set *)",
+      "Bash(start *)",
+      "Bash(git push *)",
+      "Bash($env:gh_token=\"ghp_xusu5glnuxczlm5lifqxucuogvbo1y1batyz\")",
+      "Bash(npm run *)",
+      "Bash(rmdir *)",
+      "Bash(npx *)",
+      "Bash(powershell *)",
+      "Bash(select-object *)"
     ]
   },
   "$version": 3

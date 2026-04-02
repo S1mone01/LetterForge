@@ -33,3 +33,6 @@ desktop.ini
 # Temporary files
 tmp/
 temp/
+
+.qwen/
+gha-creds-*.json

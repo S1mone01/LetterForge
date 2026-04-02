@@ -2,8 +2,11 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path  = require('path');
 const fs    = require('fs');
 
-// Auto-update imports (only in production)
-const { autoUpdater } = require('electron-updater');
+// Auto-update (only loaded in production)
+let autoUpdater = null;
+if (app.isPackaged) {
+  autoUpdater = require('electron-updater').autoUpdater;
+}
 
 // ── Splash screen window ───────────────────────────────────────────────────
 let splashWindow = null;
@@ -145,91 +148,108 @@ function createWindow() {
   // Rimuovi menu di default
   win.setMenuBarVisibility(false);
 
-  // ── Auto-update configuration ───────────────────────────────────────────
-  // Disable automatic download in production
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.allowDowngrade = false;
-  autoUpdater.allowPrerelease = false;
+  // ── Auto-update configuration (only in production) ──────────────────────
+  if (autoUpdater) {
+    // Disable automatic download in production
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = false;
 
-  // Log update events (useful for debugging)
-  autoUpdater.logger = null; // Disable built-in logger, use console
+    // Log update events (useful for debugging)
+    autoUpdater.logger = null; // Disable built-in logger, use console
 
-  autoUpdater.on('checking-for-update', () => {
-    console.log('Checking for updates...');
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('update-status', { status: 'checking' });
-    }
-  });
+    // Set feed URL for GitHub releases (required for electron-updater)
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'S1mone01',
+      repo: 'LetterForge'
+    });
 
-  autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info.version);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('update-status', { 
-        status: 'available', 
-        version: info.version,
-        releaseNotes: info.releaseNotes 
-      });
-    }
-  });
+    autoUpdater.on('checking-for-update', () => {
+      console.log('[AUTO-UPDATE] Checking for updates...');
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('update-status', { status: 'checking' });
+      }
+    });
 
-  autoUpdater.on('update-not-available', (info) => {
-    console.log('Update not available:', info.version);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('update-status', { 
-        status: 'not-available', 
-        version: info.version 
-      });
-    }
-  });
+    autoUpdater.on('update-available', (info) => {
+      console.log('[AUTO-UPDATE] Update available:', info.version);
+      console.log('[AUTO-UPDATE] Release notes:', info.releaseNotes);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('update-status', {
+          status: 'available',
+          version: info.version,
+          releaseNotes: info.releaseNotes
+        });
+      }
+    });
 
-  autoUpdater.on('download-progress', (progressObj) => {
-    console.log(`Download progress: ${progressObj.percent}%`);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('update-status', {
-        status: 'downloading',
-        percent: progressObj.percent,
-        bytesPerSecond: progressObj.bytesPerSecond,
-        transferred: progressObj.transferred,
-        total: progressObj.total
-      });
-    }
-  });
+    autoUpdater.on('update-not-available', (info) => {
+      console.log('[AUTO-UPDATE] Update not available, version:', info.version);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('update-status', {
+          status: 'not-available',
+          version: info.version
+        });
+      }
+    });
 
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info.version);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('update-status', { 
-        status: 'downloaded', 
-        version: info.version 
-      });
-    }
-  });
+    autoUpdater.on('download-progress', (progressObj) => {
+      console.log(`[AUTO-UPDATE] Download progress: ${progressObj.percent}%`);
+      console.log(`[AUTO-UPDATE] Speed: ${progressObj.bytesPerSecond} bytes/sec`);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('update-status', {
+          status: 'downloading',
+          percent: progressObj.percent,
+          bytesPerSecond: progressObj.bytesPerSecond,
+          transferred: progressObj.transferred,
+          total: progressObj.total
+        });
+      }
+    });
 
-  autoUpdater.on('error', (err) => {
-    console.error('Update error:', err);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('update-status', { 
-        status: 'error', 
-        error: err.message 
-      });
-    }
-  });
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log('[AUTO-UPDATE] Update downloaded:', info.version);
+      console.log('[AUTO-UPDATE] Downloaded file:', info.downloadedFile);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('update-status', {
+          status: 'downloaded',
+          version: info.version
+        });
+      }
+    });
 
-  // Check for updates after a delay (allow window to load)
-  if (app.isPackaged) {
+    autoUpdater.on('error', (err) => {
+      console.error('[AUTO-UPDATE] Error:', err);
+      console.error('[AUTO-UPDATE] Error message:', err.message);
+      console.error('[AUTO-UPDATE] Error stack:', err.stack);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('update-status', {
+          status: 'error',
+          error: err.message
+        });
+      }
+    });
+
+    // Check for updates after app is loaded (2 seconds delay)
     setTimeout(() => {
-      autoUpdater.checkForUpdates();
-    }, 5000);
+      console.log('Auto-checking for updates...');
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('Auto-check failed:', err.message);
+      });
+    }, 2000);
   }
 
   // ── IPC handlers for auto-update ────────────────────────────────────────
   ipcMain.handle('check-for-updates', async () => {
-    if (!app.isPackaged) {
+    if (!autoUpdater) {
       return { available: false, reason: 'dev-mode' };
     }
     try {
+      console.log('Manual check for updates triggered...');
       const result = await autoUpdater.checkForUpdates();
+      console.log('Check result:', result?.updateInfo?.version);
       return { available: result?.updateInfo != null };
     } catch (error) {
       console.error('Error checking for updates:', error);
@@ -238,7 +258,7 @@ function createWindow() {
   });
 
   ipcMain.handle('download-update', async () => {
-    if (!app.isPackaged) {
+    if (!autoUpdater) {
       return { success: false, reason: 'dev-mode' };
     }
     try {
@@ -251,7 +271,7 @@ function createWindow() {
   });
 
   ipcMain.handle('quit-and-install', async () => {
-    if (!app.isPackaged) {
+    if (!autoUpdater) {
       return { success: false, reason: 'dev-mode' };
     }
     autoUpdater.quitAndInstall();

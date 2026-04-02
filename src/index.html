@@ -210,6 +210,28 @@
   .svg-badge{display:inline-block;padding:1px 7px;background:rgba(255,107,53,.15);color:#ff6b35;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.06em}
   .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 
+  /* Auto-update notification panel */
+  #update-notify{
+    position:fixed;top:60px;left:16px;z-index:10000;
+    background:var(--panel);border:1px solid var(--accent);
+    border-radius:6px;padding:14px 16px;min-width:280px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5),0 0 0 1px rgba(200,255,0,.1);
+    display:none;opacity:0;transform:translateY(-10px);
+    transition:all .3s ease;
+  }
+  #update-notify.show{display:block;opacity:1;transform:translateY(0);}
+  #update-notify .un-title{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px;letter-spacing:-.01em}
+  #update-notify .un-ver{font-size:11px;color:var(--text);margin-bottom:8px}
+  #update-notify .un-bar{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden;margin:10px 0}
+  #update-notify .un-fill{height:100%;background:linear-gradient(90deg,var(--accent),#8fd300);width:0%;transition:width .2s}
+  #update-notify .un-pct{font-size:10px;color:var(--muted);text-align:right;margin-top:4px}
+  #update-notify .un-btns{display:flex;gap:8px;margin-top:12px}
+  #update-notify .un-btns .btn{flex:1;justify-content:center}
+  #update-notify .un-close{position:absolute;top:8px;right:8px;width:20px;height:20px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .1s}
+  #update-notify .un-close:hover{color:var(--text);background:rgba(255,255,255,.05)}
+  #update-notify .un-icon{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  #update-notify .un-icon svg{width:18px;height:18px;color:var(--accent)}
+
   /* Custom confirm dialog */
   #custom-confirm{
     display:none;position:fixed;inset:0;z-index:99999;
@@ -326,7 +348,10 @@
 <div class="app">
   <div class="left-panel">
     <div class="sec">
-      <div class="sec-title">Progetto</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div class="sec-title" style="margin:0">Progetto</div>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.0.6</span>
+      </div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
@@ -504,6 +529,24 @@
       <button class="btn" id="custom-confirm-cancel">Annulla</button>
     </div>
   </div>
+</div>
+
+<!-- Auto-update notification panel -->
+<div id="update-notify">
+  <button class="un-close" onclick="hideUpdateNotify()" title="Chiudi">×</button>
+  <div class="un-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
+    <span class="un-title">Aggiornamento disponibile!</span>
+  </div>
+  <div class="un-ver" id="un-version">Versione 4.0.6</div>
+  <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
+  <div class="un-pct" id="un-pct">0%</div>
+  <div class="un-btns" id="un-btns">
+    <button class="btn" onclick="hideUpdateNotify()">Più tardi</button>
+    <button class="btn primary" onclick="downloadUpdate()" id="un-download-btn">Scarica e installa</button>
+    <button class="btn primary" onclick="quitAndInstall()" id="un-restart-btn" style="display:none">↻ Riavvia e installa</button>
+  </div>
+  <div id="un-info" style="display:none;margin-top:12px;font-size:10px;color:var(--muted);line-height:1.6"></div>
 </div>
 
 <script>
@@ -2799,14 +2842,140 @@ requestAnimationFrame(() => {
 // forziamo il blur dell'elemento attivo così i keydown tornano al documento.
 document.getElementById('cw').addEventListener('mousedown', function(e) {
   if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA'){
-    if(document.activeElement && 
+    if(document.activeElement &&
        document.activeElement !== document.body &&
-       document.activeElement.tagName !== 'INPUT' && 
+       document.activeElement.tagName !== 'INPUT' &&
        document.activeElement.tagName !== 'TEXTAREA'){
       document.activeElement.blur();
     }
   }
 }, true);
+
+// ── AUTO-UPDATE NOTIFICATION FUNCTIONS ───────────────────────────────────
+let updateState = { available: false, version: '', downloading: false, downloaded: false };
+
+function showUpdateNotify(info) {
+  const panel = document.getElementById('update-notify');
+  const verEl = document.getElementById('un-version');
+  const fillEl = document.getElementById('un-fill');
+  const pctEl = document.getElementById('un-pct');
+  const downloadBtn = document.getElementById('un-download-btn');
+  const restartBtn = document.getElementById('un-restart-btn');
+  const infoEl = document.getElementById('un-info');
+
+  updateState.available = true;
+  updateState.version = info.version;
+
+  verEl.textContent = 'Versione ' + info.version;
+  fillEl.style.width = '0%';
+  pctEl.textContent = '0%';
+  downloadBtn.style.display = 'block';
+  restartBtn.style.display = 'none';
+  infoEl.style.display = 'none';
+
+  panel.classList.add('show');
+}
+
+function hideUpdateNotify() {
+  const panel = document.getElementById('update-notify');
+  panel.classList.remove('show');
+}
+
+function downloadUpdate() {
+  if (updateState.downloading) return;
+  updateState.downloading = true;
+
+  const downloadBtn = document.getElementById('un-download-btn');
+  const restartBtn = document.getElementById('un-restart-btn');
+  const fillEl = document.getElementById('un-fill');
+  const pctEl = document.getElementById('un-pct');
+
+  downloadBtn.style.display = 'none';
+  fillEl.style.width = '10%';
+  pctEl.textContent = 'Inizio download...';
+
+  window.electronAPI.downloadUpdate().then(result => {
+    if (!result.success) {
+      toast('Errore download: ' + (result.error || 'sconosciuto'));
+      updateState.downloading = false;
+      downloadBtn.style.display = 'block';
+      fillEl.style.width = '0%';
+      pctEl.textContent = '0%';
+    }
+  }).catch(err => {
+    toast('Errore download: ' + err.message);
+    updateState.downloading = false;
+    downloadBtn.style.display = 'block';
+    fillEl.style.width = '0%';
+    pctEl.textContent = '0%';
+  });
+}
+
+function quitAndInstall() {
+  window.electronAPI.quitAndInstall();
+}
+
+function handleUpdateStatus(data) {
+  console.log('[RENDERER] Update status received:', data);
+  
+  const panel = document.getElementById('update-notify');
+  const verEl = document.getElementById('un-version');
+  const fillEl = document.getElementById('un-fill');
+  const pctEl = document.getElementById('un-pct');
+  const downloadBtn = document.getElementById('un-download-btn');
+  const restartBtn = document.getElementById('un-restart-btn');
+  const infoEl = document.getElementById('un-info');
+
+  switch(data.status) {
+    case 'checking':
+      console.log('[RENDERER] Checking for updates...');
+      break;
+
+    case 'available':
+      console.log('[RENDERER] Update available:', data.version);
+      showUpdateNotify({ version: data.version });
+      break;
+
+    case 'not-available':
+      console.log('[RENDERER] No update available');
+      hideUpdateNotify();
+      break;
+
+    case 'downloading':
+      updateState.downloading = true;
+      const pct = Math.round(data.percent);
+      fillEl.style.width = pct + '%';
+      pctEl.textContent = pct + '% - Download in corso...';
+      console.log('[RENDERER] Downloading:', pct + '%');
+      break;
+
+    case 'downloaded':
+      updateState.downloading = false;
+      updateState.downloaded = true;
+      verEl.textContent = 'Versione ' + data.version + ' pronta!';
+      fillEl.style.width = '100%';
+      pctEl.textContent = '100%';
+      downloadBtn.style.display = 'none';
+      restartBtn.style.display = 'block';
+      infoEl.style.display = 'block';
+      infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
+      console.log('[RENDERER] Download completed, ready to install');
+      toast('Download completato! Riavvia per installare.');
+      break;
+
+    case 'error':
+      updateState.downloading = false;
+      console.error('[RENDERER] Update error:', data.error);
+      toast('Errore aggiornamento: ' + (data.error || 'sconosciuto'));
+      hideUpdateNotify();
+      break;
+  }
+}
+
+// Initialize update listener
+if (window.electronAPI && window.electronAPI.onUpdateStatus) {
+  window.electronAPI.onUpdateStatus(handleUpdateStatus);
+}
 </script>
 </body>
 </html>

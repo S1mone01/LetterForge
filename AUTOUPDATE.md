@@ -1,153 +1,205 @@
-# Auto-Update Setup Guide
+# LetterForge Pro - Auto-Update Guide
 
-This guide explains how to configure and use the automatic update system in LetterForge Pro.
+This guide explains how to configure, build, and publish updates for LetterForge Pro.
+
+## Quick Start
+
+### Build and Publish (Recommended)
+
+```powershell
+# Windows (PowerShell)
+$env:GITHUB_TOKEN="ghp_XXXXXXXXXXXXXXXXXXXX"
+npm run release
+
+# Windows (CMD)
+set GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXX
+npm run release
+
+# macOS/Linux
+export GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXX
+npm run release
+```
+
+This single command will:
+1. Build the NSIS installer for Windows
+2. Generate auto-update metadata (`latest.yml`, `blockmap`)
+3. Publish everything to GitHub Releases automatically
+
+---
 
 ## Configuration
 
 ### 1. GitHub Repository Setup
 
-Before the auto-update can work, you need to:
+The auto-update is configured to use GitHub Releases. Ensure:
 
-1. **Create a GitHub repository** (if you haven't already):
+1. **Repository exists**: `https://github.com/S1mone01/LetterForge`
+2. **GitHub Token**: Create a personal access token with `repo` scope
+   - Go to: GitHub → Settings → Developer settings → Personal access tokens
+   - Create token with `repo` scope (full control of private repositories)
+
+### 2. Package.json Configuration
+
+The build configuration is in `package.json`:
+
+```json
+{
+  "version": "4.0.2",
+  "build": {
+    "appId": "com.letterforge.pro",
+    "publish": {
+      "provider": "github",
+      "owner": "S1mone01",
+      "repo": "LetterForge",
+      "releaseType": "release"
+    }
+  }
+}
+```
+
+**Important**: Update the `version` field in `package.json` before each release!
+
+---
+
+## Build Process
+
+### What Gets Built
+
+When you run `npm run release` or `npm run build:win`, electron-builder creates:
+
+| File | Description |
+|------|-------------|
+| `LetterForge Pro Setup 4.0.2.exe` | NSIS installer for Windows |
+| `latest.yml` | Auto-update metadata (YAML format) |
+| `blockmap` | Differential update data (for faster updates) |
+
+### Build Commands
+
+```bash
+# Build only (no publish)
+npm run build:win
+
+# Build and publish to GitHub (recommended)
+npm run release
+```
+
+---
+
+## Publishing to GitHub
+
+### Option 1: Automatic Publish (Recommended)
+
+Using `npm run release` with `GITHUB_TOKEN` environment variable:
+
+```powershell
+$env:GITHUB_TOKEN="ghp_XXXXXXXXXXXXXXXXXXXX"
+npm run release
+```
+
+This automatically:
+- Creates a new release on GitHub (tagged as `v4.0.2`)
+- Uploads the installer executable
+- Uploads `latest.yml` and `blockmap` files
+- Marks the release as the latest
+
+### Option 2: Manual Upload
+
+If you prefer manual control:
+
+1. **Build the app**:
    ```bash
-   git init
-   git remote add origin https://github.com/YOUR_USERNAME/LetterForge-Desktop.git
+   npm run build:win
    ```
 
-2. **Update `package.json`** with your GitHub username:
-   
-   Find this section in `package.json`:
-   ```json
-   "publish": {
-     "provider": "github",
-     "owner": "YOUR_GITHUB_USERNAME",
-     "repo": "LetterForge-Desktop",
-     "private": false,
-     "releaseType": "release"
-   }
-   ```
-   
-   Replace `YOUR_GITHUB_USERNAME` with your actual GitHub username.
+2. **Upload to GitHub Releases**:
+   - Go to: `https://github.com/S1mone01/LetterForge/releases/new`
+   - Create a new tag: `v4.0.2`
+   - Upload these files from `dist/`:
+     - `LetterForge Pro Setup 4.0.2.exe`
+     - `latest.yml`
+     - `blockmap`
+   - Check "Set as the latest release"
+   - Click "Publish release"
 
-3. **Set GitHub Token (for publishing)**:
-   
-   To publish releases, you need a GitHub personal access token:
-   - Go to GitHub → Settings → Developer settings → Personal access tokens
-   - Create a token with `repo` scope
-   - Set environment variable before building:
-     ```bash
-     # Windows (PowerShell)
-     $env:GH_TOKEN="your_token_here"
-     
-     # Windows (CMD)
-     set GH_TOKEN=your_token_here
-     
-     # macOS/Linux
-     export GH_TOKEN=your_token_here
-     ```
+### Option 3: Using publish-github.js Script
 
-### 2. Building for Auto-Update
-
-Build your application with the appropriate command:
-
-```bash
-# Windows
+```powershell
+# Build first
 npm run build:win
 
-# macOS
-npm run build:mac
-
-# Linux
-npm run build:linux
+# Then publish
+$env:GITHUB_TOKEN="ghp_XXXXXXXXXXXXXXXXXXXX"
+node publish-github.js
 ```
 
-The build process will:
-- Create the installer/executable in `dist/`
-- Generate `latest.yml` (or `latest-mac.yml` / `latest-linux.yml`) - **this is required for auto-update!**
-- Both files need to be uploaded to GitHub
-
-### 3. Publishing to GitHub
-
-#### Option A: Manual Upload
-
-1. Create a new release on GitHub
-2. Upload the build artifacts from `dist/`:
-   - The installer (`.exe`, `.dmg`, or `.AppImage`)
-   - The `latest*.yml` file (metadata for auto-update)
-   - `blockmap` file (for differential updates)
-3. Mark the release as "Latest release" (important!)
-
-#### Option B: Automatic Publish
-
-If you configured the `GH_TOKEN` environment variable, electron-builder can publish automatically:
-
-```bash
-# Set token first
-$env:GH_TOKEN="your_token_here"  # PowerShell
-
-# Build and publish
-npm run build:win
-```
-
-The files will be automatically uploaded to GitHub as a draft release.
+---
 
 ## How Auto-Update Works
 
 ### In the Application
 
-1. **Automatic Check**: The app checks for updates 5 seconds after launch (production mode only)
+1. **Automatic Check**: The app checks for updates 3 seconds after launch (production mode only)
 
-2. **Manual Check**: You can add a "Check for Updates" button in your UI that calls:
-   ```javascript
-   window.electronAPI.checkForUpdates()
-   ```
+2. **Manual Check**: Users can click the "Aggiornamenti" button in the header
 
-3. **Status Updates**: The app receives update status via:
-   ```javascript
-   window.electronAPI.onUpdateStatus((status) => {
-     // status: { status: 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' }
-   })
-   ```
+3. **Update Notification**: When an update is available, a panel appears in the top-left corner showing:
+   - New version number
+   - Download progress
+   - Install button
 
 4. **Download & Install**:
-   ```javascript
-   // Download update
-   await window.electronAPI.downloadUpdate()
-   
-   // Install and restart
-   await window.electronAPI.quitAndInstall()
-   ```
+   - User clicks "Scarica e installa"
+   - Download progress is shown
+   - After download, user is prompted to open the release page
+   - User downloads and runs the new installer
 
 ### Update Flow
 
 ```
-┌─────────────────┐
-| Check for Update|
-└────────┬────────┘
-         │
-    ┌────▼────┐
-    │Available?│
-    └────┬────┘
-         │ Yes
-    ┌────▼────────┐
-    │ Download    │
-    │ (shows % )  │
-    └────┬────────┘
-         │
-    ┌────▼────────┐
-    │ Downloaded  │
-    │ Prompt user │
-    └────┬────────┘
-         │
-    ┌────▼────────┐
-    │ Quit &      │
-    │ Install     │
-    └─────────────┘
+┌──────────────────────┐
+│ App starts (3s delay)│
+└──────────┬───────────┘
+           │
+    ┌──────▼──────┐
+    │ Check GitHub│
+    └──────┬──────┘
+           │
+    ┌──────▼──────────┐
+    │ Update Available?│
+    └──────┬──────────┘
+           │ Yes
+    ┌──────▼────────┐
+    │ Show Notify   │
+    │ (top-left)    │
+    └──────┬────────┘
+           │
+    ┌──────▼────────┐
+    │ User clicks   │
+    │ "Scarica"     │
+    └──────┬────────┘
+           │
+    ┌──────▼────────┐
+    │ Download      │
+    │ (shows %)     │
+    └──────┬────────┘
+           │
+    ┌──────▼─────────┐
+    │ Show "Apri    │
+    │ release" btn   │
+    └──────┬─────────┘
+           │
+    ┌──────▼──────────┐
+    │ User downloads  │
+    │ and runs new    │
+    │ installer       │
+    └─────────────────┘
 ```
+
+---
 
 ## Status Events
 
-The `update-status` event sends these statuses:
+The app receives these update statuses via IPC:
 
 | Status | Description | Data |
 |--------|-------------|------|
@@ -155,97 +207,188 @@ The `update-status` event sends these statuses:
 | `available` | New version found | `version`, `releaseNotes` |
 | `not-available` | Already on latest version | `version` |
 | `downloading` | Downloading update | `percent`, `bytesPerSecond`, `transferred`, `total` |
-| `downloaded` | Update ready to install | `version` |
+| `downloaded` | Update downloaded | `version` |
 | `error` | Update failed | `error` message |
+
+---
 
 ## Testing Auto-Update
 
 ### In Development Mode
 
-Auto-update is **disabled** in development mode. The IPC handlers return:
-```javascript
-{ available: false, reason: 'dev-mode' }
-```
+Auto-update is **disabled** in development mode. When running `npm start`:
+- The "Aggiornamenti" button will show "Funzione disponibile solo in produzione"
+- IPC handlers return `{ available: false, reason: 'dev-mode' }`
 
 ### In Production Mode
 
-To test without publishing to GitHub:
+To test the auto-update flow:
 
-1. Build the app: `npm run build:win`
-2. Install the built application
-3. Create a new GitHub release with a higher version number
-4. Run the installed app and wait 5 seconds (or trigger manual check)
+1. **Build the app**:
+   ```bash
+   npm run build:win
+   ```
+
+2. **Install the built application**:
+   - Run `dist/LetterForge Pro Setup 4.0.2.exe`
+   - Install to default location
+
+3. **Create a new release**:
+   - Update version in `package.json` (e.g., `4.0.3`)
+   - Build and publish: `npm run release`
+
+4. **Test the update**:
+   - Run the installed app
+   - Wait 3 seconds (automatic check) OR click "Aggiornamenti" button
+   - Verify the notification appears
+
+---
 
 ## Troubleshooting
 
 ### Update not detected
 
-- Ensure `latest.yml` is uploaded to GitHub release
-- Check that the release is marked as "Latest release"
-- Verify `package.json` has correct `owner` and `repo`
-- Check console logs for errors
+**Problem**: App doesn't detect the new release
+
+**Solutions**:
+1. Ensure `latest.yml` is uploaded to the GitHub release
+2. Check that the release is marked as "Latest release"
+3. Verify `package.json` has correct `owner` and `repo`
+4. Check console logs (DevTools → Console) for errors
 
 ### Download fails
 
-- Ensure GitHub token has proper permissions (if publishing automatically)
-- Check network connectivity
-- Verify release files are publicly accessible
+**Problem**: Update download fails
+
+**Solutions**:
+1. Verify GitHub token has `repo` scope
+2. Check network connectivity
+3. Ensure release files are publicly accessible
+4. Check that all required files are uploaded (`.exe`, `latest.yml`, `blockmap`)
 
 ### Common Errors
 
 ```
 Error: Cannot find channel "latest.yml"
-→ Upload the latest.yml file to GitHub release
+→ Upload the latest.yml file to the GitHub release
+→ Ensure the release is tagged correctly (e.g., v4.0.2)
 
 Error: 404 Not Found
 → Check repo owner/name in package.json
-→ Ensure release is public or token has access
+→ Ensure GitHub token is valid and has repo access
+→ Verify the release exists and is public
+
+Error: Cannot resolve latest.yml
+→ Make sure latest.yml is uploaded as a release asset
+→ Check the file wasn't corrupted during upload
 ```
+
+### Build fails
+
+**Problem**: `npm run build:win` fails
+
+**Solutions**:
+1. Clean node_modules: `rm -rf node_modules && npm install`
+2. Check Node.js version: `node --version` (needs 18+)
+3. Verify all dependencies: `npm install`
+4. Run as administrator if permission errors occur
+
+---
 
 ## Security Notes
 
-- Never commit `GH_TOKEN` to version control
+- **Never commit `GITHUB_TOKEN`** to version control
 - Use environment variables or secure vaults for tokens
 - The token is only needed for publishing, not for end-users
-- Auto-update uses HTTPS and verifies file integrity via blockmap
+- Auto-update uses HTTPS and verifies file integrity via `blockmap`
+- Users download directly from GitHub Releases (trusted source)
 
-## Example UI Integration
+---
 
-Here's a simple example for adding update UI to your renderer:
+## Version Management
 
-```javascript
-// Check for updates button
-document.getElementById('check-update-btn').addEventListener('click', async () => {
-  const result = await window.electronAPI.checkForUpdates();
-  console.log('Update check result:', result);
-});
+### Before Each Release
 
-// Listen for update status
-window.electronAPI.onUpdateStatus((status) => {
-  console.log('Update status:', status);
-  
-  switch(status.status) {
-    case 'available':
-      if (confirm(`Update ${status.version} available! Download now?`)) {
-        window.electronAPI.downloadUpdate();
-      }
-      break;
-    case 'downloaded':
-      if (confirm('Update downloaded! Restart to install?')) {
-        window.electronAPI.quitAndInstall();
-      }
-      break;
-    case 'error':
-      alert('Update error: ' + status.error);
-      break;
-  }
-});
+1. Update version in `package.json`:
+   ```json
+   {
+     "version": "4.0.3"
+   }
+   ```
+
+2. Update version in `src/index.html` (if displayed in UI):
+   ```html
+   <span id="app-version">v4.0.3</span>
+   ```
+
+3. Commit the changes:
+   ```bash
+   git add package.json src/index.html
+   git commit -m "chore: bump version to 4.0.3"
+   git push
+   ```
+
+4. Build and publish:
+   ```bash
+   npm run release
+   ```
+
+### Semantic Versioning
+
+LetterForge Pro follows semantic versioning:
+- **MAJOR.MINOR.PATCH** (e.g., 4.0.2)
+- **MAJOR**: Breaking changes
+- **MINOR**: New features (backwards compatible)
+- **PATCH**: Bug fixes and minor improvements
+
+---
+
+## File Structure
+
+```
+LetterForge-Desktop/
+├── package.json           # Version & build config
+├── main.js                # Auto-update IPC handlers
+├── build-and-publish.js   # Unified build script
+├── publish-github.js      # Manual publish script
+├── dist/                  # Build output
+│   ├── LetterForge Pro Setup 4.0.2.exe
+│   ├── latest.yml         # Auto-update metadata
+│   └── blockmap           # Differential update data
+└── src/
+    └── index.html         # UI with update button
 ```
 
-## Next Steps
+---
 
-1. ✅ Update `package.json` with your GitHub username
-2. ✅ Create GitHub repository
-3. ✅ Build and test the application
-4. ✅ Create first release on GitHub
-5. ✅ Test auto-update by creating a second release with higher version
+## Example Release Workflow
+
+### Complete Release Process
+
+```bash
+# 1. Update version in package.json
+# Edit package.json: "version": "4.0.3"
+
+# 2. Commit changes
+git add package.json
+git commit -m "chore: release v4.0.3"
+git push
+
+# 3. Set GitHub token
+$env:GITHUB_TOKEN="ghp_XXXXXXXXXXXXXXXXXXXX"  # PowerShell
+
+# 4. Build and publish
+npm run release
+
+# 5. Verify release
+# Visit: https://github.com/S1mone01/LetterForge/releases/tag/v4.0.3
+```
+
+---
+
+## Support
+
+For issues or questions:
+- Check the [GitHub Issues](https://github.com/S1mone01/LetterForge/issues)
+- Review console logs for error messages
+- Verify all configuration files are correct
