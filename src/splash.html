@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LetterForge Pro - Caricamento</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap');
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    :root {
+      --bg: #0d0d0f;
+      --panel: #13131a;
+      --panel2: #1a1a25;
+      --border: #2a2a3a;
+      --accent: #c8ff00;
+      --accent2: #ff6b35;
+      --text: #e8e8f0;
+      --muted: #5a5a7a;
+    }
+    
+    body {
+      height: 100vh;
+      width: 100vw;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      overflow: hidden;
+    }
+    
+    .splash-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 40px;
+      width: 100%;
+      max-width: 500px;
+      padding: 40px;
+    }
+    
+    /* Logo styling - matches header logo but larger and centered */
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 56px;
+      letter-spacing: -0.02em;
+      text-align: center;
+      white-space: nowrap;
+    }
+    
+    .logo .light {
+      color: var(--accent);
+    }
+    
+    .logo .dark {
+      color: var(--text);
+    }
+    
+    .logo-subtitle {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: -30px;
+      text-align: center;
+    }
+    
+    /* Loading bar container */
+    .loading-container {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .loading-bar-wrapper {
+      width: 100%;
+      height: 4px;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .loading-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px rgba(200, 255, 0, 0.4);
+    }
+    
+    .loading-text {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    
+    .loading-status {
+      font-size: 10px;
+      color: var(--text);
+      text-align: center;
+      opacity: 0.7;
+      min-height: 14px;
+    }
+    
+    /* Subtle glow effect behind logo */
+    .logo-glow {
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(200, 255, 0, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: -1;
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-glow"></div>
+  
+  <div class="splash-container">
+    <!-- Logo -->
+    <div>
+      <div class="logo">
+        <span class="light">Letter</span><span class="dark">Forge</span>
+      </div>
+    </div>
+    
+    <!-- Loading bar -->
+    <div class="loading-container">
+      <div class="loading-bar-wrapper">
+        <div class="loading-bar" id="loading-bar"></div>
+      </div>
+      <div class="loading-text" id="loading-percent">0%</div>
+      <div class="loading-status" id="loading-status">Inizializzazione...</div>
+    </div>
+  </div>
+  
+  <script>
+    // Listen for loading progress from main window
+    let progress = 0;
+    
+    function updateProgress(percent, status) {
+      progress = Math.min(100, Math.max(0, percent));
+      document.getElementById('loading-bar').style.width = progress + '%';
+      document.getElementById('loading-percent').textContent = Math.round(progress) + '%';
+      if (status) {
+        document.getElementById('loading-status').textContent = status;
+      }
+    }
+    
+    // Listen for messages from main window via Electron IPC
+    if (window.electronAPI) {
+      window.electronAPI.onSplashProgress((data) => {
+        updateProgress(data.progress, data.status);
+      });
+      
+      window.electronAPI.onSplashHide(() => {
+        // Fade out animation
+        document.body.style.transition = 'opacity 0.4s ease';
+        document.body.style.opacity = '0';
+        setTimeout(() => {
+          document.body.style.display = 'none';
+        }, 400);
+      });
+    }
+    
+    // Initial animation
+    setTimeout(() => {
+      updateProgress(80, 'Caricamento risorse...');
+    }, 300);
+  </script>
+</body>
+</html>

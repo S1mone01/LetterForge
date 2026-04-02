@@ -1,0 +1,83 @@
+{
+  "name": "letterforge-pro",
+  "version": "4.0.0",
+  "description": "LetterForge Pro – editor tipografico SVG desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.letterforge.pro",
+    "productName": "LetterForge Pro",
+    "copyright": "LetterForge",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*"
+    ],
+    "extraResources": [],
+    "extraFiles": [
+      {
+        "from": "font",
+        "to": "font",
+        "filter": [
+          "**/*.ttf",
+          "**/*.otf",
+          "**/*.woff",
+          "**/*.woff2"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "publish": ["github"]
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns",
+      "publish": ["github"]
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png",
+      "publish": ["github"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "it_IT",
+        "en_US"
+      ],
+      "language": "1040"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "S1mone01",
+      "repo": "LetterForge",
+      "private": false,
+      "releaseType": "release"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-packager": "^17.1.2"
+  }
+}
