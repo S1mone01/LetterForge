@@ -19,17 +19,19 @@
 
 ```
 LetterForge-Desktop/
-├── main.js          # Electron main process (window creation, IPC handlers, file loading)
+├── main.js          # Electron main process (window creation, IPC handlers, file loading, migration)
 ├── preload.js       # Electron preload script (contextBridge for IPC)
 ├── package.json     # Project config & electron-builder settings
 ├── src/
 │   ├── index.html   # Renderer process (UI + all frontend logic)
 │   └── splash.html  # Splash screen shown during app loading
-├── font/            # Auto-loaded fonts directory
-├── svg/             # Auto-loaded SVG assets directory (created at runtime)
+├── font/            # Development-only fonts directory (NOT bundled)
+├── svg/             # Development-only SVG assets directory (NOT bundled)
 ├── assets/          # App icons for build (icon.ico, icon.icns, icon.png)
 └── dist/            # Build output directory
 ```
+
+**Important**: In production, user fonts and SVGs are stored in the Electron user data directory (`%APPDATA%/LetterForge Pro/` on Windows), which persists across app updates. The `font/` and `svg/` folders in the project root are only used during development.
 
 ### Technologies
 - **Runtime**: Electron 29.x
@@ -66,7 +68,7 @@ Launches the app in development mode with hot reload disabled (file-based).
 ### Build Configuration
 Builds are configured in `package.json` under the `"build"` key:
 - **App ID**: `com.letterforge.pro`
-- **Extra Files**: Font files from `font/` are bundled automatically
+- **No Extra Files**: User fonts and SVGs are NOT bundled (stored in user data directory instead)
 - **NSIS Installer**: Supports Italian (1040) and English languages, allows custom install directory
 
 ## Development Conventions
@@ -139,6 +141,8 @@ Projects are saved as JSON with this structure:
 - **Export**: Uses `dialog.showSaveDialog` for user-selected save location
 - **Project Save**: Saves workspace state as JSON (`.json`) with canvas settings, elements, and SVG library
 - **Project Load**: Restores complete workspace from saved JSON file
+- **User Data Storage**: Fonts and SVGs are stored in Electron's user data directory (`%APPDATA%/LetterForge Pro/` on Windows), which persists across app updates
+- **Migration**: On first launch after an update, files from the old location (next to executable) are automatically migrated to the user data directory
 
 ### UI Conventions
 - **Dark theme** with accent colors (`#c8ff00` lime, `#ff6b35` orange)
@@ -183,10 +187,14 @@ If icons are missing, remove the `"icon"` field from `package.json` to use Elect
 
 ### User Fonts
 Place `.ttf`, `.otf`, `.woff`, `.woff2` files in:
-- **Development**: `font/` in project root
-- **Production**: `font/` alongside the executable
+- **Development**: `font/` in project root (auto-loaded)
+- **Production**: Automatically managed in user data directory (`%APPDATA%/LetterForge Pro/font/` on Windows)
+  - Files are migrated from old location on first launch after update
+  - Users can manage fonts through the app's font loading features
 
 ### User SVGs
 Place `.svg` files in:
-- **Development**: `svg/` in project root (created automatically)
-- **Production**: `svg/` alongside the executable
+- **Development**: `svg/` in project root (created automatically, auto-loaded)
+- **Production**: Automatically managed in user data directory (`%APPDATA%/LetterForge Pro/svg/` on Windows)
+  - Files are migrated from old location on first launch after update
+  - Users can manage SVGs through the app's SVG import features

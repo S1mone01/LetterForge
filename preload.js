@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // ── Auto-update IPC handlers ──────────────────────────────────────────
     onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_event, value) => callback(value)),
+    onAppVersion: (callback) => ipcRenderer.on('app-version', (_event, value) => callback(value)),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     downloadUpdate: () => ipcRenderer.invoke('download-update'),
     quitAndInstall: () => ipcRenderer.invoke('quit-and-install')

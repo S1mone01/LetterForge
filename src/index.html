@@ -166,7 +166,10 @@
     box-shadow:0 1px 2px rgba(0,0,0,.3);
   }
   .app{display:flex;height:calc(100vh - 46px)}
-  .left-panel{width:230px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+  .left-panel{width:230px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+  .left-panel-scroll{flex:1;overflow-y:auto}
+  .left-panel-scroll::-webkit-scrollbar{width:3px}
+  .left-panel-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
   .sec{padding:10px 12px;border-bottom:1px solid var(--border)}
   .sec-title{font-family:'Syne',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
   
@@ -514,6 +517,25 @@
   .rp::-webkit-scrollbar{width:4px}
   .rp::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
   .rp::-webkit-scrollbar-corner{background:var(--panel)}
+  
+  /* Ordine section buttons - uniform size */
+  .ordine-btn{
+    width:100% !important;
+    min-height:36px !important;
+    padding:8px 12px !important;
+    font-size:11px !important;
+    justify-content:center !important;
+  }
+  
+  /* Font action buttons (Tutti/Nessuno) - fixed, larger */
+  .font-action-btn{
+    flex:1 !important;
+    min-height:32px !important;
+    padding:6px 10px !important;
+    font-size:11px !important;
+    justify-content:center !important;
+  }
+  
   .pr{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-width:0}
   .pr label{color:var(--muted);font-size:10px;min-width:28px;font-weight:500;flex-shrink:0}
   .pr input[type=range]{
@@ -834,8 +856,16 @@
     <div class="search-w">
       <input type="text" id="sidebar-search" placeholder="Cerca font…" oninput="handleSearch(this.value)" onmousedown="event.stopPropagation(); this.focus();">
     </div>
+    <div id="font-list-actions" style="flex-shrink:0;border-bottom:1px solid var(--border);background:var(--panel);padding:6px 8px;display:none">
+      <div style="display:flex;gap:4px">
+        <button class="btn font-action-btn" onclick="selectAllFonts()">⊞ Tutti</button>
+        <button class="btn font-action-btn" onclick="clearFontSelection()">✕ Nessuno</button>
+      </div>
+    </div>
+    <div class="left-panel-scroll">
     <div id="font-list">
       <!-- Content injected by JS -->
+    </div>
     </div>
   </div>
 
@@ -931,30 +961,30 @@
       <div class="pr"><label>Gap</label>
         <input type="range" id="pgap" min="-50" max="200" value="4" oninput="apGap(+this.value)" onmousedown="event.stopPropagation()">
         <span class="val" id="vgap">4px</span></div>
-      <button class="btn" style="width:100%;margin-top:6px;justify-content:center" onclick="distrib('h')" onmousedown="event.stopPropagation()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>
-        Distribuisci equamente
-      </button>
     </div>
     <div class="sec">
       <div class="sec-title">Ordine</div>
       <div style="display:flex;gap:6px;margin-top:6px">
-        <button class="btn" style="flex:1;font-size:10px;justify-content:center" onclick="flip('h')" onmousedown="event.stopPropagation()">
+        <button class="btn ordine-btn" onclick="flip('h')" onmousedown="event.stopPropagation()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"></path><path d="M16 7l4 5-4 5"></path><path d="M8 7l-4 5 4 5"></path></svg>
           Flip H
         </button>
-        <button class="btn" style="flex:1;font-size:10px;justify-content:center" onclick="flip('v')" onmousedown="event.stopPropagation()">
+        <button class="btn ordine-btn" onclick="flip('v')" onmousedown="event.stopPropagation()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"></path><path d="M7 8l5-4 5 4"></path><path d="M7 16l5 4 5-4"></path></svg>
           Flip V
         </button>
       </div>
-      <button class="btn" style="width:100%;margin-top:6px;font-size:10px;justify-content:center" onclick="duplicateSel()" onmousedown="event.stopPropagation()">
+      <button class="btn ordine-btn" style="margin-top:6px" onclick="duplicateSel()" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
         Duplica
       </button>
-      <button class="btn" style="width:100%;margin-top:6px;font-size:10px;justify-content:center" onclick="splitSelectedLetter()" onmousedown="event.stopPropagation()">
+      <button class="btn ordine-btn" style="margin-top:6px" onclick="splitSelectedLetter()" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><path d="M8.12 8.12L12 12"></path><path d="M20 16l-4-4"></path><circle cx="18" cy="18" r="3"></circle></svg>
         Dividi Lettera
+      </button>
+      <button class="btn ordine-btn" style="margin-top:6px" onclick="distrib('h')" onmousedown="event.stopPropagation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>
+        Distribuisci
       </button>
     </div>
     <div class="sec">
@@ -1150,16 +1180,18 @@ function handleSearch(query){
 
 function renderFonts(filter=''){
   const el   = document.getElementById('font-list');
+  const actionContainer = document.getElementById('font-list-actions');
   const keys = Object.keys(S.fonts).filter(k=>k.toLowerCase().includes(filter.toLowerCase()));
-  let bulk = '';
+  
+  // Show/hide action buttons based on font count
   if(keys.length > 1){
-    bulk = `<div style="display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--panel2)">
-      <button class="btn" style="flex:1;font-size:9px;padding:3px 6px" onclick="selectAllFonts()">⊞ Tutti</button>
-      <button class="btn" style="flex:1;font-size:9px;padding:3px 6px" onclick="clearFontSelection()">✕ Nessuno</button>
-    </div>`;
+    actionContainer.style.display = 'block';
+  } else {
+    actionContainer.style.display = 'none';
   }
-  if(!keys.length){ el.innerHTML = bulk + `<div style="padding:20px;text-align:center;color:var(--muted);font-size:11px">Nessun font trovato.</div>`; return; }
-  el.innerHTML = bulk + keys.map(n=>{
+  
+  if(!keys.length){ el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted);font-size:11px">Nessun font trovato.</div>`; return; }
+  el.innerHTML = keys.map(n=>{
     const isSel = S.selectedFonts.has(n);
     return `<div class="fi ${isSel?'act':''}" onclick="toggleFont('${n.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">
       <span class="fp" style="font-family:${S.fonts[n]}">Aa</span>
@@ -3439,6 +3471,16 @@ function handleUpdateStatus(data) {
 // Initialize update listener
 if (window.electronAPI && window.electronAPI.onUpdateStatus) {
   window.electronAPI.onUpdateStatus(handleUpdateStatus);
+}
+
+// Auto-update version display from package.json
+if (window.electronAPI && window.electronAPI.onAppVersion) {
+  window.electronAPI.onAppVersion((version) => {
+    const verEl = document.getElementById('app-version');
+    const unVerEl = document.getElementById('un-version');
+    if (verEl) verEl.textContent = 'v' + version;
+    if (unVerEl) unVerEl.textContent = 'Versione ' + version;
+  });
 }
 </script>
 </body>

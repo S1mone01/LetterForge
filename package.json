@@ -22,25 +22,7 @@
       "src/**/*"
     ],
     "extraResources": [],
-    "extraFiles": [
-      {
-        "from": "font",
-        "to": "font",
-        "filter": [
-          "**/*.ttf",
-          "**/*.otf",
-          "**/*.woff",
-          "**/*.woff2"
-        ]
-      },
-      {
-        "from": "svg",
-        "to": "svg",
-        "filter": [
-          "**/*.svg"
-        ]
-      }
-    ],
+    "extraFiles": [],
     "win": {
       "target": [
         {

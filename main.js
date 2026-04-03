@@ -46,20 +46,105 @@ function hideSplashWindow() {
   }
 }
 
-// ── Percorso cartella font (stessa dir dell'exe / del progetto) ──────────
+// ── Percorso cartella font (user data directory - persists across updates) ─
 function getFontDir() {
-  const base = app.isPackaged
-    ? path.dirname(process.execPath)
-    : __dirname;
-  return path.join(base, 'font');
+  const userData = app.getPath('userData');
+  return path.join(userData, 'font');
 }
 
-// ── AGGIUNTO: Percorso cartella svg ───────────────────────────────────────
+// ── Percorso cartella svg (user data directory - persists across updates) ──
 function getSvgDir() {
-  const base = app.isPackaged
-    ? path.dirname(process.execPath)
-    : __dirname;
-  return path.join(base, 'svg');
+  const userData = app.getPath('userData');
+  return path.join(userData, 'svg');
+}
+
+// ── MIGRAZIONE: Copia file dalla vecchia cartella (accanto all'exe) alla userData ──
+function migrateUserFiles() {
+  const userData = app.getPath('userData');
+  const oldBase = app.isPackaged ? path.dirname(process.execPath) : __dirname;
+  
+  // Crea directory utente se non esistono
+  const newFontDir = path.join(userData, 'font');
+  const newSvgDir = path.join(userData, 'svg');
+  
+  try {
+    if (!fs.existsSync(newFontDir)) {
+      fs.mkdirSync(newFontDir, { recursive: true });
+    }
+    if (!fs.existsSync(newSvgDir)) {
+      fs.mkdirSync(newSvgDir, { recursive: true });
+    }
+  } catch (e) {
+    console.warn('Errore nel creare directory utente:', e.message);
+    return;
+  }
+
+  // Migra font dalla vecchia cartella
+  const oldFontDir = path.join(oldBase, 'font');
+  if (fs.existsSync(oldFontDir) && oldFontDir !== newFontDir) {
+    try {
+      const files = fs.readdirSync(oldFontDir);
+      const EXTS = ['.ttf', '.otf', '.woff', '.woff2'];
+      let migrated = 0;
+      
+      files.forEach(file => {
+        const ext = path.extname(file).toLowerCase();
+        if (!EXTS.includes(ext)) return;
+        
+        const src = path.join(oldFontDir, file);
+        const dest = path.join(newFontDir, file);
+        
+        // Copia solo se non esiste già nella destinazione
+        if (!fs.existsSync(dest)) {
+          try {
+            fs.copyFileSync(src, dest);
+            migrated++;
+          } catch (e) {
+            console.warn(`Errore nel copiare font ${file}:`, e.message);
+          }
+        }
+      });
+      
+      if (migrated > 0) {
+        console.log(`Migrati ${migrated} font da ${oldFontDir} a ${newFontDir}`);
+      }
+    } catch (e) {
+      console.warn('Errore nel migrare font:', e.message);
+    }
+  }
+
+  // Migra SVG dalla vecchia cartella
+  const oldSvgDir = path.join(oldBase, 'svg');
+  if (fs.existsSync(oldSvgDir) && oldSvgDir !== newSvgDir) {
+    try {
+      const files = fs.readdirSync(oldSvgDir);
+      let migrated = 0;
+      
+      files.forEach(file => {
+        const ext = path.extname(file).toLowerCase();
+        if (ext !== '.svg') return;
+        
+        const src = path.join(oldSvgDir, file);
+        const dest = path.join(newSvgDir, file);
+        
+        // Copia solo se non esiste già nella destinazione
+        if (!fs.existsSync(dest)) {
+          try {
+            fs.copyFileSync(src, dest);
+            migrated++;
+          } catch (e) {
+            console.warn(`Errore nel copiare SVG ${file}:`, e.message);
+          }
+        }
+      });
+      
+      if (migrated > 0) {
+        console.log(`Migrati ${migrated} SVG da ${oldSvgDir} a ${newSvgDir}`);
+      }
+    } catch (e) {
+      console.warn('Errore nel migrare SVG:', e.message);
+    }
+  }
 }
 
 // ── Leggi tutti i font dalla cartella e restituiscili come base64 ─────────
@@ -95,7 +180,7 @@ function loadFontsFromDir(dir) {
 // ── AGGIUNTO: Leggi tutti gli SVG dalla cartella come testo puro ──────────
 function loadSvgsFromDir(dir) {
   if (!fs.existsSync(dir)) {
-    try { fs.mkdirSync(dir); } catch(e) {}
+    try { fs.mkdirSync(dir, { recursive: true }); } catch(e) {}
     return [];
   }
 
@@ -280,6 +365,10 @@ function createWindow() {
 
   // Quando la pagina è pronta, invia i font E GLI SVG
   win.webContents.once('did-finish-load', () => {
+    // Invia la versione dell'app dal package.json
+    const pkg = require('./package.json');
+    win.webContents.send('app-version', pkg.version);
+    
     updateSplashProgress(20, 'Caricamento font...');
 
     // 1. CARICAMENTO FONT
@@ -315,6 +404,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Migra file utente prima di creare la finestra (prima esecuzione dopo update)
+  migrateUserFiles();
+  
   createWindow();
 
   // ── Gestione salvataggio SVG ────────────────────────────────────────────
