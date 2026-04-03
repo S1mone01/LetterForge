@@ -20,7 +20,9 @@
       "Bash(rmdir *)",
       "Bash(npx *)",
       "Bash(powershell *)",
-      "Bash(select-object *)"
+      "Bash(select-object *)",
+      "Bash(curl *)",
+      "Bash(jq *)"
     ]
   },
   "$version": 3

@@ -22,25 +22,149 @@
   .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;letter-spacing:-.02em;color:var(--accent);white-space:nowrap}
   .logo span{color:var(--text)}
   .spacer{flex:1}
-  .btn{padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;border-radius:3px;transition:all .12s;white-space:nowrap;display:flex;align-items:center;gap:6px}
-  .btn:hover{border-color:var(--accent);color:var(--accent)}
-  .btn.primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
-  .btn.primary:hover{background:#b8ef00}
-  .btn.danger{border-color:#ff4455;color:#ff4455}
-  .btn.danger:hover{background:#ff445522}
-  .btn.del-green{border-color:var(--border);color:var(--text)}
-  .btn.del-green:hover{border-color:#00cc66;color:#00cc66;background:rgba(0,204,102,0.08)}
-  .btn.snap-on{background:rgba(0,204,102,0.15);border-color:#00cc66;color:#00cc66}
-  .btn.snap-on:hover{background:rgba(0,204,102,0.25);border-color:#00cc66;color:#00cc66}
-  .btn-icon{padding:4px 8px}
+  .btn{
+    padding:6px 14px;
+    border:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.01) 100%);
+    color:var(--text);
+    font-family:'DM Mono',monospace;
+    font-size:11px;
+    font-weight:400;
+    cursor:pointer;
+    border-radius:6px;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+    white-space:nowrap;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    box-shadow:0 1px 2px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.05);
+    position:relative;
+    overflow:hidden;
+  }
+  .btn::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    background:linear-gradient(180deg,rgba(255,255,255,.08) 0%,transparent 100%);
+    opacity:0;
+    transition:opacity .2s;
+  }
+  .btn:hover{
+    border-color:var(--accent);
+    color:var(--accent);
+    box-shadow:0 2px 6px rgba(200,255,0,.15),inset 0 1px 0 rgba(255,255,255,.08);
+    transform:translateY(-1px);
+  }
+  .btn:hover::before{opacity:1}
+  .btn:active{
+    transform:translateY(0);
+    box-shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+  .btn.primary{
+    background:linear-gradient(180deg,var(--accent) 0%,#b8ef00 100%);
+    color:#000;
+    border-color:var(--accent);
+    font-weight:600;
+    box-shadow:0 2px 8px rgba(200,255,0,.3),inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .btn.primary:hover{
+    background:linear-gradient(180deg,#d4ff1a 0%,#c8ff00 100%);
+    border-color:#d4ff1a;
+    box-shadow:0 4px 12px rgba(200,255,0,.4),inset 0 1px 0 rgba(255,255,255,.4);
+    transform:translateY(-2px);
+  }
+  .btn.primary:active{
+    transform:translateY(0);
+    box-shadow:0 1px 4px rgba(200,255,0,.2);
+  }
+  .btn.danger{
+    border-color:#ff4455;
+    color:#ff4455;
+    background:linear-gradient(180deg,rgba(255,68,85,.08) 0%,rgba(255,68,85,.03) 100%);
+  }
+  .btn.danger:hover{
+    background:linear-gradient(180deg,rgba(255,68,85,.2) 0%,rgba(255,68,85,.1) 100%);
+    border-color:#ff6677;
+    color:#ff6677;
+    box-shadow:0 2px 8px rgba(255,68,85,.2);
+  }
+  .btn.del-green{
+    border-color:var(--border);
+    color:var(--text);
+    background:linear-gradient(180deg,rgba(0,204,102,.06) 0%,rgba(0,204,102,.02) 100%);
+  }
+  .btn.del-green:hover{
+    border-color:#00cc66;
+    color:#00cc66;
+    background:linear-gradient(180deg,rgba(0,204,102,.15) 0%,rgba(0,204,102,.08) 100%);
+    box-shadow:0 2px 8px rgba(0,204,102,.15);
+  }
+  .btn.snap-on{
+    background:linear-gradient(180deg,rgba(0,204,102,.2) 0%,rgba(0,204,102,.1) 100%);
+    border-color:#00cc66;
+    color:#00cc66;
+    font-weight:600;
+    box-shadow:0 1px 4px rgba(0,204,102,.2);
+  }
+  .btn.snap-on:hover{
+    background:linear-gradient(180deg,rgba(0,204,102,.3) 0%,rgba(0,204,102,.15) 100%);
+    border-color:#00dd77;
+    color:#00dd77;
+    box-shadow:0 2px 8px rgba(0,204,102,.25);
+  }
+  .btn-icon{
+    padding:6px 8px;
+    min-width:32px;
+    justify-content:center;
+  }
+  .btn svg{
+    width:14px;
+    height:14px;
+    flex-shrink:0;
+  }
   .cvsize{display:flex;align-items:center;gap:6px}
-  .cvsize span{color:var(--muted);font-size:11px}
-  .cvsize input{width:52px;padding:4px 5px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;border-radius:3px;outline:none;text-align:center}
-  .cvsize input:focus{border-color:var(--accent)}
-  .zoom-ctrl{display:flex;align-items:center;gap:5px}
-  .zoom-ctrl span{color:var(--muted);font-size:11px;min-width:36px;text-align:center}
-  .zoom-ctrl button{width:22px;height:22px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer;border-radius:3px;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .1s;padding:0}
-  .zoom-ctrl button:hover{border-color:var(--accent);color:var(--accent)}
+  .cvsize span{color:var(--muted);font-size:11px;font-weight:500}
+  .cvsize input{
+    width:56px;padding:5px 7px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'DM Mono',monospace;
+    font-size:11px;
+    border-radius:6px;
+    outline:none;
+    text-align:center;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  .cvsize input:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(200,255,0,.1);
+  }
+  .zoom-ctrl{display:flex;align-items:center;gap:6px}
+  .zoom-ctrl span{color:var(--muted);font-size:11px;min-width:42px;text-align:center;font-weight:500}
+  .zoom-ctrl button{
+    width:26px;height:26px;
+    border:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.02) 100%);
+    color:var(--text);
+    cursor:pointer;
+    border-radius:5px;
+    font-size:14px;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+    padding:0;
+    box-shadow:0 1px 2px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .zoom-ctrl button:hover{
+    border-color:var(--accent);
+    color:var(--accent);
+    box-shadow:0 2px 6px rgba(200,255,0,.15);
+    transform:translateY(-1px);
+  }
+  .zoom-ctrl button:active{
+    transform:translateY(0);
+    box-shadow:0 1px 2px rgba(0,0,0,.3);
+  }
   .app{display:flex;height:calc(100vh - 46px)}
   .left-panel{width:230px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
   .sec{padding:10px 12px;border-bottom:1px solid var(--border)}
@@ -48,47 +172,123 @@
   
   /* --- UPDATED FONT ZONE STYLES --- */
   #folder-zone, #drop-zone {
-    border: 1px dashed var(--accent);
-    border-radius: 3px;
-    padding: 9px;
+    border: 1.5px dashed var(--accent);
+    border-radius: 6px;
+    padding: 12px;
     text-align: center;
     color: var(--accent);
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.6;
     cursor: pointer;
-    transition: all .12s;
+    transition: all .2s cubic-bezier(.4,0,.2,1);
     margin-bottom: 8px;
-    background: transparent;
+    background: linear-gradient(180deg,rgba(200,255,0,.03) 0%,rgba(200,255,0,.01) 100%);
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
   }
-  #folder-zone:hover, #folder-zone.drag, 
+  #folder-zone:hover, #folder-zone.drag,
   #drop-zone:hover, #drop-zone.drag {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(200, 255, 0, 0.05);
+    background: linear-gradient(180deg,rgba(200,255,0,.08) 0%,rgba(200,255,0,.04) 100%);
+    box-shadow: 0 2px 8px rgba(200,255,0,.15);
+    transform: translateY(-1px);
   }
   #folder-zone span, #drop-zone span {
     color: var(--text);
     opacity: 0.7;
-    font-size: 9px;
+    font-size: 10px;
     display: block;
-    margin-top: 2px;
+    margin-top: 3px;
   }
   /* -------------------------------- */
-  
-  #svg-drop-zone{border:1px dashed #ff6b35;border-radius:3px;padding:9px;text-align:center;color:#ff6b3599;font-size:10px;line-height:1.6;cursor:pointer;transition:all .12s;margin-top:8px}
-  #svg-drop-zone:hover,#svg-drop-zone.drag{border-color:#ff6b35;color:#ff6b35;background:rgba(255,107,53,.05)}
 
-  #svg-folder-zone{border:1px dashed #ff6b35;border-radius:3px;padding:9px;text-align:center;color:#ff6b3599;font-size:10px;line-height:1.6;cursor:pointer;transition:all .12s;margin-top:8px}
-  #svg-folder-zone:hover{border-color:#ff6b35;color:#ff6b35;background:rgba(255,107,53,.05)}
+  #svg-drop-zone{
+    border: 1.5px dashed #ff6b35;
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.6;
+    cursor: pointer;
+    transition: all .2s cubic-bezier(.4,0,.2,1);
+    margin-top: 8px;
+    background: linear-gradient(180deg,rgba(255,107,53,.03) 0%,rgba(255,107,53,.01) 100%);
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+  }
+  #svg-drop-zone svg{
+    color: var(--accent2);
+  }
+  #svg-drop-zone div{
+    color: var(--accent2);
+    font-size: 11px;
+  }
+  #svg-drop-zone span{
+    color: var(--text);
+    opacity: 0.7;
+    font-size: 10px;
+  }
+  #svg-drop-zone:hover,#svg-drop-zone.drag{
+    border-color:#ff6b35;
+    background: linear-gradient(180deg,rgba(255,107,53,.08) 0%,rgba(255,107,53,.04) 100%);
+    box-shadow: 0 2px 8px rgba(255,107,53,.15);
+    transform: translateY(-1px);
+  }
+  #svg-drop-zone:hover svg,
+  #svg-drop-zone.drag svg{
+    color: #ff8855;
+  }
+  #svg-drop-zone:hover div,
+  #svg-drop-zone.drag div{
+    color: #ff8855;
+  }
+
+  #svg-folder-zone{
+    border: 1.5px dashed #ff6b35;
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.6;
+    cursor: pointer;
+    transition: all .2s cubic-bezier(.4,0,.2,1);
+    margin-top: 8px;
+    background: linear-gradient(180deg,rgba(255,107,53,.03) 0%,rgba(255,107,53,.01) 100%);
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+  }
+  #svg-folder-zone svg{
+    color: var(--accent2);
+  }
+  #svg-folder-zone div{
+    color: var(--accent2);
+    font-size: 11px;
+  }
+  #svg-folder-zone span{
+    color: var(--text);
+    opacity: 0.7;
+    font-size: 10px;
+  }
+  #svg-folder-zone:hover{
+    border-color:#ff6b35;
+    background: linear-gradient(180deg,rgba(255,107,53,.08) 0%,rgba(255,107,53,.04) 100%);
+    box-shadow: 0 2px 8px rgba(255,107,53,.15);
+    transform: translateY(-1px);
+  }
+  #svg-folder-zone:hover svg{
+    color: #ff8855;
+  }
+  #svg-folder-zone:hover div{
+    color: #ff8855;
+  }
 
   /* --- Segmented Control UI --- */
   .segmented-control {
     display: flex;
     background: var(--panel2);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 3px;
+    border-radius: 8px;
+    padding: 4px;
     margin: 8px 0;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.2);
   }
   .segmented-control input[type="radio"] {
     display: none;
@@ -96,65 +296,187 @@
   .segmented-control label {
     flex: 1;
     text-align: center;
-    padding: 6px 0;
-    font-size: 10px;
+    padding: 8px 0;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--muted);
     cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.2s ease;
+    border-radius: 5px;
+    transition: all 0.25s cubic-bezier(.4,0,.2,1);
+    box-shadow: 0 1px 2px rgba(0,0,0,.1);
   }
   .segmented-control label:hover {
     color: var(--text);
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.06);
   }
   .segmented-control input#mode-font:checked + label {
-    background: var(--accent);
+    background: linear-gradient(180deg,var(--accent) 0%,#b8ef00 100%);
     color: #000;
+    box-shadow: 0 2px 6px rgba(200,255,0,.3),inset 0 1px 0 rgba(255,255,255,.3);
   }
   .segmented-control input#mode-svg:checked + label {
-    background: var(--accent2);
+    background: linear-gradient(180deg,var(--accent2) 0%,#e55a2b 100%);
     color: #fff;
+    box-shadow: 0 2px 6px rgba(255,107,53,.3),inset 0 1px 0 rgba(255,255,255,.2);
   }
 
-  .switch{position:relative;display:inline-block;width:34px;height:18px}
+  .switch{position:relative;display:inline-block;width:38px;height:20px}
   .switch input{opacity:0;width:0;height:0}
-  .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#2a2a3a;transition:.2s;border-radius:18px}
-  .slider:before{position:absolute;content:"";height:14px;width:14px;left:2px;bottom:2px;background-color:white;transition:.2s;border-radius:50%}
+  .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#2a2a3a;transition:.25s cubic-bezier(.4,0,.2,1);border-radius:20px}
+  .slider:before{position:absolute;content:"";height:16px;width:16px;left:2px;bottom:2px;background-color:white;transition:.25s cubic-bezier(.4,0,.2,1);border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3)}
   input:checked + .slider{background-color:var(--accent)}
-  input:checked + .slider:before{transform:translateX(16px)}
+  input:checked + .slider:before{transform:translateX(18px)}
+  input:checked + .slider:before{background-color:#000}
 
-  .search-w{padding:7px 12px;border-bottom:1px solid var(--border)}
-  .search-w input{width:100%;padding:5px 8px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:12px;border-radius:3px;outline:none}
-  .search-w input:focus{border-color:var(--accent)}
+  .search-w{padding:8px 12px;border-bottom:1px solid var(--border)}
+  .search-w input{
+    width:100%;padding:7px 10px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'DM Mono',monospace;
+    font-size:12px;
+    border-radius:6px;
+    outline:none;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  .search-w input:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(200,255,0,.1);
+  }
+  .search-w input::placeholder{color:var(--muted)}
   #font-list{flex:1;overflow-y:auto}
   #font-list::-webkit-scrollbar{width:3px}
   #font-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  .fi{padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-left:2px solid transparent;transition:all .1s}
-  .fi:hover{background:rgba(255,255,255,.03)}
-  .fi.act{background:var(--sel);border-left-color:var(--accent)}
+  .fi{
+    padding:8px 12px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    border-left:2px solid transparent;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  .fi:hover{
+    background:rgba(255,255,255,.04);
+    border-left-color:rgba(200,255,0,.3);
+  }
+  .fi.act{
+    background:var(--sel);
+    border-left-color:var(--accent);
+  }
   .fi .fp{font-size:18px;color:var(--muted);min-width:28px;text-align:center;line-height:1}
   .fi .fn{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* SVG Grid Styles */
-  .svg-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px}
-  .svg-item{background:var(--panel2);border:1px solid var(--border);border-radius:4px;overflow:hidden;cursor:pointer;transition:all .15s;display:flex;flex-direction:column}
-  .svg-item:hover{border-color:var(--accent2);transform:translateY(-1px)}
-  .svg-item.act{border-color:var(--accent2);background:rgba(255,107,53,0.08)}
-  .svg-thumb{height:60px;background:#000;display:flex;align-items:center;justify-content:center;padding:4px;overflow:hidden}
+  .svg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+  .svg-item{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    overflow:hidden;
+    cursor:pointer;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+    display:flex;
+    flex-direction:column;
+    box-shadow:0 1px 3px rgba(0,0,0,.15);
+  }
+  .svg-item:hover{
+    border-color:var(--accent2);
+    transform:translateY(-2px);
+    box-shadow:0 4px 12px rgba(255,107,53,.2);
+  }
+  .svg-item.act{
+    border-color:var(--accent2);
+    background:rgba(255,107,53,0.1);
+    box-shadow:0 2px 8px rgba(255,107,53,.25);
+  }
+  .svg-thumb{
+    height:64px;
+    background:linear-gradient(180deg,#0a0a0f 0%,#151520 100%);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:6px;
+    overflow:hidden;
+  }
   .svg-thumb svg{max-width:100%;max-height:100%;fill:var(--text)}
-  .svg-name{font-size:9px;padding:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+  .svg-name{
+    font-size:10px;
+    padding:5px 6px;
+    text-align:center;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    color:var(--muted);
+    background:rgba(255,255,255,.02);
+  }
 
   .canvas-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
-  .tbar2{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);background:var(--panel);flex-shrink:0;flex-wrap:wrap;z-index:10}
-  .tbar2 label{color:var(--muted);font-size:10px;white-space:nowrap}
-  .tbar2 input[type=text]{flex:1;min-width:120px;padding:5px 9px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:14px;border-radius:3px;outline:none;pointer-events:auto}
-  .tbar2 input[type=text]:focus{border-color:var(--accent)}
-  .tbar2 .ni{width:50px;padding:5px 5px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;border-radius:3px;outline:none;text-align:center;pointer-events:auto}
-  .tbar2 .ni:focus{border-color:var(--accent)}
-  .tbar2 input[type=color]{width:26px;height:26px;border-radius:3px;border:1.5px solid var(--border);cursor:pointer;padding:0;pointer-events:auto}
+  .tbar2{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:9px 14px;
+    border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,var(--panel) 0%,rgba(19,19,26,.95) 100%);
+    flex-shrink:0;
+    flex-wrap:wrap;
+    z-index:10;
+    box-shadow:0 2px 8px rgba(0,0,0,.15);
+  }
+  .tbar2 label{color:var(--muted);font-size:10px;white-space:nowrap;font-weight:500}
+  .tbar2 input[type=text]{
+    flex:1;min-width:120px;
+    padding:7px 11px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'DM Mono',monospace;
+    font-size:14px;
+    border-radius:6px;
+    outline:none;
+    pointer-events:auto;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  .tbar2 input[type=text]:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(200,255,0,.1);
+  }
+  .tbar2 input[type=text]::placeholder{color:var(--muted)}
+  .tbar2 .ni{
+    width:54px;padding:6px 7px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'DM Mono',monospace;
+    font-size:11px;
+    border-radius:6px;
+    outline:none;
+    text-align:center;
+    pointer-events:auto;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  .tbar2 .ni:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(200,255,0,.1);
+  }
+  .tbar2 input[type=color]{
+    width:28px;height:28px;
+    border-radius:6px;
+    border:1.5px solid var(--border);
+    cursor:pointer;
+    padding:2px;
+    pointer-events:auto;
+    background:var(--panel2);
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  .tbar2 input[type=color]:hover{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(200,255,0,.1);
+  }
 
   #cw{
     flex:1;overflow:auto;
@@ -188,22 +510,93 @@
     box-shadow:0 0 4px var(--snap);
   }
 
-  .rp{width:230px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
-  .rp::-webkit-scrollbar{width:3px}
-  .rp::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  .pr{display:flex;align-items:center;gap:7px;margin-bottom:7px}
-  .pr label{color:var(--muted);font-size:10px;min-width:28px}
-  .pr input[type=range]{flex:1;accent-color:var(--accent);height:3px}
-  .pr .val{color:var(--text);font-size:10px;min-width:32px;text-align:right}
-  .pr input[type=number]{width:56px;padding:4px 5px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;border-radius:3px;outline:none}
-  .pr input[type=number]:focus{border-color:var(--accent)}
-  .pr input[type=color]{width:26px;height:22px;border-radius:3px;border:1px solid var(--border);cursor:pointer;padding:0}
-  .gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(30px,1fr));gap:3px;max-height:120px;overflow-y:auto}
-  .gc{height:30px;display:flex;align-items:center;justify-content:center;background:var(--panel2);border:1px solid var(--border);border-radius:3px;cursor:pointer;font-size:15px;transition:all .1s}
-  .gc:hover,.gc.sel{border-color:var(--accent);color:var(--accent);background:var(--sel)}
-  .ag{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-  .tbtn{width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .1s}
-  .tbtn:hover{background:var(--panel2);color:var(--text);border-color:var(--border)}
+  .rp{width:230px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;overflow-x:hidden}
+  .rp::-webkit-scrollbar{width:4px}
+  .rp::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .rp::-webkit-scrollbar-corner{background:var(--panel)}
+  .pr{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-width:0}
+  .pr label{color:var(--muted);font-size:10px;min-width:28px;font-weight:500;flex-shrink:0}
+  .pr input[type=range]{
+    flex:1;
+    accent-color:var(--accent);
+    height:4px;
+    border-radius:2px;
+    cursor:pointer;
+    min-width:0;
+  }
+  .pr .val{color:var(--text);font-size:10px;min-width:36px;text-align:right;font-weight:500;flex-shrink:0}
+  .pr input[type=number]{
+    width:52px;padding:5px 6px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:'DM Mono',monospace;
+    font-size:11px;
+    border-radius:6px;
+    outline:none;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+    flex-shrink:0;
+  }
+  .pr input[type=number]:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(200,255,0,.1);
+  }
+  .pr input[type=color]{
+    width:28px;height:24px;
+    border-radius:5px;
+    border:1.5px solid var(--border);
+    cursor:pointer;
+    padding:2px;
+    background:var(--panel2);
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  .pr input[type=color]:hover{
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(200,255,0,.1);
+  }
+  .gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:4px;max-height:120px;overflow-y:auto}
+  .gc{
+    height:32px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:5px;
+    cursor:pointer;
+    font-size:15px;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+    box-shadow:0 1px 2px rgba(0,0,0,.15);
+  }
+  .gc:hover,.gc.sel{
+    border-color:var(--accent);
+    color:var(--accent);
+    background:var(--sel);
+    box-shadow:0 2px 6px rgba(200,255,0,.15);
+    transform:translateY(-1px);
+  }
+  .ag{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  .tbtn{
+    width:30px;height:30px;
+    border:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.01) 100%);
+    color:var(--muted);
+    border-radius:5px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:14px;
+    transition:all .2s cubic-bezier(.4,0,.2,1);
+    box-shadow:0 1px 2px rgba(0,0,0,.15),inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .tbtn:hover{
+    background:var(--panel2);
+    color:var(--text);
+    border-color:var(--accent);
+    box-shadow:0 2px 6px rgba(200,255,0,.15);
+    transform:translateY(-1px);
+  }
   .hint{color:var(--muted);font-size:10px;line-height:1.6}
   .badge{display:inline-block;padding:1px 7px;background:rgba(200,255,0,.12);color:var(--accent);border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.06em}
   .nsel{color:var(--muted);font-size:10px;text-align:center;padding:14px 0}
@@ -315,7 +708,7 @@
 <body>
 <header>
   <div class="logo">Letter<span>Forge</span></div>
-  <div style="display:flex;gap:4px;margin-right:12px;border-right:1px solid var(--border);padding-right:12px">
+  <div style="display:flex;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
     <button class="btn btn-icon" onclick="undo()" title="Annulla (Ctrl+Z)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
     </button>
@@ -326,39 +719,73 @@
   <div class="cvsize">
     <span>W</span><input id="cvW" type="number" value="800" min="100" max="4000" onchange="applySize()" onmousedown="event.stopPropagation(); this.focus();">
     <span>H</span><input id="cvH" type="number" value="500" min="100" max="4000" onchange="applySize()" onmousedown="event.stopPropagation(); this.focus();">
-    <button class="btn" onclick="applySize()" onmousedown="event.stopPropagation()">Applica</button>
+    <button class="btn" onclick="applySize()" onmousedown="event.stopPropagation()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
+      Applica
+    </button>
   </div>
-  <button class="btn" onclick="toggleGrid()" id="grid-btn" onmousedown="event.stopPropagation()">⊞ Griglia</button>
+  <button class="btn" onclick="toggleGrid()" id="grid-btn" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+    Griglia
+  </button>
   <div class="zoom-ctrl">
-    <button onclick="zoomOut()" onmousedown="event.stopPropagation()">−</button>
+    <button onclick="zoomOut()" onmousedown="event.stopPropagation()" title="Zoom out">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    </button>
     <span id="zoom-label">100%</span>
-    <button onclick="zoomIn()" onmousedown="event.stopPropagation()">＋</button>
+    <button onclick="zoomIn()" onmousedown="event.stopPropagation()" title="Zoom in">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    </button>
   </div>
-  <button class="btn" onclick="zoomReset()" title="Reset zoom" onmousedown="event.stopPropagation()">Centra</button>
-  <button class="btn snap-on" id="snap-btn" onclick="toggleSnap()" title="Attiva/Disattiva snap allineamento (Y)" onmousedown="event.stopPropagation()">Snap</button>
-  <button class="btn" style="margin-left: 16px; border-color: var(--accent); color: var(--accent);" onclick="mergeSelected()" title="Unisci gli elementi in un unico oggetto" onmousedown="event.stopPropagation()">⧉ Unisci</button>
+  <button class="btn" onclick="zoomReset()" title="Reset zoom" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+    Centra
+  </button>
+  <button class="btn snap-on" id="snap-btn" onclick="toggleSnap()" title="Attiva/Disattiva snap allineamento (Y)" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M21 3l-7 7"></path><path d="M3 3l7 7"></path><path d="M16 21h5v-5"></path><path d="M8 21H3v-5"></path><path d="M21 21l-7-7"></path><path d="M3 21l7-7"></path></svg>
+    Snap
+  </button>
+  <button class="btn" style="margin-left: 16px; border-color: var(--accent); color: var(--accent);" onclick="mergeSelected()" title="Unisci gli elementi in un unico oggetto" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M12 8v8"></path><path d="M8 12h8"></path></svg>
+    Unisci
+  </button>
   <div class="spacer"></div>
-  <button class="btn" onclick="selectAll()" onmousedown="event.stopPropagation()">Seleziona tutto</button>
-  <button class="btn del-green" onclick="deleteSelected()" onmousedown="event.stopPropagation()">✕ Elimina</button>
-  <button class="btn" onclick="deleteUnselected()" onmousedown="event.stopPropagation()">✕ Elimina non selezionati</button>
-  <button class="btn danger" onclick="clearCanvas()" onmousedown="event.stopPropagation()">Elimina Tutto</button>
-  <button class="btn primary" onclick="exportSVG()" onmousedown="event.stopPropagation()">⬇ SVG</button>
+  <button class="btn" onclick="selectAll()" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
+    Seleziona tutto
+  </button>
+  <button class="btn del-green" onclick="deleteSelected()" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+    Elimina
+  </button>
+  <button class="btn" onclick="deleteUnselected()" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+    Elimina non sel.
+  </button>
+  <button class="btn danger" onclick="clearCanvas()" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+    Elimina Tutto
+  </button>
+  <button class="btn primary" onclick="exportSVG()" onmousedown="event.stopPropagation()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+    SVG
+  </button>
 </header>
 
 <div class="app">
   <div class="left-panel">
     <div class="sec">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.0.6</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.0.7</span>
       </div>
-      <div style="display:flex;gap:6px;margin-bottom:8px">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
           Salva
         </button>
         <button class="btn" style="flex:1;border-color:var(--accent2);color:var(--accent2)" onclick="loadProject()" title="Carica un progetto salvato">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           Carica
         </button>
       </div>
@@ -366,21 +793,29 @@
     <div class="sec">
       <div class="sec-title">Importa Risorse</div>
       <div id="folder-zone" onclick="document.getElementById('folder-fi').click()">
-        +  Carica cartella font<br><span>seleziona la cartella con i tuoi .ttf/.otf</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+        <div>Carica cartella font</div>
+        <span>seleziona la cartella con i tuoi .ttf/.otf</span>
       </div>
       <input type="file" id="folder-fi" accept=".ttf,.otf,.woff,.woff2" multiple webkitdirectory directory style="display:none" onchange="importFontsFromFolder(this.files)">
       <div id="drop-zone" onclick="document.getElementById('ffi').click()">
-        ＋ Carica Font (.ttf/.otf)<br><span>o trascina qui</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+        <div>Carica Font (.ttf/.otf)</div>
+        <span>o trascina qui</span>
       </div>
       <input type="file" id="ffi" accept=".ttf,.otf,.woff,.woff2" multiple style="display:none" onchange="importFonts(this.files)">
-      
+
       <div id="svg-folder-zone" onclick="document.getElementById('svg-folder-fi').click()">
-        +  Carica cartella SVG<br><span style="font-size:9px;opacity:0.7">seleziona la cartella con i tuoi .svg</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+        <div>Carica cartella SVG</div>
+        <span style="font-size:10px;opacity:0.7">seleziona la cartella con i tuoi .svg</span>
       </div>
       <input type="file" id="svg-folder-fi" accept=".svg" multiple webkitdirectory directory style="display:none" onchange="importSVGsFromFolder(this.files)">
 
       <div id="svg-drop-zone" onclick="document.getElementById('svgfi').click()">
-        ＋ Importa SVG<br><span style="font-size:9px;opacity:0.7">trascina o clicca</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+        <div>Importa SVG</div>
+        <span style="font-size:10px;opacity:0.7">trascina o clicca</span>
       </div>
       <input type="file" id="svgfi" accept=".svg" multiple style="display:none">
     </div>
@@ -411,7 +846,10 @@
       <label>pt</label>
       <input class="ni" type="number" id="fsize" value="80" min="4" max="900" onmousedown="event.stopPropagation(); this.focus();">
       <input type="color" id="fcol" value="#111111" title="Colore" onmousedown="event.stopPropagation();" onchange="apFill(this.value)">
-      <button class="btn primary" onclick="addText()" onmousedown="event.stopPropagation()">Aggiungi ↵</button>
+      <button class="btn primary" onclick="addText()" onmousedown="event.stopPropagation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Aggiungi
+      </button>
     </div>
     <div id="cw">
       <div id="snap-line"></div>
@@ -452,8 +890,7 @@
       <div class="sec-title">Rotazione</div>
       <div class="pr"><label>↻</label>
         <input type="range" id="prot" min="-180" max="180" value="0" oninput="apRot(+this.value)" onmousedown="event.stopPropagation()">
-        <!-- Diventato un campo numerico -->
-        <input type="number" id="vrot" value="0" style="width:50px; text-align:center;" oninput="apRot(+this.value)" onmousedown="event.stopPropagation(); this.focus();">
+        <input type="number" id="vrot" value="0" style="width:52px; text-align:center;" oninput="apRot(+this.value)" onmousedown="event.stopPropagation(); this.focus();">
       </div>
     </div>
     <div class="sec">
@@ -494,16 +931,31 @@
       <div class="pr"><label>Gap</label>
         <input type="range" id="pgap" min="-50" max="200" value="4" oninput="apGap(+this.value)" onmousedown="event.stopPropagation()">
         <span class="val" id="vgap">4px</span></div>
-      <button class="btn" style="width:100%;margin-top:3px" onclick="distrib('h')" onmousedown="event.stopPropagation()">Distribuisci equamente</button>
+      <button class="btn" style="width:100%;margin-top:6px;justify-content:center" onclick="distrib('h')" onmousedown="event.stopPropagation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>
+        Distribuisci equamente
+      </button>
     </div>
     <div class="sec">
       <div class="sec-title">Ordine</div>
-      <div style="display:flex;gap:4px;margin-top:4px">
-        <button class="btn" style="flex:1;font-size:10px" onclick="flip('h')" onmousedown="event.stopPropagation()">↔ Flip H</button>
-        <button class="btn" style="flex:1;font-size:10px" onclick="flip('v')" onmousedown="event.stopPropagation()">↕ Flip V</button>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn" style="flex:1;font-size:10px;justify-content:center" onclick="flip('h')" onmousedown="event.stopPropagation()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"></path><path d="M16 7l4 5-4 5"></path><path d="M8 7l-4 5 4 5"></path></svg>
+          Flip H
+        </button>
+        <button class="btn" style="flex:1;font-size:10px;justify-content:center" onclick="flip('v')" onmousedown="event.stopPropagation()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"></path><path d="M7 8l5-4 5 4"></path><path d="M7 16l5 4 5-4"></path></svg>
+          Flip V
+        </button>
       </div>
-      <button class="btn" style="width:100%;margin-top:4px;font-size:10px" onclick="duplicateSel()" onmousedown="event.stopPropagation()">⧉ Duplica</button>
-      <button class="btn" style="width:100%;margin-top:4px;font-size:10px" onclick="splitSelectedLetter()" onmousedown="event.stopPropagation()">✄ Dividi Lettera</button>
+      <button class="btn" style="width:100%;margin-top:6px;font-size:10px;justify-content:center" onclick="duplicateSel()" onmousedown="event.stopPropagation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        Duplica
+      </button>
+      <button class="btn" style="width:100%;margin-top:6px;font-size:10px;justify-content:center" onclick="splitSelectedLetter()" onmousedown="event.stopPropagation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><path d="M8.12 8.12L12 12"></path><path d="M20 16l-4-4"></path><circle cx="18" cy="18" r="3"></circle></svg>
+        Dividi Lettera
+      </button>
     </div>
     <div class="sec">
       <div class="sec-title">Info</div>
@@ -525,7 +977,10 @@
   <div class="dlg">
     <div class="dlg-msg" id="custom-confirm-msg">Sei sicuro?</div>
     <div class="dlg-btns">
-      <button class="btn danger" id="custom-confirm-ok">Conferma</button>
+      <button class="btn danger" id="custom-confirm-ok">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path></svg>
+        Conferma
+      </button>
       <button class="btn" id="custom-confirm-cancel">Annulla</button>
     </div>
   </div>
@@ -538,13 +993,22 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.0.6</div>
+  <div class="un-ver" id="un-version">Versione 4.0.7</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
-    <button class="btn" onclick="hideUpdateNotify()">Più tardi</button>
-    <button class="btn primary" onclick="downloadUpdate()" id="un-download-btn">Scarica e installa</button>
-    <button class="btn primary" onclick="quitAndInstall()" id="un-restart-btn" style="display:none">↻ Riavvia e installa</button>
+    <button class="btn" onclick="hideUpdateNotify()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      Più tardi
+    </button>
+    <button class="btn primary" onclick="downloadUpdate()" id="un-download-btn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      Scarica e installa
+    </button>
+    <button class="btn primary" onclick="quitAndInstall()" id="un-restart-btn" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+      Riavvia e installa
+    </button>
   </div>
   <div id="un-info" style="display:none;margin-top:12px;font-size:10px;color:var(--muted);line-height:1.6"></div>
 </div>
