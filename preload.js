@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveProjectFile: (content) => ipcRenderer.invoke('save-project', content),
     loadProjectFile: () => ipcRenderer.invoke('load-project'),
 
+    // Apri cartelle utente
+    openFontFolder: () => ipcRenderer.invoke('open-font-folder'),
+    openSVGFolder: () => ipcRenderer.invoke('open-svg-folder'),
+
     // ── Auto-update IPC handlers ──────────────────────────────────────────
     onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_event, value) => callback(value)),
     onAppVersion: (callback) => ipcRenderer.on('app-version', (_event, value) => callback(value)),

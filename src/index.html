@@ -88,6 +88,28 @@
     color:#ff6677;
     box-shadow:0 2px 8px rgba(255,68,85,.2);
   }
+  .btn-accent2{
+    border-color:var(--accent2) !important;
+    color:var(--accent2) !important;
+    background:linear-gradient(180deg,rgba(255,107,53,.06) 0%,rgba(255,107,53,.02) 100%) !important;
+  }
+  .btn-accent2:hover{
+    border-color:#ff8855 !important;
+    color:#ff8855 !important;
+    background:linear-gradient(180deg,rgba(255,107,53,.15) 0%,rgba(255,107,53,.08) 100%) !important;
+    box-shadow:0 2px 8px rgba(255,107,53,.15) !important;
+  }
+  .btn-accent{
+    border-color:var(--accent) !important;
+    color:var(--accent) !important;
+    background:linear-gradient(180deg,rgba(200,255,0,.06) 0%,rgba(200,255,0,.02) 100%) !important;
+  }
+  .btn-accent:hover{
+    border-color:#d4ff1a !important;
+    color:#d4ff1a !important;
+    background:linear-gradient(180deg,rgba(200,255,0,.15) 0%,rgba(200,255,0,.08) 100%) !important;
+    box-shadow:0 2px 8px rgba(200,255,0,.15) !important;
+  }
   .btn.del-green{
     border-color:var(--border);
     color:var(--text);
@@ -172,9 +194,27 @@
   .left-panel-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
   .sec{padding:10px 12px;border-bottom:1px solid var(--border)}
   .sec-title{font-family:'Syne',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+
+  /* Toggle section spacing */
+  .sec-toggle{padding:8px 12px 6px 12px}
+  .sec-toggle .segmented-control{margin:0}
   
-  /* --- UPDATED FONT ZONE STYLES --- */
-  #folder-zone, #drop-zone {
+  /* Import section spacing */
+  .sec-import{padding:10px 12px}
+  .sec-import .sec-title{margin-bottom:8px}
+  
+  /* Import group spacing */
+  #font-import-group, #svg-import-group{display:flex;flex-direction:column}
+  .btn-open-folder{
+    width:100% !important;
+    margin-bottom:6px !important;
+    font-size:10px !important;
+  }
+  #folder-zone, #drop-zone, #svg-folder-zone, #svg-drop-zone{margin-bottom:6px}
+  #folder-zone:last-child, #drop-zone:last-child, #svg-folder-zone:last-child, #svg-drop-zone:last-child{margin-bottom:0}
+  
+  /* Import zone base styles - unified */
+  .import-zone{
     border: 1.5px dashed var(--accent);
     border-radius: 6px;
     padding: 12px;
@@ -184,102 +224,53 @@
     line-height: 1.6;
     cursor: pointer;
     transition: all .2s cubic-bezier(.4,0,.2,1);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     background: linear-gradient(180deg,rgba(200,255,0,.03) 0%,rgba(200,255,0,.01) 100%);
     box-shadow: 0 1px 3px rgba(0,0,0,.1);
   }
-  #folder-zone:hover, #folder-zone.drag,
-  #drop-zone:hover, #drop-zone.drag {
+  .import-zone:hover, .import-zone.drag {
     border-color: var(--accent);
     color: var(--accent);
     background: linear-gradient(180deg,rgba(200,255,0,.08) 0%,rgba(200,255,0,.04) 100%);
     box-shadow: 0 2px 8px rgba(200,255,0,.15);
     transform: translateY(-1px);
   }
-  #folder-zone span, #drop-zone span {
+  .import-zone svg{
+    margin-bottom: 4px;
+  }
+  .import-zone span{
     color: var(--text);
     opacity: 0.7;
     font-size: 10px;
     display: block;
     margin-top: 3px;
   }
-  /* -------------------------------- */
-
-  #svg-drop-zone{
-    border: 1.5px dashed #ff6b35;
-    border-radius: 6px;
-    padding: 12px;
-    text-align: center;
-    font-size: 11px;
-    line-height: 1.6;
-    cursor: pointer;
-    transition: all .2s cubic-bezier(.4,0,.2,1);
-    margin-top: 8px;
+  
+  /* SVG zones override with accent2 color */
+  .import-zone.svg-zone{
+    border-color: #ff6b35;
+    color: var(--accent2);
     background: linear-gradient(180deg,rgba(255,107,53,.03) 0%,rgba(255,107,53,.01) 100%);
-    box-shadow: 0 1px 3px rgba(0,0,0,.1);
   }
-  #svg-drop-zone svg{
-    color: var(--accent2);
-  }
-  #svg-drop-zone div{
-    color: var(--accent2);
-    font-size: 11px;
-  }
-  #svg-drop-zone span{
-    color: var(--text);
-    opacity: 0.7;
-    font-size: 10px;
-  }
-  #svg-drop-zone:hover,#svg-drop-zone.drag{
-    border-color:#ff6b35;
+  .import-zone.svg-zone:hover, .import-zone.svg-zone.drag{
+    border-color: #ff6b35;
+    color: #ff8855;
     background: linear-gradient(180deg,rgba(255,107,53,.08) 0%,rgba(255,107,53,.04) 100%);
     box-shadow: 0 2px 8px rgba(255,107,53,.15);
-    transform: translateY(-1px);
   }
-  #svg-drop-zone:hover svg,
-  #svg-drop-zone.drag svg{
-    color: #ff8855;
-  }
-  #svg-drop-zone:hover div,
-  #svg-drop-zone.drag div{
-    color: #ff8855;
-  }
-
-  #svg-folder-zone{
-    border: 1.5px dashed #ff6b35;
-    border-radius: 6px;
-    padding: 12px;
-    text-align: center;
-    font-size: 11px;
-    line-height: 1.6;
-    cursor: pointer;
-    transition: all .2s cubic-bezier(.4,0,.2,1);
-    margin-top: 8px;
-    background: linear-gradient(180deg,rgba(255,107,53,.03) 0%,rgba(255,107,53,.01) 100%);
-    box-shadow: 0 1px 3px rgba(0,0,0,.1);
-  }
-  #svg-folder-zone svg{
+  .import-zone.svg-zone svg{
     color: var(--accent2);
   }
-  #svg-folder-zone div{
+  .import-zone.svg-zone div{
     color: var(--accent2);
     font-size: 11px;
   }
-  #svg-folder-zone span{
-    color: var(--text);
-    opacity: 0.7;
-    font-size: 10px;
-  }
-  #svg-folder-zone:hover{
-    border-color:#ff6b35;
-    background: linear-gradient(180deg,rgba(255,107,53,.08) 0%,rgba(255,107,53,.04) 100%);
-    box-shadow: 0 2px 8px rgba(255,107,53,.15);
-    transform: translateY(-1px);
-  }
-  #svg-folder-zone:hover svg{
+  .import-zone.svg-zone:hover svg,
+  .import-zone.svg-zone.drag svg{
     color: #ff8855;
   }
-  #svg-folder-zone:hover div{
+  .import-zone.svg-zone:hover div,
+  .import-zone.svg-zone.drag div{
     color: #ff8855;
   }
 
@@ -521,8 +512,8 @@
   /* Ordine section buttons - uniform size */
   .ordine-btn{
     width:100% !important;
-    min-height:36px !important;
-    padding:8px 12px !important;
+    min-height:30px !important;
+    padding:6px 10px !important;
     font-size:11px !important;
     justify-content:center !important;
   }
@@ -799,7 +790,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.0.7</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.0.8</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -812,44 +803,53 @@
         </button>
       </div>
     </div>
-    <div class="sec">
-      <div class="sec-title">Importa Risorse</div>
-      <div id="folder-zone" onclick="document.getElementById('folder-fi').click()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
-        <div>Carica cartella font</div>
-        <span>seleziona la cartella con i tuoi .ttf/.otf</span>
-      </div>
-      <input type="file" id="folder-fi" accept=".ttf,.otf,.woff,.woff2" multiple webkitdirectory directory style="display:none" onchange="importFontsFromFolder(this.files)">
-      <div id="drop-zone" onclick="document.getElementById('ffi').click()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-        <div>Carica Font (.ttf/.otf)</div>
-        <span>o trascina qui</span>
-      </div>
-      <input type="file" id="ffi" accept=".ttf,.otf,.woff,.woff2" multiple style="display:none" onchange="importFonts(this.files)">
-
-      <div id="svg-folder-zone" onclick="document.getElementById('svg-folder-fi').click()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
-        <div>Carica cartella SVG</div>
-        <span style="font-size:10px;opacity:0.7">seleziona la cartella con i tuoi .svg</span>
-      </div>
-      <input type="file" id="svg-folder-fi" accept=".svg" multiple webkitdirectory directory style="display:none" onchange="importSVGsFromFolder(this.files)">
-
-      <div id="svg-drop-zone" onclick="document.getElementById('svgfi').click()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:4px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
-        <div>Importa SVG</div>
-        <span style="font-size:10px;opacity:0.7">trascina o clicca</span>
-      </div>
-      <input type="file" id="svgfi" accept=".svg" multiple style="display:none">
-    </div>
-
     <!-- Toggle Slider Section -->
-    <div class="sec" style="border-bottom:none; padding-bottom:0;">
+    <div class="sec sec-toggle" style="border-bottom:none">
       <div class="segmented-control">
         <input type="radio" id="mode-font" name="view_mode" value="fonts" checked onchange="toggleViewMode('fonts')">
         <label for="mode-font">Aa Fonts</label>
-        
+
         <input type="radio" id="mode-svg" name="view_mode" value="svgs" onchange="toggleViewMode('svgs')">
         <label for="mode-svg">⬡ SVG</label>
+      </div>
+    </div>
+    <div class="sec sec-import">
+      <div class="sec-title">Importa Risorse</div>
+      
+      <!-- Font section -->
+      <div id="font-import-group">
+        <button class="btn btn-accent btn-open-folder" onclick="openUserFontFolder()" onmousedown="event.stopPropagation()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          Apri cartella
+        </button>
+        <div id="folder-zone" class="import-zone" onclick="document.getElementById('folder-fi').click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+          <div>Carica cartella font</div>
+        </div>
+        <input type="file" id="folder-fi" accept=".ttf,.otf,.woff,.woff2" multiple webkitdirectory directory style="display:none" onchange="importFontsFromFolder(this.files)">
+        <div id="drop-zone" class="import-zone" onclick="document.getElementById('ffi').click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+          <div>Carica Font (.ttf/.otf)</div>
+        </div>
+        <input type="file" id="ffi" accept=".ttf,.otf,.woff,.woff2" multiple style="display:none" onchange="importFonts(this.files)">
+      </div>
+
+      <!-- SVG section -->
+      <div id="svg-import-group" style="display:none">
+        <button class="btn btn-accent2 btn-open-folder" onclick="openUserSVGFolder()" onmousedown="event.stopPropagation()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          Apri cartella
+        </button>
+        <div id="svg-folder-zone" class="import-zone svg-zone" onclick="document.getElementById('svg-folder-fi').click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+          <div>Carica cartella SVG</div>
+        </div>
+        <input type="file" id="svg-folder-fi" accept=".svg" multiple webkitdirectory directory style="display:none" onchange="importSVGsFromFolder(this.files)">
+        <div id="svg-drop-zone" class="import-zone svg-zone" onclick="document.getElementById('svgfi').click()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+          <div>Importa SVG</div>
+        </div>
+        <input type="file" id="svgfi" accept=".svg" multiple style="display:none">
       </div>
     </div>
 
@@ -1023,7 +1023,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.0.7</div>
+  <div class="un-ver" id="un-version">Versione 4.0.8</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -1162,6 +1162,21 @@ function restoreState(state){
 // ── VIEW TOGGLE LOGIC ─────────────────────────────────────────────────────
 function toggleViewMode(mode){
   S.viewMode = mode;
+  
+  const fontImportGroup = document.getElementById('font-import-group');
+  const svgImportGroup = document.getElementById('svg-import-group');
+  const fontListActions = document.getElementById('font-list-actions');
+  
+  if(mode === 'fonts'){
+    fontImportGroup.style.display = 'flex';
+    svgImportGroup.style.display = 'none';
+    fontListActions.style.display = 'block';
+  } else {
+    fontImportGroup.style.display = 'none';
+    svgImportGroup.style.display = 'flex';
+    fontListActions.style.display = 'none';
+  }
+  
   handleSearch(document.getElementById('sidebar-search').value);
 }
 
@@ -1243,10 +1258,51 @@ function importFonts(files){
     }).catch(()=>toast(`Errore UI: ${f.name}`));
   });
 }
+// Drag & drop per font
 const dz=document.getElementById('drop-zone');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
 dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
 dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');importFonts(e.dataTransfer.files)});
+
+const fz=document.getElementById('folder-zone');
+fz.addEventListener('dragover',e=>{e.preventDefault();fz.classList.add('drag')});
+fz.addEventListener('dragleave',()=>fz.classList.remove('drag'));
+fz.addEventListener('drop',e=>{e.preventDefault();fz.classList.remove('drag');importFontsFromFolder(e.dataTransfer.files)});
+
+// Drag & drop per SVG
+const sdz=document.getElementById('svg-drop-zone');
+sdz.addEventListener('dragover',e=>{e.preventDefault();sdz.classList.add('drag')});
+sdz.addEventListener('dragleave',()=>sdz.classList.remove('drag'));
+sdz.addEventListener('drop',e=>{e.preventDefault();sdz.classList.remove('drag');handleSVGDropp(e.dataTransfer.files)});
+
+const sfz=document.getElementById('svg-folder-zone');
+sfz.addEventListener('dragover',e=>{e.preventDefault();sfz.classList.add('drag')});
+sfz.addEventListener('dragleave',()=>sfz.classList.remove('drag'));
+sfz.addEventListener('drop',e=>{e.preventDefault();sfz.classList.remove('drag');importSVGsFromFolder(e.dataTransfer.files)});
+
+function openUserFontFolder(){
+  if(window.electronAPI && window.electronAPI.openFontFolder){
+    window.electronAPI.openFontFolder().then(result => {
+      if(!result.success){
+        toast('Errore nell\'apertura della cartella font');
+      }
+    }).catch(err => {
+      toast('Errore nell\'apertura della cartella font');
+    });
+  }
+}
+
+function openUserSVGFolder(){
+  if(window.electronAPI && window.electronAPI.openSVGFolder){
+    window.electronAPI.openSVGFolder().then(result => {
+      if(!result.success){
+        toast('Errore nell\'apertura della cartella SVG');
+      }
+    }).catch(err => {
+      toast('Errore nell\'apertura della cartella SVG');
+    });
+  }
+}
 
 function importFontsFromFolder(files){
   const ff=Array.from(files).filter(f=>/\.(ttf|otf|woff|woff2)$/i.test(f.name));
@@ -1270,9 +1326,6 @@ function importFontsFromFolder(files){
     }).catch(()=>console.error(`Errore font: ${f.name}`));
   });
 }
-const fz=document.getElementById('folder-zone');
-fz.addEventListener('dragover',e=>{e.preventDefault();fz.style.borderColor='var(--accent)';fz.style.background='rgba(200,255,0,.04)'});
-fz.addEventListener('dragleave',()=>{fz.style.borderColor='';fz.style.background=''});
 
 // ── SVG IMPORT LOGIC E FUNZIONI CONDIVISE ───────────────────────────────────
 
@@ -1934,10 +1987,6 @@ function importSVGs(files) {
   });
 }
 
-const sdz=document.getElementById('svg-drop-zone');
-sdz.addEventListener('dragover',e=>{e.preventDefault();sdz.classList.add('drag')});
-sdz.addEventListener('dragleave',()=>sdz.classList.remove('drag'));
-sdz.addEventListener('drop',e=>{e.preventDefault();sdz.classList.remove('drag');importSVGs(e.dataTransfer.files)});
 document.getElementById('svgfi').addEventListener('change',function(){importSVGs(this.files);this.value='';});
 
 function buildSVGLayer(){ document.getElementById('svg-layer').innerHTML=''; }

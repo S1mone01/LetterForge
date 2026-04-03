@@ -478,6 +478,40 @@ app.whenReady().then(() => {
     }
   });
 
+  // ── Apri cartella font utente ───────────────────────────────────────
+  ipcMain.handle('open-font-folder', async () => {
+    const fontDir = getFontDir();
+    const { shell } = require('electron');
+    try {
+      // Crea la cartella se non esiste
+      if (!fs.existsSync(fontDir)) {
+        fs.mkdirSync(fontDir, { recursive: true });
+      }
+      await shell.openPath(fontDir);
+      return { success: true };
+    } catch (error) {
+      console.error('Errore nell\'apertura della cartella font:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ── Apri cartella SVG utente ───────────────────────────────────────
+  ipcMain.handle('open-svg-folder', async () => {
+    const svgDir = getSvgDir();
+    const { shell } = require('electron');
+    try {
+      // Crea la cartella se non esiste
+      if (!fs.existsSync(svgDir)) {
+        fs.mkdirSync(svgDir, { recursive: true });
+      }
+      await shell.openPath(svgDir);
+      return { success: true };
+    } catch (error) {
+      console.error('Errore nell\'apertura della cartella SVG:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
