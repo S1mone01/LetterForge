@@ -732,15 +732,10 @@
   <div class="cvsize">
     <span>W</span><input id="cvW" type="number" value="800" min="100" max="4000" onchange="applySize()" onmousedown="event.stopPropagation(); this.focus();">
     <span>H</span><input id="cvH" type="number" value="500" min="100" max="4000" onchange="applySize()" onmousedown="event.stopPropagation(); this.focus();">
-    <button class="btn" onclick="applySize()" onmousedown="event.stopPropagation()">
+    <button class="btn btn-icon" onclick="applySize()" onmousedown="event.stopPropagation()" title="Applica dimensioni">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
-      Applica
     </button>
   </div>
-  <button class="btn" onclick="toggleGrid()" id="grid-btn" onmousedown="event.stopPropagation()">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
-    Griglia
-  </button>
   <div class="zoom-ctrl">
     <button onclick="zoomOut()" onmousedown="event.stopPropagation()" title="Zoom out">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -761,6 +756,15 @@
   <button class="btn" style="margin-left: 16px; border-color: var(--accent); color: var(--accent);" onclick="mergeSelected()" title="Unisci gli elementi in un unico oggetto" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M12 8v8"></path><path d="M8 12h8"></path></svg>
     Unisci
+  </button>
+  <button class="btn" style="border-color: #4488ff; color: #4488ff;" onclick="setSelectedLayer(1)" onmousedown="event.stopPropagation()" title="Porta gli oggetti selezionati nel Layer 1 (sotto)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M18 13l-6 6-6-6"></path></svg>
+  </button>
+  <button class="btn" style="border-color: #ffaa00; color: #ffaa00;" onclick="setSelectedLayer(2)" onmousedown="event.stopPropagation()" title="Porta gli oggetti selezionati nel Layer 2 (centro)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+  </button>
+  <button class="btn" style="border-color: #ff4488; color: #ff4488;" onclick="setSelectedLayer(3)" onmousedown="event.stopPropagation()" title="Porta gli oggetti selezionati nel Layer 3 (sopra)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="M18 11l-6-6-6 6"></path></svg>
   </button>
   <div class="spacer"></div>
   <button class="btn" onclick="selectAll()" onmousedown="event.stopPropagation()">
@@ -790,7 +794,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.0.9</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.0</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -874,7 +878,7 @@
       <label>Testo</label>
       <input type="text" id="ti" placeholder="Scrivi qui…" value="Ciao" onkeydown="if(event.key==='Enter')addText()" onmousedown="event.stopPropagation(); this.focus();">
       <label>pt</label>
-      <input class="ni" type="number" id="fsize" value="80" min="4" max="900" onmousedown="event.stopPropagation(); this.focus();">
+      <input class="ni" type="number" id="fsize" value="80" min="4" max="900" oninput="if(S.sel.size>0){apFS(+this.value)}" onchange="if(S.sel.size>0){apFS(+this.value)}" onmousedown="event.stopPropagation(); this.focus();">
       <input type="color" id="fcol" value="#111111" title="Colore" onmousedown="event.stopPropagation();" onchange="apFill(this.value)">
       <button class="btn primary" onclick="addText()" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -946,8 +950,6 @@
     </div>
     <div class="sec">
       <div class="sec-title">Stile</div>
-      <div class="pr"><label>Fill</label><input type="color" id="pfill" value="#111111" oninput="apFill(this.value)" onmousedown="event.stopPropagation()"></div>
-      <div class="pr"><label>pt</label><input type="number" id="pfs" value="80" min="4" max="900" step="1" oninput="apFS(+this.value)" onmousedown="event.stopPropagation(); this.focus();"></div>
       <div class="pr"><label>Op.</label>
         <input type="range" id="pop" min="0" max="1" step="0.01" value="1" oninput="apOp(+this.value)" onmousedown="event.stopPropagation()">
         <span class="val" id="vop">100%</span></div>
@@ -1023,7 +1025,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.0.9</div>
+  <div class="un-ver" id="un-version">Versione 4.1.0</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -1439,7 +1441,8 @@ function addSVGToCanvas(name){
     svgW: svgObj.width,
     svgH: svgObj.height,
     borderWidth: 0,
-    borderColor: '#000000'
+    borderColor: '#000000',
+    layer: 2
   });
   render(); upd(); saveState();
   toast(`SVG "${name}" aggiunto ✓`);
@@ -1972,7 +1975,8 @@ function importSVGs(files) {
           svgW: objW,
           svgH: objH,
           _bbox: { x: 0, y: 0, w: objW, h: objH },
-          _shapes: shapes.length
+          _shapes: shapes.length,
+          layer: 2
         });
 
         render(); upd(); saveState();
@@ -2061,7 +2065,7 @@ function addText(){
 
       for(const ch of line){
         const w=ctx.measureText(ch).width;
-        S.letters.push({id:uid++,ch,x:x-(lineWidth/2)+w/2,y,fontSize:fs,fill,fontFamily:lf.css,fontName:lf.fontName,sx:1,sy:1,rot:0,skew:0,op:1,borderWidth:0,borderColor:'#000000'});
+        S.letters.push({id:uid++,ch,x:x-(lineWidth/2)+w/2,y,fontSize:fs,fill,fontFamily:lf.css,fontName:lf.fontName,sx:1,sy:1,rot:0,skew:0,op:1,borderWidth:0,borderColor:'#000000',layer:2});
         x+=w+fs*0.05;
       }
     });
@@ -2080,7 +2084,11 @@ function render(){
   ll.innerHTML='';
   const ctx=document.getElementById('dc').getContext('2d');
 
-  S.letters.forEach((l,i)=>{
+  // Ordina gli indici per layer (1=sotto, 3=sopra)
+  const sortedIndices = S.letters.map((l, i) => i).sort((a, b) => (S.letters[a].layer || 2) - (S.letters[b].layer || 2));
+
+  sortedIndices.forEach(i => {
+    const l = S.letters[i];
     ctx.font=`${l.fontSize}px ${l.fontFamily}`;
     const mw = l.isGroup ? l.groupW : ctx.measureText(l.ch).width;
     const mh = l.isGroup ? l.groupH : l.fontSize;
@@ -2800,8 +2808,8 @@ function upd(){
     v('fcol', '#ffffff');
   }
 
-  if(allSameFs) v('pfs', Math.round(first.fontSize));
-  else v('pfs', Math.round(avgFs));
+  if(allSameFs) { v('pfs', Math.round(first.fontSize)); v('fsize', Math.round(first.fontSize)); }
+  else { v('pfs', Math.round(avgFs)); v('fsize', Math.round(avgFs)); }
   
   v('pop', avgOp);
   t('vop', Math.round(avgOp * 100) + '%');
@@ -2820,10 +2828,13 @@ function upd(){
     v('pbordercol', '#000000');
   }
 
+  const layerLabels = {1: 'Sotto', 2: 'Centro', 3: 'Sopra'};
+  const allSameLayer = sel.every(i => (S.letters[i].layer || 2) === (S.letters[sel[0]].layer || 2));
+  const layerInfo = allSameLayer ? `<br>Layer: ${layerLabels[S.letters[sel[0]].layer || 2] || 'Centro'}` : '';
   const badge = first.isSvgImport ? `<span class="svg-badge">SVG path</span>` : `<span class="badge">${sel.length} lettera${sel.length>1?'e':''}</span>`;
-  const infoText = sel.length > 1 
-    ? `${badge}<br><br><b>${sel.length} elementi selezionati</b><br>BBox: ${Math.round(getGroupBBox()?.w || 0)} × ${Math.round(getGroupBBox()?.h || 0)}px`
-    : `${badge}<br><br>Nome: ${first.fontName}<br>Pos: (${Math.round(first.x)}, ${Math.round(first.y)})<br>Rot: ${Math.round(first.rot)}°`;
+  const infoText = sel.length > 1
+    ? `${badge}<br><br><b>${sel.length} elementi selezionati</b>${layerInfo}<br>BBox: ${Math.round(getGroupBBox()?.w || 0)} × ${Math.round(getGroupBBox()?.h || 0)}px`
+    : `${badge}<br><br>Nome: ${first.fontName}<br>Pos: (${Math.round(first.x)}, ${Math.round(first.y)})<br>Rot: ${Math.round(first.rot)}°<br>Layer: ${layerLabels[first.layer || 2] || 'Centro'}`;
   info.innerHTML = infoText;
 }
 function resetPropertyFields(){
@@ -2835,8 +2846,6 @@ function resetPropertyFields(){
   v('psx', 1); t('vsx', '1.00'); v('psy', 1); t('vsy', '1.00');
   // Resetta i campi inclinazione
   v('psk', 0); t('vsk', '0°');
-  // Resetta i campi stile
-  v('pfill', '#111111'); v('pfs', 80);
   // Resetta opacità
   v('pop', 1); t('vop', '100%');
   // Resetta bordo
@@ -2844,6 +2853,8 @@ function resetPropertyFields(){
   v('pbordercol', '#000000');
   // Resetta spaziatura
   v('pgap', 4); t('vgap', '4px');
+  // Resetta pt
+  v('fsize', 80);
 }
 function v(id,val){const el = document.getElementById(id);if(el){const active=document.activeElement;if(active!==el&&el!==active){el.value=val;}}}
 function t(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
@@ -3032,7 +3043,17 @@ function applySize(){
 function toggleGrid(){
   S.gridOn=!S.gridOn;
   document.getElementById('gr').style.display=S.gridOn?'block':'none';
-  document.getElementById('grid-btn').style.color=S.gridOn?'var(--accent)':'';
+  const gridBtn = document.getElementById('grid-btn');
+  if(gridBtn) gridBtn.style.color=S.gridOn?'var(--accent)':'';
+}
+
+function setSelectedLayer(layer){
+  if(S.sel.size === 0){ toast('Seleziona almeno un oggetto!'); return; }
+  if(layer < 1 || layer > 3){ return; }
+  S.sel.forEach(i => { S.letters[i].layer = layer; });
+  const layerNames = {1: 'Layer 1 (sotto)', 2: 'Layer 2 (centro)', 3: 'Layer 3 (sopra)'};
+  render(); upd(); saveState();
+  toast(`${S.sel.size} oggetto/i → ${layerNames[layer]} ✓`);
 }
 
 // ── SALVA PROGETTO ─────────────────────────────────────────────────────────
@@ -3135,7 +3156,8 @@ function applyProjectData(data) {
   
   // Ripristina griglia
   document.getElementById('gr').style.display = S.gridOn ? 'block' : 'none';
-  document.getElementById('grid-btn').style.color = S.gridOn ? 'var(--accent)' : '';
+  const gridBtn2 = document.getElementById('grid-btn');
+  if(gridBtn2) gridBtn2.style.color = S.gridOn ? 'var(--accent)' : '';
   
   // Ripristina lettere
   S.letters = data.letters || [];
@@ -3156,67 +3178,415 @@ function applyProjectData(data) {
   toast(`Progetto caricato: ${S.letters.length} elementi ✓`);
 }
 
+// ── EXPORT SVG ──────────────────────────────────────────────────────────────
+//
+// Strategia:
+// 1. Calcola la matrice di trasformazione completa di ogni elemento
+//    direttamente dai dati S.letters (senza leggere dal DOM screen).
+//    La struttura è identica a render():
+//      outer g:  translate(l.x,l.y) [rotate] [scale] [skewX] translate(-l.x,-l.y)
+//      inner el: translate(innerX, innerY)   (dove innerX/Y dipende dal tipo)
+// 2. Applica la matrice combinata al path data → path assoluto nel viewport SVG.
+// 3. Calcola bbox reale tramite DOM temporaneo (stesso viewport SVG, niente zoom).
+// 4. Union-Find su bbox: elementi che si toccano appartengono allo stesso oggetto.
+// 5. L'ordine Z (layer) è SEMPRE rispettato: non si fonde mai tra colori diversi
+//    che si sovrappongono; si fondono solo path dello stesso colore E stesso gruppo
+//    Union-Find. Il render finale emette ogni item nell'ordine originale di render,
+//    wrappando in <g> solo il primo e l'ultimo item di ogni gruppo toccante.
+
+// Costruisce DOMMatrix da parametri lettera (uguale a render)
+function _buildLetterMatrix(l, mw) {
+  // outer: translate(l.x,l.y) rotate scale skewX translate(-l.x,-l.y)
+  let m = new DOMMatrix();
+  m = m.translate(l.x, l.y);
+  if (l.rot) m = m.rotate(l.rot);
+  if (l.sx !== 1 || l.sy !== 1) m = m.scale(l.sx, l.sy);
+  if (l.skew) m = m.skewX(l.skew);
+  m = m.translate(-l.x, -l.y);
+  return m;
+}
+
+// Applica DOMMatrix a segmenti assoluti
+function _applyDOMMatrixToSegs(segs, m) {
+  return applyMatrixToSegs(segs, m); // riusa la funzione già presente
+}
+
+// bbox reale di un path trasformato (usa DOM temporaneo offscreen, NO zoom)
+function _realBBox(pathD) {
+  const bb = calcRealBBox(pathD);
+  if (!bb) return null;
+  return { x: bb.x, y: bb.y, x2: bb.x + bb.width, y2: bb.y + bb.height,
+           w: bb.width, h: bb.height };
+}
+
+// Due bbox si toccano o sovrappongono (tolleranza 1px)
+function _touch(a, b) {
+  return a.x2 + 1 >= b.x && b.x2 + 1 >= a.x &&
+         a.y2 + 1 >= b.y && b.y2 + 1 >= a.y;
+}
+
 async function exportSVG() {
   try {
-    const svg = document.getElementById('svg');
-    const clone = svg.cloneNode(true);
-    
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
-    clone.setAttribute('width', S.canvasW);
-    clone.setAttribute('height', S.canvasH);
-    clone.setAttribute('viewBox', `0 0 ${S.canvasW} ${S.canvasH}`);
+    if (S.letters.length === 0) { toast('Canvas vuoto!'); return; }
 
-    ['bg', 'sb', 'gr', 'handles-layer', 'snap-line'].forEach(id => {
-      const el = clone.getElementById(id); 
-      if(el) el.remove();
+    const ctx = document.getElementById('dc').getContext('2d');
+
+    // Ordine di render (identico a render())
+    const sortedIndices = S.letters.map((_, i) => i)
+      .sort((a, b) => (S.letters[a].layer || 2) - (S.letters[b].layer || 2));
+
+    // ── Passo 1: costruisce ogni item con pathD trasformato e bbox ──
+    // item = { pathD, bbox, color, opacity, borderWidth, borderColor, isText, textMarkup, renderOrder }
+    const items = [];
+
+    sortedIndices.forEach((i, renderOrder) => {
+      const l = S.letters[i];
+      const color = l.fill || '#000000';
+      const opacity = (l.op != null) ? l.op : 1;
+      const bw = l.borderWidth || 0;
+      const bc = l.borderColor || '#000000';
+
+      ctx.font = `${l.fontSize}px ${l.fontFamily}`;
+      const mw = l.isGroup ? l.groupW : (l.isSvgImport ? (l.svgW || 100) : ctx.measureText(l.ch).width);
+
+      // Matrice outer (pivot di rot/scale)
+      const outerM = _buildLetterMatrix(l, mw);
+
+      if (l.isGroup && l.groupHTML) {
+        // Gruppo: ogni path ha transform outer + translate(dx, dy) + proprio transform
+        const dx = l.x - (l.originalX || l.x);
+        const dy = l.y - (l.originalY || l.y);
+        const innerM = outerM.translate(dx, dy);
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = l.groupHTML;
+        const allSegs = [];
+        tempDiv.querySelectorAll('path').forEach(p => {
+          const d = p.getAttribute('d');
+          if (!d) return;
+          const pTfStr = p.getAttribute('transform') || '';
+          const pM = pTfStr ? parseTransformToMatrix(pTfStr) : new DOMMatrix();
+          const combined = innerM.multiply(pM);
+          const segs = pathToAbsoluteSegments(d);
+          allSegs.push(..._applyDOMMatrixToSegs(segs, combined));
+        });
+        if (!allSegs.length) return;
+        const pathD = segsToPathD(allSegs);
+        const bbox = _realBBox(pathD);
+        if (!bbox) return;
+        items.push({ pathD, bbox, color, opacity, bw: 0, bc, renderOrder });
+
+      } else if (l.customPath) {
+        // SVG import o customPath: inner transform = translate(innerX, innerY)
+        const innerX = l.isSvgImport ? l.x - (l.svgW || mw) / 2 : l.x - mw / 2;
+        const innerY = l.y;
+        const combined = outerM.translate(innerX, innerY);
+        const segs = pathToAbsoluteSegments(l.customPath);
+        const transformed = _applyDOMMatrixToSegs(segs, combined);
+        const pathD = segsToPathD(transformed);
+        const bbox = _realBBox(pathD);
+        if (!bbox) return;
+        items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder });
+
+      } else if (S.openFonts[l.fontName]) {
+        // Font opentype: inner transform = translate(l.x - mw/2, l.y)
+        const innerX = l.x - mw / 2;
+        const innerY = l.y;
+        const combined = outerM.translate(innerX, innerY);
+        const d = S.openFonts[l.fontName].getPath(l.ch, 0, 0, l.fontSize).toPathData(2);
+        const segs = pathToAbsoluteSegments(d);
+        const transformed = _applyDOMMatrixToSegs(segs, combined);
+        const pathD = segsToPathD(transformed);
+        const bbox = _realBBox(pathD);
+        if (!bbox) return;
+        items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder });
+
+      } else {
+        // Testo sistema: posizione diretta, nessun path
+        const opAttr = opacity !== 1 ? ` opacity="${opacity}"` : '';
+        const bwAttr = bw > 0 ? ` stroke="${bc}" stroke-width="${bw}" stroke-linejoin="round" stroke-linecap="round" style="paint-order:stroke fill"` : '';
+        const markup = `<text x="${l.x}" y="${l.y}" font-family="${escHtml(l.fontFamily)}" font-size="${l.fontSize}" fill="${color}" text-anchor="middle"${opAttr}${bwAttr}>${escHtml(l.ch)}</text>`;
+        const fs = l.fontSize || 80;
+        const estW = fs * 0.65;
+        const bbox = { x: l.x - estW / 2, y: l.y - fs, x2: l.x + estW / 2, y2: l.y };
+        items.push({ isText: true, textMarkup: markup, bbox, color, opacity, bw, bc, renderOrder });
+      }
     });
 
-    clone.querySelectorAll('.lg rect, .lg circle').forEach(el => el.remove());
-    clone.querySelectorAll('.lg').forEach(g => {
-      g.removeAttribute('class');
-      g.removeAttribute('data-i');
+    if (!items.length) { toast('Nessun elemento esportabile!'); return; }
+
+    // ── Passo 2: Union-Find per raggruppare elementi che si toccano ──
+    const n = items.length;
+    const ufP = items.map((_, i) => i);
+    function ufF(i) { while (ufP[i] !== i) { ufP[i] = ufP[ufP[i]]; i = ufP[i]; } return i; }
+    function ufU(a, b) { ufP[ufF(a)] = ufF(b); }
+    for (let a = 0; a < n; a++)
+      for (let b = a + 1; b < n; b++)
+        if (_touch(items[a].bbox, items[b].bbox)) ufU(a, b);
+
+    // Assegna groupId (= root del Union-Find) ad ogni item
+    items.forEach((it, i) => { it.groupId = ufF(i); });
+
+    // ── Passo 3: genera SVG rispettando l'ordine Z ──
+    // Strategia: scorre items nell'ordine di render.
+    // Elementi dello stesso gruppo E dello stesso colore CONSECUTIVI si fondono
+    // in un unico <path>. Se il gruppo ha più colori/elementi, li wrappa in <g>.
+    // Gli elementi di colori diversi NON si fondono mai (Z-order preservato).
+
+    // Prima: per ogni gruppo calcola se ha più di 1 item
+    const groupSizes = new Map();
+    items.forEach(it => {
+      groupSizes.set(it.groupId, (groupSizes.get(it.groupId) || 0) + 1);
     });
 
-    clone.querySelectorAll('.svgobj rect[stroke="#ff6b35"]').forEach(el => el.remove());
-    clone.querySelectorAll('.svgobj').forEach(g => {
-      g.removeAttribute('class');
-      g.removeAttribute('data-si');
+    // Per raggruppare i <g> apriamo/chiudiamo: tracciamo quale groupId è "aperto"
+    let svgContent = '';
+    const openedGroups = new Set(); // groupId già aperti con <g>
+    const closedGroups = new Set(); // groupId già chiusi
+
+    // Raggruppa items per groupId e trova min/max renderOrder
+    const groupBounds = new Map();
+    items.forEach((it, idx) => {
+      const g = it.groupId;
+      if (!groupBounds.has(g)) groupBounds.set(g, { min: idx, max: idx });
+      else {
+        const b = groupBounds.get(g);
+        if (idx < b.min) b.min = idx;
+        if (idx > b.max) b.max = idx;
+      }
     });
 
-    if(clone.querySelector('text')) {
-      toast("Attenzione: Font di sistema rilevati. Il 3D potrebbe ignorarli!");
+    // Fonde path consecutivi dello stesso colore+gruppo in un unico <path>
+    // Emette in ordine renderOrder
+    let pendingPath = null; // { color, pathD, bw, bc, opacity, groupId }
+
+    function flushPending() {
+      if (!pendingPath) return;
+      const { color, pathD, bw, bc, opacity } = pendingPath;
+      const opAttr = opacity !== 1 ? ` opacity="${opacity}"` : '';
+      if (bw > 0) {
+        svgContent += `<path d="${pathD}" fill="${color}"${opAttr} stroke="${bc}" stroke-width="${bw}" stroke-linejoin="round" stroke-linecap="round" style="paint-order:stroke fill"/>\n`;
+      } else {
+        svgContent += `<path d="${pathD}" fill="${color}"${opAttr}/>\n`;
+      }
+      pendingPath = null;
     }
+
+    items.forEach((it, idx) => {
+      const gId = it.groupId;
+      const isMulti = groupSizes.get(gId) > 1;
+
+      // Apri <g> se questo gruppo ha più di 1 item e non è ancora aperto
+      if (isMulti && !openedGroups.has(gId)) {
+        flushPending();
+        svgContent += `<g>\n`;
+        openedGroups.add(gId);
+      }
+
+      if (it.isText) {
+        flushPending();
+        svgContent += it.textMarkup + '\n';
+      } else {
+        // Prova a fondere con il pending se stesso colore+gruppo
+        if (pendingPath && pendingPath.color === it.color && pendingPath.groupId === gId &&
+            pendingPath.opacity === it.opacity) {
+          pendingPath.pathD += ' ' + it.pathD;
+          // Prendi il borderWidth maggiore
+          if (it.bw > pendingPath.bw) { pendingPath.bw = it.bw; pendingPath.bc = it.bc; }
+        } else {
+          flushPending();
+          pendingPath = { color: it.color, pathD: it.pathD, bw: it.bw, bc: it.bc,
+                          opacity: it.opacity, groupId: gId };
+        }
+      }
+
+      // Chiudi <g> se questo è l'ultimo item del gruppo
+      if (isMulti && idx === groupBounds.get(gId).max) {
+        flushPending();
+        svgContent += `</g>\n`;
+        closedGroups.add(gId);
+      }
+    });
+
+    flushPending();
 
     const usedFonts = [...new Set(S.letters.map(l => l.fontName))].join(', ');
-    let defs = clone.querySelector('defs');
-    if (!defs) {
-      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-      clone.insertBefore(defs, clone.firstChild);
-    }
-    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-    style.textContent = `/* LetterForge export — Fonts: ${usedFonts} */`;
-    defs.appendChild(style);
-
-    const serializer = new XMLSerializer();
-    let str = '<?xml version="1.0" encoding="utf-8"?>\n' + serializer.serializeToString(clone);
+    const svgString = `<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${S.canvasW}" height="${S.canvasH}" viewBox="0 0 ${S.canvasW} ${S.canvasH}">
+  <defs><!-- LetterForge export — Fonts: ${usedFonts} --></defs>
+${svgContent}</svg>`;
 
     if (window.electronAPI && window.electronAPI.saveSVG) {
-      const success = await window.electronAPI.saveSVG(str);
-      if (success) { toast('SVG Trasparente salvato ✓'); }
+      const success = await window.electronAPI.saveSVG(svgString);
+      if (success) { toast('SVG esportato ✓'); }
     } else {
-      const blob = new Blob([str], {type:'image/svg+xml'});
+      const blob = new Blob([svgString], { type: 'image/svg+xml' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'letterforge_trasparente.svg';
+      a.download = 'letterforge_export.svg';
       a.click();
       toast('SVG scaricato ✓');
     }
   } catch (error) {
-    console.error("Errore durante la creazione dell'SVG:", error);
+    console.error('Errore esportazione SVG:', error);
     toast('Errore esportazione!');
   }
 }
+
+// ── Path parsing & transform utilities ──
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function identityMatrix(){ return [1,0,0,1,0,0]; }
+
+function multiplyMatrix(a, b){
+  return [
+    a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1],
+    a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3],
+    a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]
+  ];
+}
+
+function parseTransformString(str){
+  let m = identityMatrix();
+  if(!str) return m;
+  const re = /(translate|rotate|scale|skewX|skewY|matrix)\s*\(([^)]+)\)/g;
+  let match;
+  while((match = re.exec(str)) !== null){
+    const fn = match[1], args = match[2].split(/[\s,]+/).map(Number);
+    let cm = identityMatrix();
+    if(fn==='translate'){ cm = [1,0,0,1,args[0]||0,args[1]||0]; }
+    else if(fn==='rotate'){
+      const rad = args[0]*Math.PI/180, c=Math.cos(rad), s=Math.sin(rad);
+      cm = [c,s,-s,c,0,0];
+    }
+    else if(fn==='scale'){ cm = [args[0]||1,0,0,args[1]||args[0]||1,0,0]; }
+    else if(fn==='skewX'){ const t=Math.tan(args[0]*Math.PI/180); cm = [1,0,t,1,0,0]; }
+    else if(fn==='skewY'){ const t=Math.tan(args[0]*Math.PI/180); cm = [1,t,0,1,0,0]; }
+    else if(fn==='matrix'){ cm = args.slice(0,6); }
+    m = multiplyMatrix(m, cm);
+  }
+  return m;
+}
+
+function buildTransformMatrix(gx, gy, rotDeg, sx, sy, skewDeg, innerX, innerY){
+  // translate(gx,gy) rotate(rot) scale(sx,sy) skewX(skew) translate(-innerX,-innerY)
+  let m = identityMatrix();
+  m = multiplyMatrix(m, [1,0,0,1,gx,gy]);
+  if(rotDeg){ const r=rotDeg*Math.PI/180; m = multiplyMatrix(m,[Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r),0,0]); }
+  if(sx!==1||sy!==1){ m = multiplyMatrix(m,[sx,0,0,sy,0,0]); }
+  if(skewDeg){ const t=Math.tan(skewDeg*Math.PI/180); m = multiplyMatrix(m,[1,t,0,1,0,0]); }
+  m = multiplyMatrix(m, [1,0,0,1,-innerX,-innerY]);
+  return m;
+}
+
+function buildGroupTransformMatrix(l){
+  // translate(l.x,l.y) [rotate scale skew] translate(-l.x,-l.y) translate(l.x-origX, l.y-origY)
+  let m = identityMatrix();
+  m = multiplyMatrix(m, [1,0,0,1,l.x,l.y]);
+  if(l.rot){ const r=l.rot*Math.PI/180; m = multiplyMatrix(m,[Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r),0,0]); }
+  if(l.sx!==1||l.sy!==1){ m = multiplyMatrix(m,[l.sx,0,0,l.sy,0,0]); }
+  if(l.skew){ const t=Math.tan(l.skew*Math.PI/180); m = multiplyMatrix(m,[1,t,0,1,0,0]); }
+  m = multiplyMatrix(m, [1,0,0,1,-l.x,-l.y]);
+  m = multiplyMatrix(m, [1,0,0,1,l.x-(l.originalX||l.x), l.y-(l.originalY||l.y)]);
+  return m;
+}
+
+function transformPoint(p, m){
+  return [m[0]*p[0]+m[2]*p[1]+m[4], m[1]*p[0]+m[3]*p[1]+m[5]];
+}
+
+function parsePathD(d){
+  const cmds = [];
+  const re = /([MmLlHhVvCcSsQqTtAaZz])|([+-]?\d*\.?\d+(?:e[+-]?\d+)?)/gi;
+  let currentCmd = null;
+  let args = [];
+
+  function flush(){
+    if(currentCmd && args.length){
+      cmds.push({ type: currentCmd, values: args.slice() });
+      args = [];
+    }
+  }
+
+  let match;
+  while((match = re.exec(d)) !== null){
+    if(match[1]){
+      flush();
+      currentCmd = match[1];
+    } else if(match[2] !== undefined){
+      args.push(parseFloat(match[2]));
+    }
+  }
+  flush();
+  return cmds;
+}
+
+function transformCmds(cmds, m){
+  return cmds.map(c => {
+    const t = c.type.toUpperCase();
+    const vals = c.values;
+    if(t === 'Z') return { type: 'Z' };
+
+    let result = { type: c.type };
+    // M, L, T: 2 args (x,y)
+    if(t === 'M' || t === 'L' || t === 'T'){
+      const [x,y] = transformPoint([vals[0],vals[1]], m);
+      result.x = x; result.y = y;
+    }
+    // H: 1 arg (x)
+    else if(t === 'H'){
+      const [x] = transformPoint([vals[0],0], m);
+      result.x = x;
+    }
+    // V: 1 arg (y)
+    else if(t === 'V'){
+      const [,y] = transformPoint([0,vals[0]], m);
+      result.y = y;
+    }
+    // C: 6 args (x1,y1,x2,y2,x,y)
+    else if(t === 'C' || t === 'S'){
+      const [x1,y1] = transformPoint([vals[0],vals[1]], m);
+      const [x2,y2] = transformPoint([vals[2],vals[3]], m);
+      const [x,y] = transformPoint([vals[4],vals[5]], m);
+      result.x1=x1; result.y1=y1; result.x2=x2; result.y2=y2; result.x=x; result.y=y;
+    }
+    // Q: 4 args (x1,y1,x,y)
+    else if(t === 'Q'){
+      const [x1,y1] = transformPoint([vals[0],vals[1]], m);
+      const [x,y] = transformPoint([vals[2],vals[3]], m);
+      result.x1=x1; result.y1=y1; result.x=x; result.y=y;
+    }
+    // A: 7 args (rx,ry,xrot,laf,sf,x,y) - rx,ry not transformed, but x,y are
+    else if(t === 'A'){
+      result.rx=vals[0]; result.ry=vals[1];
+      // For arcs, we rotate the large-arc/sweep flags if the matrix flips
+      result.xrot = vals[2]; // TODO: adjust for rotation
+      result.laf = vals[3]; result.sf = vals[4];
+      const [x,y] = transformPoint([vals[5],vals[6]], m);
+      result.x=x; result.y=y;
+    }
+    return result;
+  });
+}
+
+function cmdsToPathD(cmds){
+  return cmds.map(c => {
+    if(c.type === 'Z') return 'Z';
+    if(c.type === 'M') return `M ${r(c.x)} ${r(c.y)}`;
+    if(c.type === 'L') return `L ${r(c.x)} ${r(c.y)}`;
+    if(c.type === 'H') return `H ${r(c.x)}`;
+    if(c.type === 'V') return `V ${r(c.y)}`;
+    if(c.type === 'C') return `C ${r(c.x1)} ${r(c.y1)}, ${r(c.x2)} ${r(c.y2)}, ${r(c.x)} ${r(c.y)}`;
+    if(c.type === 'S') return `S ${r(c.x1)} ${r(c.y1)}, ${r(c.x)} ${r(c.y)}`;
+    if(c.type === 'Q') return `Q ${r(c.x1)} ${r(c.y1)}, ${r(c.x)} ${r(c.y)}`;
+    if(c.type === 'T') return `T ${r(c.x)} ${r(c.y)}`;
+    if(c.type === 'A') return `A ${r(c.rx)} ${r(c.ry)} ${r(c.xrot||0)} ${c.laf||0} ${c.sf||0} ${r(c.x)} ${r(c.y)}`;
+    return '';
+  }).join(' ');
+}
+
+function r(v){ return v !== undefined ? (Math.round(v*100)/100) : 0; }
 
 function splitSelectedLetter(){
   const sel=[...S.sel];if(sel.length!==1){toast('Seleziona esattamente una lettera da dividere.');return;}
@@ -3281,6 +3651,9 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowRight'){e.preventDefault();aps(l=>l.x+=step);}
   if(e.key==='ArrowUp'){e.preventDefault();aps(l=>l.y-=step);}
   if(e.key==='ArrowDown'){e.preventDefault();aps(l=>l.y+=step);}
+  if(e.ctrlKey&&e.key==='1'){e.preventDefault();setSelectedLayer(1);}
+  if(e.ctrlKey&&e.key==='2'){e.preventDefault();setSelectedLayer(2);}
+  if(e.ctrlKey&&e.key==='3'){e.preventDefault();setSelectedLayer(3);}
 });
 
 function toast(msg){
@@ -3362,7 +3735,8 @@ function mergeSelected() {
     groupHTML: inner,
     groupPaths: groupPaths,
     borderWidth: 0,
-    borderColor: '#000000'
+    borderColor: '#000000',
+    layer: Math.max(...sel.map(i => S.letters[i].layer || 2))
   });
 
   tempG.remove();
