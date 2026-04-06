@@ -144,7 +144,7 @@
     height:14px;
     flex-shrink:0;
   }
-  .cvsize{display:flex;align-items:center;gap:6px}
+  .cvsize{display:flex;align-items:center;gap:3px;margin-left:-16px}
   .cvsize span{color:var(--muted);font-size:11px;font-weight:500}
   .cvsize input{
     width:56px;padding:5px 7px;
@@ -157,6 +157,12 @@
     outline:none;
     text-align:center;
     transition:all .2s cubic-bezier(.4,0,.2,1);
+    -moz-appearance:textfield;
+  }
+  .cvsize input::-webkit-outer-spin-button,
+  .cvsize input::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
   }
   .cvsize input:focus{
     border-color:var(--accent);
@@ -192,16 +198,20 @@
   .left-panel-scroll{flex:1;overflow-y:auto}
   .left-panel-scroll::-webkit-scrollbar{width:3px}
   .left-panel-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  .sec{padding:10px 12px;border-bottom:1px solid var(--border)}
-  .sec-title{font-family:'Syne',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .left-panel .sec{padding:10px 12px;border-bottom:1px solid var(--border)}
+  .left-panel .sec-title{font-family:'Syne',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .rp .sec{padding:6px 12px;border-bottom:1px solid var(--border)}
+  .rp .sec:first-child{padding:10px 12px 8px 12px}
+  .rp .sec:last-child{padding-bottom:12px}
+  .rp .sec-title{font-family:'Syne',sans-serif;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
 
   /* Toggle section spacing */
-  .sec-toggle{padding:8px 12px 6px 12px}
-  .sec-toggle .segmented-control{margin:0}
-  
+  .sec-toggle{padding:8px 12px 4px 10px !important}
+  .sec-toggle .segmented-control{margin:0 !important}
+
   /* Import section spacing */
-  .sec-import{padding:10px 12px}
-  .sec-import .sec-title{margin-bottom:8px}
+  .sec-import{padding:8px 12px 6px 10px !important}
+  .sec-import .sec-title{margin-bottom:6px !important}
   
   /* Import group spacing */
   #font-import-group, #svg-import-group{display:flex;flex-direction:column}
@@ -341,6 +351,11 @@
     box-shadow:0 0 0 3px rgba(200,255,0,.1);
   }
   .search-w input::placeholder{color:var(--muted)}
+  /* SVG mode: search input highlights in orange */
+  .left-panel:has(#mode-svg:checked) .search-w input:focus{
+    border-color:var(--accent2);
+    box-shadow:0 0 0 3px rgba(255,107,53,.15);
+  }
   #font-list{flex:1;overflow-y:auto}
   #font-list::-webkit-scrollbar{width:3px}
   #font-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
@@ -471,6 +486,20 @@
     border-color:var(--accent);
     box-shadow:0 0 0 3px rgba(200,255,0,.1);
   }
+  .fsize-opt{
+    padding:6px 14px;
+    font-size:12px;
+    color:var(--text);
+    cursor:pointer;
+    text-align:center;
+    transition:background .15s;
+  }
+  .fsize-opt:hover{
+    background:var(--sel);
+    color:var(--accent);
+  }
+  #fsize-dropdown::-webkit-scrollbar{width:3px}
+  #fsize-dropdown::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 
   #cw{
     flex:1;overflow:auto;
@@ -557,7 +586,7 @@
     justify-content:center !important;
   }
   
-  .pr{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-width:0}
+  .pr{display:flex;align-items:center;gap:8px;margin-bottom:5px;min-width:0}
   .pr label{color:var(--muted);font-size:10px;min-width:28px;font-weight:500;flex-shrink:0}
   .pr input[type=range]{
     flex:1;
@@ -579,6 +608,12 @@
     outline:none;
     transition:all .2s cubic-bezier(.4,0,.2,1);
     flex-shrink:0;
+    -moz-appearance:textfield;
+  }
+  .pr input[type=number]::-webkit-outer-spin-button,
+  .pr input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
   }
   .pr input[type=number]:focus{
     border-color:var(--accent);
@@ -597,7 +632,10 @@
     border-color:var(--accent);
     box-shadow:0 0 0 3px rgba(200,255,0,.1);
   }
-  .gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:4px;max-height:120px;overflow-y:auto}
+  .gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(32px,1fr));gap:4px;max-height:120px;overflow-y:auto;padding:4px 0}
+  .gg::-webkit-scrollbar{width:4px}
+  .gg::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .gg::-webkit-scrollbar-corner{background:transparent}
   .gc{
     height:32px;
     display:flex;
@@ -618,7 +656,7 @@
     box-shadow:0 2px 6px rgba(200,255,0,.15);
     transform:translateY(-1px);
   }
-  .ag{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  .ag{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
   .tbtn{
     width:30px;height:30px;
     border:1px solid var(--border);
@@ -644,7 +682,7 @@
   .badge{display:inline-block;padding:1px 7px;background:rgba(200,255,0,.12);color:var(--accent);border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.06em}
   .nsel{color:var(--muted);font-size:10px;text-align:center;padding:14px 0}
   .svg-badge{display:inline-block;padding:1px 7px;background:rgba(255,107,53,.15);color:#ff6b35;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.06em}
-  .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
 
   /* Auto-update notification panel */
   #update-notify{
@@ -788,13 +826,13 @@
     Unisci
   </button>
   <div class="spacer"></div>
-  <button class="btn del-green" onclick="deleteSelected()" onmousedown="event.stopPropagation()">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-    Elimina
-  </button>
   <button class="btn" onclick="deleteUnselected()" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
     Elimina non sel.
+  </button>
+  <button class="btn del-green" onclick="deleteSelected()" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+    Elimina
   </button>
   <button class="btn danger" onclick="clearCanvas()" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
@@ -811,9 +849,9 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.1</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.2</span>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
           Salva
@@ -895,7 +933,25 @@
       <label>Testo</label>
       <input type="text" id="ti" placeholder="Scrivi qui…" value="Ciao" onkeydown="if(event.key==='Enter')addText()" onmousedown="event.stopPropagation(); this.focus();">
       <label>pt</label>
-      <input class="ni" type="number" id="fsize" value="80" min="4" max="900" oninput="if(S.sel.size>0){apFS(+this.value)}" onchange="if(S.sel.size>0){apFS(+this.value)}" onmousedown="event.stopPropagation(); this.focus();">
+      <div style="position:relative;display:inline-block">
+        <input class="ni" type="text" id="fsize" value="80" onkeydown="if(event.key==='Enter'){event.preventDefault();if(S.sel.size>0){apFS(+this.value)} this.blur()}" onmousedown="event.stopPropagation(); this.focus();" onblur="if(S.sel.size>0){apFS(+this.value)}" style="padding-right:20px;cursor:text">
+        <button onclick="toggleFontSizeDropdown()" onmousedown="event.stopPropagation()" style="position:absolute;right:0;top:0;bottom:0;width:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;border-left:1px solid var(--border)" title="Scegli dimensione">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div id="fsize-dropdown" style="display:none;position:absolute;top:100%;right:0;background:var(--panel);border:1px solid var(--border);border-radius:6px;min-width:80px;max-height:200px;overflow-y:auto;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.4);padding:4px 0">
+          <div onclick="setFontSize(12)" class="fsize-opt">12</div>
+          <div onclick="setFontSize(16)" class="fsize-opt">16</div>
+          <div onclick="setFontSize(24)" class="fsize-opt">24</div>
+          <div onclick="setFontSize(32)" class="fsize-opt">32</div>
+          <div onclick="setFontSize(48)" class="fsize-opt">48</div>
+          <div onclick="setFontSize(64)" class="fsize-opt">64</div>
+          <div onclick="setFontSize(80)" class="fsize-opt">80</div>
+          <div onclick="setFontSize(96)" class="fsize-opt">96</div>
+          <div onclick="setFontSize(120)" class="fsize-opt">120</div>
+          <div onclick="setFontSize(160)" class="fsize-opt">160</div>
+          <div onclick="setFontSize(200)" class="fsize-opt">200</div>
+        </div>
+      </div>
       <input type="color" id="fcol" value="#111111" title="Colore" onmousedown="event.stopPropagation();" onchange="apFill(this.value)">
       <button class="btn primary" onclick="addText()" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -997,6 +1053,10 @@
       <div class="pr"><label>Gap</label>
         <input type="range" id="pgap" min="-50" max="200" value="4" oninput="apGap(+this.value)" onmousedown="event.stopPropagation()">
         <span class="val" id="vgap">4px</span></div>
+      <button class="btn ordine-btn" style="margin-top:6px" onclick="distrib('h')" onmousedown="event.stopPropagation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>
+        Distribuisci
+      </button>
     </div>
     <div class="sec">
       <div class="sec-title">Ordine</div>
@@ -1017,10 +1077,6 @@
       <button class="btn ordine-btn" style="margin-top:6px" onclick="splitSelectedLetter()" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><path d="M8.12 8.12L12 12"></path><path d="M20 16l-4-4"></path><circle cx="18" cy="18" r="3"></circle></svg>
         Dividi Lettera
-      </button>
-      <button class="btn ordine-btn" style="margin-top:6px" onclick="distrib('h')" onmousedown="event.stopPropagation()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>
-        Distribuisci
       </button>
     </div>
     <div class="sec">
@@ -2826,7 +2882,7 @@ function upd(){
   v('px', Math.round(avgX));
   v('py', Math.round(avgY));
   v('prot', Math.round(avgRot));
-  t('vrot', Math.round(avgRot) + '°');
+  v('vrot', Math.round(avgRot));
   v('psx', avgSx);
   t('vsx', avgSx.toFixed(2));
   v('psy', avgSy);
@@ -3007,6 +3063,22 @@ function apFill(val){
   v('pfill', val);
 }
 function apFS(val){aps(l=>l.fontSize=val);}
+function toggleFontSizeDropdown(){
+  const dd=document.getElementById('fsize-dropdown');
+  dd.style.display=dd.style.display==='block'?'none':'block';
+}
+function setFontSize(val){
+  document.getElementById('fsize').value=val;
+  if(S.sel.size>0) apFS(val);
+  document.getElementById('fsize-dropdown').style.display='none';
+}
+// Chiudi dropdown font size quando si clicca fuori
+document.addEventListener('click',function(e){
+  const dd=document.getElementById('fsize-dropdown');
+  if(dd && dd.style.display==='block' && !e.target.closest('#fsize') && !e.target.closest('[onclick*="toggleFontSizeDropdown"]') && !e.target.closest('#fsize-dropdown')){
+    dd.style.display='none';
+  }
+});
 function apOp(val){t('vop',Math.round(val*100)+'%');aps(l=>l.op=val);}
 function apBorder(val){t('vborder',val.toFixed(1)+'px');aps(l=>l.borderWidth=val);}
 function apBorderCol(val){aps(l=>l.borderColor=val);}
