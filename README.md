@@ -350,6 +350,28 @@ npm start
 - Controlla che le estensioni siano `.ttf`, `.otf`, `.woff`, `.woff2`
 - Riavvia l'app
 
+#### Font non visualizzati correttamente nell'anteprima 3D
+L'anteprima 3D richiede che i font siano parsati correttamente da opentype.js. Se un font non viene visualizzato:
+
+1. **Diagnostica font** - Apri DevTools (Ctrl+Shift+I) e nella console digita:
+   ```javascript
+   // Diagnostica un font specifico
+   diagnoseFont('NomeFont')
+   
+   // Oppure diagnostica tutti i font
+   diagnoseAllFonts()
+   ```
+   
+2. **Cause comuni**:
+   - Font corrotto o non valido
+   - Font senza dati glyph (nessun contorno vettoriale)
+   - Font in formato non supportato da opentype.js
+   
+3. **Soluzione**:
+   - Prova a convertire il font in un altro formato (es. da .ttf a .otf)
+   - Usa un font alternativo
+   - Verifica che il font abbia contorni vettoriali (non tutti i font li hanno)
+
 #### L'auto-update non funziona
 - Assicurati di essere in **produzione** (non `npm start`)
 - Controlla i log in DevTools (Ctrl+Shift+I)
