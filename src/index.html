@@ -517,6 +517,36 @@
     font-size:11px !important;
     justify-content:center !important;
   }
+
+  /* Layer buttons - active state */
+  .layer-btn.active{
+    font-weight: 700;
+    box-shadow: 0 2px 8px currentColor;
+  }
+  #layer-btn-1.active{
+    background: linear-gradient(180deg, #4488ff 0%, #3377ee 100%) !important;
+    color: #000 !important;
+    border-color: #4488ff !important;
+  }
+  #layer-btn-1.active svg{
+    stroke: #000 !important;
+  }
+  #layer-btn-2.active{
+    background: linear-gradient(180deg, #ffaa00 0%, #ee9900 100%) !important;
+    color: #000 !important;
+    border-color: #ffaa00 !important;
+  }
+  #layer-btn-2.active svg{
+    stroke: #000 !important;
+  }
+  #layer-btn-3.active{
+    background: linear-gradient(180deg, #ff4488 0%, #ee3377 100%) !important;
+    color: #000 !important;
+    border-color: #ff4488 !important;
+  }
+  #layer-btn-3.active svg{
+    stroke: #000 !important;
+  }
   
   /* Font action buttons (Tutti/Nessuno) - fixed, larger */
   .font-action-btn{
@@ -757,20 +787,7 @@
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M12 8v8"></path><path d="M8 12h8"></path></svg>
     Unisci
   </button>
-  <button class="btn" style="border-color: #4488ff; color: #4488ff;" onclick="setSelectedLayer(1)" onmousedown="event.stopPropagation()" title="Porta gli oggetti selezionati nel Layer 1 (sotto)">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M18 13l-6 6-6-6"></path></svg>
-  </button>
-  <button class="btn" style="border-color: #ffaa00; color: #ffaa00;" onclick="setSelectedLayer(2)" onmousedown="event.stopPropagation()" title="Porta gli oggetti selezionati nel Layer 2 (centro)">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-  </button>
-  <button class="btn" style="border-color: #ff4488; color: #ff4488;" onclick="setSelectedLayer(3)" onmousedown="event.stopPropagation()" title="Porta gli oggetti selezionati nel Layer 3 (sopra)">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="M18 11l-6-6-6 6"></path></svg>
-  </button>
   <div class="spacer"></div>
-  <button class="btn" onclick="selectAll()" onmousedown="event.stopPropagation()">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
-    Seleziona tutto
-  </button>
   <button class="btn del-green" onclick="deleteSelected()" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
     Elimina
@@ -794,7 +811,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.0</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.1</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -921,6 +938,23 @@
       </div>
     </div>
     <div class="sec">
+      <div class="sec-title">Layer</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn ordine-btn layer-btn" id="layer-btn-1" style="border-color: #4488ff; color: #4488ff;" onclick="setSelectedLayer(1)" onmousedown="event.stopPropagation()" title="Layer 1 (sotto)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M18 13l-6 6-6-6"></path></svg>
+          1
+        </button>
+        <button class="btn ordine-btn layer-btn" id="layer-btn-2" style="border-color: #ffaa00; color: #ffaa00;" onclick="setSelectedLayer(2)" onmousedown="event.stopPropagation()" title="Layer 2 (centro)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          2
+        </button>
+        <button class="btn ordine-btn layer-btn" id="layer-btn-3" style="border-color: #ff4488; color: #ff4488;" onclick="setSelectedLayer(3)" onmousedown="event.stopPropagation()" title="Layer 3 (sopra)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="M18 11l-6-6-6 6"></path></svg>
+          3
+        </button>
+      </div>
+    </div>
+    <div class="sec">
       <div class="sec-title">Rotazione</div>
       <div class="pr"><label>↻</label>
         <input type="range" id="prot" min="-180" max="180" value="0" oninput="apRot(+this.value)" onmousedown="event.stopPropagation()">
@@ -1025,7 +1059,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.1.0</div>
+  <div class="un-ver" id="un-version">Versione 4.1.1</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -2831,6 +2865,25 @@ function upd(){
   const layerLabels = {1: 'Sotto', 2: 'Centro', 3: 'Sopra'};
   const allSameLayer = sel.every(i => (S.letters[i].layer || 2) === (S.letters[sel[0]].layer || 2));
   const layerInfo = allSameLayer ? `<br>Layer: ${layerLabels[S.letters[sel[0]].layer || 2] || 'Centro'}` : '';
+  
+  // Aggiorna lo stato dei pulsanti layer
+  const layerBtn1 = document.getElementById('layer-btn-1');
+  const layerBtn2 = document.getElementById('layer-btn-2');
+  const layerBtn3 = document.getElementById('layer-btn-3');
+  
+  // Resetta tutti i pulsanti
+  if(layerBtn1) layerBtn1.classList.remove('active');
+  if(layerBtn2) layerBtn2.classList.remove('active');
+  if(layerBtn3) layerBtn3.classList.remove('active');
+  
+  // Se tutti gli oggetti selezionati sono nello stesso layer, illumina il pulsante corrispondente
+  if(allSameLayer) {
+    const activeLayer = S.letters[sel[0]].layer || 2;
+    if(activeLayer === 1 && layerBtn1) layerBtn1.classList.add('active');
+    else if(activeLayer === 2 && layerBtn2) layerBtn2.classList.add('active');
+    else if(activeLayer === 3 && layerBtn3) layerBtn3.classList.add('active');
+  }
+  
   const badge = first.isSvgImport ? `<span class="svg-badge">SVG path</span>` : `<span class="badge">${sel.length} lettera${sel.length>1?'e':''}</span>`;
   const infoText = sel.length > 1
     ? `${badge}<br><br><b>${sel.length} elementi selezionati</b>${layerInfo}<br>BBox: ${Math.round(getGroupBBox()?.w || 0)} × ${Math.round(getGroupBBox()?.h || 0)}px`
@@ -2855,6 +2908,14 @@ function resetPropertyFields(){
   v('pgap', 4); t('vgap', '4px');
   // Resetta pt
   v('fsize', 80);
+  
+  // Resetta i pulsanti layer
+  const layerBtn1 = document.getElementById('layer-btn-1');
+  const layerBtn2 = document.getElementById('layer-btn-2');
+  const layerBtn3 = document.getElementById('layer-btn-3');
+  if(layerBtn1) layerBtn1.classList.remove('active');
+  if(layerBtn2) layerBtn2.classList.remove('active');
+  if(layerBtn3) layerBtn3.classList.remove('active');
 }
 function v(id,val){const el = document.getElementById(id);if(el){const active=document.activeElement;if(active!==el&&el!==active){el.value=val;}}}
 function t(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
