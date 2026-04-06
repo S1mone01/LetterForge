@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <title>LetterForge Pro</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap');
@@ -957,6 +959,11 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         Aggiungi
       </button>
+      <div class="spacer"></div>
+      <button class="btn btn-accent2" onclick="toggle3DPreview()" onmousedown="event.stopPropagation()" title="Anteprima 3D">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 4.5v9L12 21l-9-4.5v-9L12 3z"></path><path d="M12 12l9-4.5"></path><path d="M12 12v9"></path><path d="M12 12L3 7.5"></path></svg>
+        3D Preview
+      </button>
     </div>
     <div id="cw">
       <div id="snap-line"></div>
@@ -976,6 +983,20 @@
             fill="rgba(200,255,0,.08)" stroke="#c8ff00" stroke-width="1"
             stroke-dasharray="4 3" pointer-events="none" style="display:none"/>
         </svg>
+      </div>
+    </div>
+    <!-- 3D Preview Panel -->
+    <div id="preview-3d-panel" style="display:none;position:fixed;top:46px;right:0;width:420px;height:calc(100vh - 46px);background:var(--panel);border-left:1px solid var(--border);z-index:100;flex-direction:column;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);">
+        <div class="sec-title" style="margin:0;font-size:11px;">ANTEPRIMA 3D</div>
+        <button class="btn btn-icon" onclick="toggle3DPreview()" title="Chiudi" style="padding:4px 6px;min-width:28px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div id="threejs-container" style="flex:1;position:relative;overflow:hidden;"></div>
+      <div style="padding:10px 14px;border-top:1px solid var(--border);max-height:40%;overflow-y:auto;">
+        <div class="sec-title" style="margin-bottom:8px;font-size:10px;">COLORI & ALTEZZE</div>
+        <div id="color-heights-list" style="display:flex;flex-direction:column;gap:8px;"></div>
       </div>
     </div>
   </div>
@@ -4038,6 +4059,452 @@ if (window.electronAPI && window.electronAPI.onAppVersion) {
     if (unVerEl) unVerEl.textContent = 'Versione ' + version;
   });
 }
+
+// ===========================
+// 3D PREVIEW FUNCTIONALITY
+// ===========================
+let threeJSState = {
+  scene: null,
+  camera: null,
+  renderer: null,
+  controls: null,
+  meshes: [],
+  colorHeights: {}, // Maps hex color to extrusion height
+  isInitialized: false,
+  animationId: null
+};
+
+function toggle3DPreview() {
+  const panel = document.getElementById('preview-3d-panel');
+  if (panel.style.display === 'none' || panel.style.display === '') {
+    panel.style.display = 'flex';
+    init3DPreview();
+    update3DPreview();
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function init3DPreview() {
+  if (threeJSState.isInitialized) return;
+  
+  const container = document.getElementById('threejs-container');
+  if (!container) return;
+  
+  // Scene
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x13131a);
+  
+  // Camera
+  const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 10000);
+  camera.position.set(0, -500, 600);
+  
+  // Renderer
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+  
+  // Orbit Controls
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.screenSpacePanning = true;
+  controls.mouseButtons = {
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.PAN
+  };
+  
+  // Lights
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
+  
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(200, -200, 400);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  scene.add(dirLight);
+  
+  const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+  dirLight2.position.set(-200, 200, 300);
+  scene.add(dirLight2);
+  
+  // Grid helper
+  const gridHelper = new THREE.GridHelper(1000, 50, 0x2a2a3a, 0x1a1a25);
+  gridHelper.rotation.x = Math.PI / 2;
+  scene.add(gridHelper);
+  
+  // Store state
+  threeJSState.scene = scene;
+  threeJSState.camera = camera;
+  threeJSState.renderer = renderer;
+  threeJSState.controls = controls;
+  threeJSState.isInitialized = true;
+  
+  // Handle resize
+  window.addEventListener('resize', on3DResize);
+  
+  // Animation loop
+  animate3D();
+}
+
+function on3DResize() {
+  const container = document.getElementById('threejs-container');
+  if (!container || !threeJSState.isInitialized) return;
+  
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  
+  threeJSState.camera.aspect = width / height;
+  threeJSState.camera.updateProjectionMatrix();
+  threeJSState.renderer.setSize(width, height);
+}
+
+function animate3D() {
+  threeJSState.animationId = requestAnimationFrame(animate3D);
+  if (threeJSState.controls) {
+    threeJSState.controls.update();
+  }
+  if (threeJSState.renderer && threeJSState.scene && threeJSState.camera) {
+    threeJSState.renderer.render(threeJSState.scene, threeJSState.camera);
+  }
+}
+
+function extractColorsFromSVG() {
+  const svgLayer = document.getElementById('svg-layer');
+  if (!svgLayer) return [];
+  
+  const colorMap = new Map();
+  const elements = svgLayer.querySelectorAll('path, circle, rect, ellipse, polygon, polyline');
+  
+  elements.forEach(el => {
+    let fill = el.getAttribute('fill');
+    if (fill && fill !== 'none' && !fill.startsWith('url')) {
+      // Normalize color
+      const hex = normalizeColor(fill);
+      if (hex) {
+        if (!colorMap.has(hex)) {
+          colorMap.set(hex, []);
+        }
+        colorMap.get(hex).push(el);
+      }
+    }
+  });
+  
+  return Array.from(colorMap.entries()).map(([color, els]) => ({
+    color: color,
+    elements: els,
+    height: threeJSState.colorHeights[color] || 20 // Default height 20mm
+  }));
+}
+
+function normalizeColor(colorStr) {
+  // Simple RGB/Hex normalizer
+  if (colorStr.startsWith('#')) {
+    return colorStr.toUpperCase();
+  }
+  // Parse rgb()
+  const rgbMatch = colorStr.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
+    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
+    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
+    return '#' + r + g + b;
+  }
+  return null;
+}
+
+function buildColorHeightsList(colorsData) {
+  const listEl = document.getElementById('color-heights-list');
+  if (!listEl) return;
+  
+  listEl.innerHTML = '';
+  
+  colorsData.forEach(item => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px;background:var(--panel2);border-radius:6px;border:1px solid var(--border);';
+    
+    // Color swatch
+    const swatch = document.createElement('div');
+    swatch.style.cssText = `width:24px;height:24px;border-radius:4px;background:${item.color};border:1px solid var(--border);flex-shrink:0;`;
+    row.appendChild(swatch);
+    
+    // Color label
+    const label = document.createElement('span');
+    label.textContent = item.color;
+    label.style.cssText = 'font-size:10px;color:var(--muted);min-width:70px;font-family:"DM Mono",monospace;';
+    row.appendChild(label);
+    
+    // Slider
+    const sliderContainer = document.createElement('div');
+    sliderContainer.style.cssText = 'flex:1;display:flex;align-items:center;gap:6px;';
+    
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '200';
+    slider.step = '1';
+    slider.value = item.height;
+    slider.style.cssText = 'flex:1;height:4px;-webkit-appearance:none;background:var(--border);border-radius:2px;outline:none;cursor:pointer;';
+    slider.oninput = (e) => {
+      const newHeight = parseFloat(e.target.value);
+      threeJSState.colorHeights[item.color] = newHeight;
+      valueDisplay.textContent = newHeight + ' mm';
+      update3DPreview();
+    };
+    
+    // Style the slider thumb
+    const style = document.createElement('style');
+    style.textContent = `
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        background: var(--accent2);
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      }
+    `;
+    sliderContainer.appendChild(style);
+    
+    sliderContainer.appendChild(slider);
+    
+    // Value display
+    const valueDisplay = document.createElement('span');
+    valueDisplay.textContent = item.height + ' mm';
+    valueDisplay.style.cssText = 'font-size:10px;color:var(--text);min-width:45px;text-align:right;font-weight:500;';
+    sliderContainer.appendChild(valueDisplay);
+    
+    row.appendChild(sliderContainer);
+    listEl.appendChild(row);
+  });
+  
+  if (colorsData.length === 0) {
+    listEl.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:10px;text-align:center;">Nessun colore rilevato</div>';
+  }
+}
+
+function pathToThreeShape(pathD, scale = 1) {
+  const shape = new THREE.Shape();
+  const cmds = parsePathDForThree(pathD);
+  
+  let currentX = 0;
+  let currentY = 0;
+  
+  cmds.forEach(cmd => {
+    switch(cmd.type) {
+      case 'M':
+        currentX = cmd.x * scale;
+        currentY = cmd.y * scale;
+        shape.moveTo(currentX, currentY);
+        break;
+      case 'L':
+        currentX = cmd.x * scale;
+        currentY = cmd.y * scale;
+        shape.lineTo(currentX, currentY);
+        break;
+      case 'Q':
+        currentX = cmd.x2 * scale;
+        currentY = cmd.y2 * scale;
+        shape.quadraticCurveTo(cmd.x1 * scale, cmd.y1 * scale, currentX, currentY);
+        break;
+      case 'C':
+        currentX = cmd.x3 * scale;
+        currentY = cmd.y3 * scale;
+        shape.bezierCurveTo(cmd.x1 * scale, cmd.y1 * scale, cmd.x2 * scale, cmd.y2 * scale, currentX, currentY);
+        break;
+      case 'Z':
+        shape.closePath();
+        break;
+    }
+  });
+  
+  return shape;
+}
+
+function parsePathDForThree(d) {
+  const cmds = [];
+  const regex = /([MmLlQqCcZz])([^MmLlQqCcZz]*)/g;
+  let match;
+  
+  let currentX = 0;
+  let currentY = 0;
+  
+  while ((match = regex.exec(d)) !== null) {
+    const type = match[1];
+    const params = match[2].trim().split(/[\s,]+/).filter(p => p !== '').map(Number);
+    
+    switch(type) {
+      case 'M':
+        currentX = params[0];
+        currentY = params[1];
+        cmds.push({ type: 'M', x: currentX, y: currentY });
+        break;
+      case 'm':
+        currentX += params[0];
+        currentY += params[1];
+        cmds.push({ type: 'M', x: currentX, y: currentY });
+        break;
+      case 'L':
+        currentX = params[0];
+        currentY = params[1];
+        cmds.push({ type: 'L', x: currentX, y: currentY });
+        break;
+      case 'l':
+        currentX += params[0];
+        currentY += params[1];
+        cmds.push({ type: 'L', x: currentX, y: currentY });
+        break;
+      case 'Q':
+        cmds.push({ type: 'Q', x1: params[0], y1: params[1], x2: params[2], y2: params[3] });
+        currentX = params[2];
+        currentY = params[3];
+        break;
+      case 'q':
+        cmds.push({ 
+          type: 'Q', 
+          x1: currentX + params[0], 
+          y1: currentY + params[1], 
+          x2: currentX + params[2], 
+          y2: currentY + params[3] 
+        });
+        currentX += params[2];
+        currentY += params[3];
+        break;
+      case 'C':
+        cmds.push({ type: 'C', x1: params[0], y1: params[1], x2: params[2], y2: params[3], x3: params[4], y3: params[5] });
+        currentX = params[4];
+        currentY = params[5];
+        break;
+      case 'c':
+        cmds.push({ 
+          type: 'C', 
+          x1: currentX + params[0], 
+          y1: currentY + params[1], 
+          x2: currentX + params[2], 
+          y2: currentY + params[3], 
+          x3: currentX + params[4], 
+          y3: currentY + params[5] 
+        });
+        currentX += params[4];
+        currentY += params[5];
+        break;
+      case 'Z':
+      case 'z':
+        cmds.push({ type: 'Z' });
+        break;
+    }
+  }
+  
+  return cmds;
+}
+
+function update3DPreview() {
+  if (!threeJSState.isInitialized) return;
+  
+  const scene = threeJSState.scene;
+  
+  // Clear existing meshes
+  threeJSState.meshes.forEach(mesh => scene.remove(mesh));
+  threeJSState.meshes = [];
+  
+  // Extract colors and build UI
+  const colorsData = extractColorsFromSVG();
+  buildColorHeightsList(colorsData);
+  
+  // Create extruded meshes for each color
+  const svgLayer = document.getElementById('svg-layer');
+  if (!svgLayer) return;
+  
+  const svgElement = document.getElementById('svg');
+  const viewBox = svgElement ? svgElement.viewBox.baseVal : { width: 800, height: 500 };
+  
+  colorsData.forEach(colorItem => {
+    const height = threeJSState.colorHeights[colorItem.color] || 20;
+    
+    colorItem.elements.forEach(el => {
+      const d = el.getAttribute('d');
+      if (!d) return;
+      
+      const shape = pathToThreeShape(d, 1);
+      if (!shape || shape.curves.length === 0) return;
+      
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: height,
+        bevelEnabled: false,
+        curveSegments: 12
+      });
+      
+      // Center geometry
+      geometry.center();
+      
+      // Rotate to align with SVG coordinate system (Y is flipped in SVG)
+      geometry.rotateX(Math.PI / 2);
+      
+      const material = new THREE.MeshStandardMaterial({
+        color: colorItem.color,
+        roughness: 0.5,
+        metalness: 0.1
+      });
+      
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      
+      // Position at origin (centered)
+      mesh.position.set(0, 0, 0);
+      
+      scene.add(mesh);
+      threeJSState.meshes.push(mesh);
+    });
+  });
+  
+  // Reset camera to fit scene
+  fitCameraToObject();
+}
+
+function fitCameraToObject() {
+  if (!threeJSState.isInitialized || threeJSState.meshes.length === 0) return;
+  
+  const box = new THREE.Box3();
+  threeJSState.meshes.forEach(mesh => {
+    box.union(new THREE.Box3().setFromObject(mesh));
+  });
+  
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const fov = threeJSState.camera.fov * (Math.PI / 180);
+  let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+  cameraZ *= 1.5; // Zoom out a bit
+  
+  threeJSState.camera.position.set(center.x, center.y - cameraZ * 0.5, cameraZ);
+  threeJSState.camera.lookAt(center);
+  threeJSState.controls.target.copy(center);
+  threeJSState.controls.update();
+}
+
+// Hook into render functions to update 3D preview when SVG changes
+const originalRenderSVGLayer = window.renderSVGLayer;
+window.renderSVGLayer = function(forceRebuild) {
+  if (originalRenderSVGLayer) originalRenderSVGLayer(forceRebuild);
+  if (document.getElementById('preview-3d-panel').style.display !== 'none') {
+    setTimeout(update3DPreview, 100);
+  }
+};
+
+const originalRender = window.render;
+window.render = function() {
+  if (originalRender) originalRender();
+  if (document.getElementById('preview-3d-panel').style.display !== 'none') {
+    setTimeout(update3DPreview, 100);
+  }
+};
 </script>
 </body>
 </html>
