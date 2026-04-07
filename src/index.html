@@ -746,9 +746,16 @@
             for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
             try {
               var parsed = opentype.parse(bytes.buffer);
-              window._pendingFonts = window._pendingFonts || [];
-              window._pendingFonts.push({ name: font.name, css: "'" + cn + "',sans-serif", open: parsed });
-            } catch(e) {}
+              // Validate that the font has glyph data
+              if (parsed && parsed.glyphs && parsed.glyphs.length > 0) {
+                window._pendingFonts = window._pendingFonts || [];
+                window._pendingFonts.push({ name: font.name, css: "'" + cn + "',sans-serif", open: parsed });
+              } else {
+                console.warn('Font parsed but has no glyphs:', font.name);
+              }
+            } catch(e) {
+              console.warn('Opentype parse failed for:', font.name, e);
+            }
             var tryAdd = function() {
               if (typeof S !== 'undefined') {
                 (window._pendingFonts || []).forEach(function(pf) {
@@ -855,7 +862,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.5</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.6</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -1210,7 +1217,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.1.5</div>
+  <div class="un-ver" id="un-version">Versione 4.1.6</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -1610,9 +1617,10 @@ function addSVGToCanvas(name){
   if(!svgObj) return;
 
   // Calcola scala automatica per adattare SVG al canvas
-  const targetSize = Math.min(S.canvasW, S.canvasH) * 0.08; // 8% del lato più piccolo
+  // Target: 20% del lato più piccolo del canvas (più visibile)
+  const targetSize = Math.min(S.canvasW, S.canvasH) * 0.20;
   const svgMaxDim = Math.max(svgObj.width, svgObj.height);
-  const autoScale = targetSize / svgMaxDim;
+  const autoScale = svgMaxDim > 0 ? targetSize / svgMaxDim : 1;
 
   S.letters.push({
     id: uid++,
@@ -2347,7 +2355,7 @@ function render(){
         el.style.paintOrder = 'stroke fill';
       }
     } else if(S.openFonts[l.fontName]){
-      const d=S.openFonts[l.fontName].getPath(l.ch,0,0,l.fontSize).toPathData(2);
+      const d=S.openFonts[l.fontName].getPath(l.ch,0,0,l.fontSize).toPathData(4);
       el=document.createElementNS('http://www.w3.org/2000/svg','path');
       el.setAttribute('d',d);el.setAttribute('fill',displayFill);
       el.setAttribute('transform',`translate(${l.x-mw/2},${l.y})`);
@@ -3542,7 +3550,8 @@ async function exportSVG() {
         const innerX = l.x - mw / 2;
         const innerY = l.y;
         const combined = outerM.translate(innerX, innerY);
-        const d = S.openFonts[l.fontName].getPath(l.ch, 0, 0, l.fontSize).toPathData(2);
+        // Use higher precision for better export quality
+        const d = S.openFonts[l.fontName].getPath(l.ch, 0, 0, l.fontSize).toPathData(4);
         const segs = pathToAbsoluteSegments(d);
         const transformed = _applyDOMMatrixToSegs(segs, combined);
         const pathD = segsToPathD(transformed);
@@ -4311,34 +4320,31 @@ function build3DObjects() {
   // Clear previous meshes
   threeMeshes = [];
   threeExtrusionLevels = {};
-  
+
+  // STEP 1: Use EXACT same logic as exportSVG() to build items
   const ctx = document.getElementById('dc').getContext('2d');
-  
-  // Ordine di render (identico a render() e exportSVG())
   const sortedIndices = S.letters.map((_, i) => i)
     .sort((a, b) => (S.letters[a].layer || 2) - (S.letters[b].layer || 2));
-  
-  // Costruisce items con pathD trasformato (STEPPA 1 di exportSVG)
+
   const items = [];
-  
+
   sortedIndices.forEach((i, renderOrder) => {
     const l = S.letters[i];
     const color = l.fill || '#000000';
     const opacity = (l.op != null) ? l.op : 1;
     const bw = l.borderWidth || 0;
     const bc = l.borderColor || '#000000';
-    
+
     ctx.font = `${l.fontSize}px ${l.fontFamily}`;
     const mw = l.isGroup ? l.groupW : (l.isSvgImport ? (l.svgW || 100) : ctx.measureText(l.ch).width);
-    
-    // Matrice outer (pivot di rot/scale)
+
     const outerM = _buildLetterMatrix(l, mw);
-    
+
     if (l.isGroup && l.groupHTML) {
       const dx = l.x - (l.originalX || l.x);
       const dy = l.y - (l.originalY || l.y);
       const innerM = outerM.translate(dx, dy);
-      
+
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = l.groupHTML;
       const allSegs = [];
@@ -4355,8 +4361,8 @@ function build3DObjects() {
       const pathD = segsToPathD(allSegs);
       const bbox = _realBBox(pathD);
       if (!bbox) return;
-      items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder, letter: l });
-      
+      items.push({ pathD, bbox, color, opacity, bw: 0, bc, renderOrder });
+
     } else if (l.customPath) {
       const innerX = l.isSvgImport ? l.x - (l.svgW || mw) / 2 : l.x - mw / 2;
       const innerY = l.y;
@@ -4366,286 +4372,391 @@ function build3DObjects() {
       const pathD = segsToPathD(transformed);
       const bbox = _realBBox(pathD);
       if (!bbox) return;
-      items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder, letter: l });
-      
+      items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder });
+
     } else if (S.openFonts[l.fontName]) {
       const innerX = l.x - mw / 2;
       const innerY = l.y;
       const combined = outerM.translate(innerX, innerY);
-      const d = S.openFonts[l.fontName].getPath(l.ch, 0, 0, l.fontSize).toPathData(2);
-      const segs = pathToAbsoluteSegments(d);
-      const transformed = _applyDOMMatrixToSegs(segs, combined);
-      const pathD = segsToPathD(transformed);
-      const bbox = _realBBox(pathD);
-      if (!bbox) return;
-      items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder, letter: l });
+      try {
+        // Use higher precision (4 instead of 2) for better path quality
+        const d = S.openFonts[l.fontName].getPath(l.ch, 0, 0, l.fontSize).toPathData(4);
+        if (!d || d.length === 0) {
+          throw new Error('Empty path data');
+        }
+        const segs = pathToAbsoluteSegments(d);
+        if (!segs || segs.length === 0) {
+          throw new Error('No path segments generated');
+        }
+        const transformed = _applyDOMMatrixToSegs(segs, combined);
+        const pathD = segsToPathD(transformed);
+        if (!pathD || pathD.length === 0) {
+          throw new Error('Empty path string after transformation');
+        }
+        const bbox = _realBBox(pathD);
+        if (!bbox) {
+          throw new Error('Could not calculate bounding box');
+        }
+        items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder });
+      } catch(e) {
+        console.warn('3D: Font path generation failed for:', `"${l.ch}" in font "${l.fontName}"`, '- using fallback box', e);
+        // Fallback: create a simple box
+        const fs = l.fontSize || 80;
+        const estW = fs * 0.65;
+        const estH = fs;
+        const x = l.x - estW / 2;
+        const y = l.y - estH;
+        const pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
+        items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder });
+      }
+
+    } else {
+      // System font fallback: create a simple box
+      const fs = l.fontSize || 80;
+      const estW = fs * 0.65;
+      const estH = fs;
+      const x = l.x - estW / 2;
+      const y = l.y - estH;
+      const pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
+      items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder });
     }
   });
-  
+
   if (!items.length) {
     toast('Nessun elemento valido per il 3D!');
     close3DPreview();
     return;
   }
-  
-  // Group items by color (senza unire i path - ogni elemento mantiene la sua posizione)
+
+  // STEP 2: Convert paths to 3D meshes
+  const extrusionDepth = 20;
+
+  // Group items by color for extrusion controls
   const colorGroups = {};
-  items.forEach((item, idx) => {
-    const color = item.color;
-    if (!colorGroups[color]) {
-      colorGroups[color] = [];
-    }
-    colorGroups[color].push({ ...item, itemIdx: idx });
-  });
-  
-  // Tutti gli oggetti iniziano da Z=0 (nessun offset iniziale)
-  const zOffset = 0;
-  const colorKeys = Object.keys(colorGroups);
-  
-  colorKeys.forEach((color, groupIdx) => {
-    const itemsInGroup = colorGroups[color];
-    
-    // Default extrusion amount
-    const extrusionAmount = 20;
-    threeExtrusionLevels[color] = {
-      extrusion: extrusionAmount,
-      meshes: []
-    };
-    
-    // Crea una mesh per OGNI elemento (non unire!)
-    itemsInGroup.forEach((item) => {
-      try {
-        // Parse del path
-        const commands = parseSVGPath(item.pathD);
-        if (!commands.length) return;
-        
-        // Raggruppa comandi in path separati (per ogni 'M')
-        const paths = [];
-        let currentPath = [];
-        
-        commands.forEach(cmd => {
-          if (cmd.type === 'M') {
-            if (currentPath.length) {
-              paths.push(currentPath);
-            }
-            currentPath = [cmd];
-          } else {
-            currentPath.push(cmd);
-          }
+
+  items.forEach((item) => {
+    try {
+      const shapes = pathD_to_ThreeShapes(item.pathD);
+
+      // Track meshes by color
+      const meshIndices = [];
+
+      shapes.forEach(shape => {
+        const geometry = new THREE.ExtrudeGeometry(shape, {
+          depth: extrusionDepth,
+          bevelEnabled: true,
+          bevelThickness: 1,
+          bevelSize: 0.5,
+          bevelSegments: 2,
+          curveSegments: 12
         });
-        
-        if (currentPath.length) {
-          paths.push(currentPath);
-        }
-        
-        if (paths.length === 0) return;
-        
-        // Calcola l'area con segno di ogni path per determinare se è una hole
-        // I path con area negativa (orari) sono holes, quelli positivi (antiorari) sono shape
-        function signedArea2D(points) {
-          let area = 0;
-          for (let i = 0; i < points.length; i++) {
-            const j = (i + 1) % points.length;
-            area += points[i].x * points[j].y;
-            area -= points[j].x * points[i].y;
-          }
-          return area / 2;
-        }
-        
-        // Converti tutti i path in punti 2D
-        const allPaths2D = paths.map(pathCommands => {
-          const points = [];
-          pathCommands.forEach(cmd => {
-            if (cmd.type === 'M' || cmd.type === 'L') {
-              points.push({ x: cmd.x, y: cmd.y });
-            } else if (cmd.type === 'C') {
-              for (let t = 0; t <= 1; t += 0.05) {
-                const mt = 1 - t;
-                points.push({
-                  x: mt*mt*mt*cmd.x + 3*mt*mt*t*cmd.x1 + 3*mt*t*t*cmd.x2 + t*t*t*cmd.x,
-                  y: mt*mt*mt*cmd.y + 3*mt*mt*t*cmd.y1 + 3*mt*t*t*cmd.y2 + t*t*t*cmd.y
-                });
-              }
-            } else if (cmd.type === 'Q') {
-              for (let t = 0; t <= 1; t += 0.05) {
-                const mt = 1 - t;
-                points.push({
-                  x: mt*mt*points[points.length-1]?.x + 2*mt*t*cmd.x1 + t*t*cmd.x,
-                  y: mt*mt*points[points.length-1]?.y + 2*mt*t*cmd.y1 + t*t*cmd.y
-                });
-              }
-            }
-          });
-          return { points, commands: pathCommands };
+
+        const threeColor = new THREE.Color(item.color);
+        const material = new THREE.MeshPhongMaterial({
+          color: threeColor,
+          specular: 0x444444,
+          shininess: 30,
+          side: THREE.DoubleSide,
+          transparent: item.opacity < 1,
+          opacity: item.opacity
         });
-        
-        // Separa outer paths (area positiva) da holes (area negativa)
-        const outerPaths = [];
-        const holePaths = [];
-        
-        allPaths2D.forEach(pathData => {
-          const area = signedArea2D(pathData.points);
-          if (area > 0) {
-            outerPaths.push(pathData);
-          } else {
-            holePaths.push(pathData);
-          }
-        });
-        
-        // Se non ci sono outer path, usa il primo path come shape principale
-        if (outerPaths.length === 0 && paths.length > 0) {
-          outerPaths.push(allPaths2D[0]);
-        }
-        
-        // Per ogni outer path, trova le holes che sono contenute al suo interno
-        outerPaths.forEach((outerPathData, outerIdx) => {
-          const shape = new THREE.Shape();
-          let started = false;
-          
-          outerPathData.commands.forEach(cmd => {
-            if (cmd.type === 'M') {
-              shape.moveTo(cmd.x, -cmd.y);
-              started = true;
-            } else if (cmd.type === 'L' && started) {
-              shape.lineTo(cmd.x, -cmd.y);
-            } else if (cmd.type === 'C' && started) {
-              shape.bezierCurveTo(cmd.x1, -cmd.y1, cmd.x2, -cmd.y2, cmd.x, -cmd.y);
-            } else if (cmd.type === 'Q' && started) {
-              shape.quadraticCurveTo(cmd.x1, -cmd.y1, cmd.x, -cmd.y);
-            } else if (cmd.type === 'Z' && started) {
-              shape.closePath();
-            }
-          });
-          
-          if (!started) return;
-          
-          // Trova le holes che sono dentro questo outer path
-          const outerBBox = {
-            minX: Math.min(...outerPathData.points.map(p => p.x)),
-            maxX: Math.max(...outerPathData.points.map(p => p.x)),
-            minY: Math.min(...outerPathData.points.map(p => p.y)),
-            maxY: Math.max(...outerPathData.points.map(p => p.y))
-          };
-          
-          holePaths.forEach(holePathData => {
-            // Controlla se la hole è dentro il bounding box dell'outer
-            const holeCenter = holePathData.points.reduce((sum, p) => ({ x: sum.x + p.x, y: sum.y + p.y }), { x: 0, y: 0 });
-            holeCenter.x /= holePathData.points.length;
-            holeCenter.y /= holePathData.points.length;
-            
-            if (holeCenter.x >= outerBBox.minX && holeCenter.x <= outerBBox.maxX &&
-                holeCenter.y >= outerBBox.minY && holeCenter.y <= outerBBox.maxY) {
-              
-              // Aggiungi la hole
-              const holePath2D = [];
-              let hStarted = false;
-              
-              holePathData.commands.forEach(cmd => {
-                if (cmd.type === 'M') {
-                  hStarted = true;
-                } else if (cmd.type === 'L' && hStarted) {
-                  holePath2D.push({ x: cmd.x, y: cmd.y });
-                } else if (cmd.type === 'C' && hStarted) {
-                  for (let t = 0; t <= 1; t += 0.1) {
-                    const mt = 1 - t;
-                    const lastPt = holePath2D.length > 0 ? holePath2D[holePath2D.length - 1] : { x: cmd.x1, y: cmd.y1 };
-                    holePath2D.push({
-                      x: mt*mt*lastPt.x + 2*mt*t*cmd.x1 + t*t*cmd.x,
-                      y: mt*mt*lastPt.y + 2*mt*t*cmd.y1 + t*t*cmd.y
-                    });
-                  }
-                } else if (cmd.type === 'Q' && hStarted) {
-                  for (let t = 0; t <= 1; t += 0.1) {
-                    const mt = 1 - t;
-                    const lastPt = holePath2D.length > 0 ? holePath2D[holePath2D.length - 1] : { x: cmd.x1, y: cmd.y1 };
-                    holePath2D.push({
-                      x: mt*mt*lastPt.x + 2*mt*t*cmd.x1 + t*t*cmd.x,
-                      y: mt*mt*lastPt.y + 2*mt*t*cmd.y1 + t*t*cmd.y
-                    });
-                  }
-                }
-              });
-              
-              if (holePath2D.length > 2) {
-                const hole = new THREE.Path();
-                hole.moveTo(holePath2D[0].x, -holePath2D[0].y);
-                for (let i = 1; i < holePath2D.length; i++) {
-                  hole.lineTo(holePath2D[i].x, -holePath2D[i].y);
-                }
-                hole.closePath();
-                shape.holes.push(hole);
-              }
-            }
-          });
-        
-          // Crea geometria estrusa
-          const geometry = new THREE.ExtrudeGeometry(shape, {
-            depth: extrusionAmount,
-            bevelEnabled: true,
-            bevelThickness: 1,
-            bevelSize: 0.5,
-            bevelSegments: 2,
-            curveSegments: 12
-          });
-          
-          // Materiale
-          const threeColor = new THREE.Color(color);
-          const material = new THREE.MeshPhongMaterial({
-            color: threeColor,
-            specular: 0x444444,
-            shininess: 30,
-            side: THREE.DoubleSide
-          });
-          
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.z = zOffset;
-          
-          threeScene.add(mesh);
-          threeMeshes.push(mesh);
-          threeExtrusionLevels[color].meshes.push(mesh);
-        });
-        
-      } catch (e) {
-        console.error('Errore nel creare mesh 3D:', e);
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.z = 0;
+
+        threeScene.add(mesh);
+        threeMeshes.push(mesh);
+        meshIndices.push(threeMeshes.length - 1);
+      });
+
+      if (!threeExtrusionLevels[item.color]) {
+        threeExtrusionLevels[item.color] = { extrusion: extrusionDepth, meshes: [] };
       }
-    });
+      threeExtrusionLevels[item.color].meshes.push(...meshIndices.map(idx => threeMeshes[idx]));
+
+      // Track color groups for UI
+      if (!colorGroups[item.color]) {
+        colorGroups[item.color] = [];
+      }
+      colorGroups[item.color].push(item);
+
+    } catch (e) {
+      console.error('Errore nel creare mesh 3D:', e);
+    }
   });
-  
-  // Centra automaticamente la scena: sposta TUTTE le mesh al centro (0,0,0)
+
+  // Build extrusion controls
+  buildExtrusionControls(colorGroups);
+
+  // STEP 3: Center scene
   if (threeCamera && threeControls && threeMeshes.length > 0) {
-    // Calcola il bounding box complessivo di tutte le mesh
     const globalBBox = new THREE.Box3();
     threeMeshes.forEach(mesh => {
       const bbox = new THREE.Box3().setFromObject(mesh);
       globalBBox.union(bbox);
     });
-    
+
     const center = new THREE.Vector3();
     globalBBox.getCenter(center);
-    
-    // Sposta ogni mesh per centrare tutto all'origine
+
     threeMeshes.forEach(mesh => {
       mesh.position.x -= center.x;
       mesh.position.y -= center.y;
       mesh.position.z -= center.z;
     });
-    
+
     const size = new THREE.Vector3();
     globalBBox.getSize(size);
-    
+
     const maxDim = Math.max(size.x, size.y, size.z);
     const fov = threeCamera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-    cameraZ *= 1.3; // 30% di margine
-    
-    // Camera puntata al centro (ora è 0,0,0)
+    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.3;
+
     threeCamera.position.set(0, 0, cameraZ);
     threeControls.target.set(0, 0, 0);
     threeControls.update();
   }
-  
-  // Build extrusion controls
-  buildExtrusionControls(colorGroups);
+}
+
+function pathD_to_ThreeShapes(pathD) {
+  const shapes = [];
+
+  try {
+    const commands = parseSVGPath(pathD);
+    if (!commands.length) return shapes;
+
+    // Group commands by M (move to) to separate subpaths
+    const subpaths = [];
+    let currentSubpath = [];
+
+    commands.forEach(cmd => {
+      if (cmd.type === 'M') {
+        if (currentSubpath.length > 0) {
+          subpaths.push(currentSubpath);
+        }
+        currentSubpath = [cmd];
+      } else {
+        currentSubpath.push(cmd);
+      }
+    });
+
+    if (currentSubpath.length > 0) {
+      subpaths.push(currentSubpath);
+    }
+
+    if (subpaths.length === 0) return shapes;
+
+    // Helper: convert subpath to THREE.Shape or THREE.Path
+    // NOTE: We flip Y (-cmd.y) because Three.js Y-axis points up, SVG Y-axis points down
+    function subpathToShape(subpath, isHole = false) {
+      const shape = isHole ? new THREE.Path() : new THREE.Shape();
+      let started = false;
+      let currentX = 0;
+      let currentY = 0;
+
+      for (const cmd of subpath) {
+        if (cmd.type === 'M') {
+          currentX = cmd.x;
+          currentY = cmd.y;
+          shape.moveTo(cmd.x, -cmd.y);
+          started = true;
+        } else if (cmd.type === 'L' && started) {
+          currentX = cmd.x;
+          currentY = cmd.y;
+          shape.lineTo(cmd.x, -cmd.y);
+        } else if (cmd.type === 'H' && started) {
+          currentX = cmd.x;
+          shape.lineTo(cmd.x, -currentY);
+        } else if (cmd.type === 'V' && started) {
+          currentY = cmd.y;
+          shape.lineTo(currentX, -cmd.y);
+        } else if (cmd.type === 'C' && started) {
+          currentX = cmd.x;
+          currentY = cmd.y;
+          shape.bezierCurveTo(cmd.x1, -cmd.y1, cmd.x2, -cmd.y2, cmd.x, -cmd.y);
+        } else if (cmd.type === 'Q' && started) {
+          currentX = cmd.x;
+          currentY = cmd.y;
+          shape.quadraticCurveTo(cmd.x1, -cmd.y1, cmd.x, -cmd.y);
+        } else if (cmd.type === 'Z' && started) {
+          shape.closePath();
+        }
+      }
+
+      return started ? shape : null;
+    }
+
+    // Helper: calculate signed area AFTER Y-flip to determine winding
+    // This is critical: we must calculate area on the FLIPPED coordinates
+    // because that's what Three.js will see
+    function getSignedAreaFlipped(subpath) {
+      let area = 0;
+      let prevX = 0, prevY = 0;
+      let firstX = 0, firstY = 0;
+      let started = false;
+
+      for (const cmd of subpath) {
+        // Apply Y-flip immediately
+        const cmdX = cmd.x !== undefined ? cmd.x : prevX;
+        const cmdY = cmd.y !== undefined ? -cmd.y : -prevY;
+        
+        if (cmd.type === 'M') {
+          if (started) {
+            area += prevX * firstY - firstX * prevY;
+          }
+          firstX = cmdX;
+          firstY = cmdY;
+          prevX = cmdX;
+          prevY = cmdY;
+          started = true;
+        } else if (cmd.type === 'L' || cmd.type === 'H' || cmd.type === 'V') {
+          area += prevX * cmdY - cmdX * prevY;
+          prevX = cmdX;
+          prevY = cmdY;
+        } else if (cmd.type === 'C') {
+          // Approximate bezier with line segments
+          const steps = 20;
+          for (let t = 1; t <= steps; t++) {
+            const frac = t / steps;
+            const mt = 1 - frac;
+            const x = mt*mt*mt*prevX + 3*mt*mt*frac*cmd.x1 + 3*mt*frac*frac*cmd.x2 + frac*frac*frac*cmd.x;
+            const y = mt*mt*mt*(-prevY) + 3*mt*mt*frac*(-cmd.y1) + 3*mt*frac*frac*(-cmd.y2) + frac*frac*frac*(-cmd.y);
+            // Wait, this is wrong - we need to track prevY properly
+            // Let me redo this
+          }
+          // Actually, let's use a simpler approach: just sample the points
+          let py = prevY;
+          for (let t = 1; t <= steps; t++) {
+            const frac = t / steps;
+            const mt = 1 - frac;
+            const x = mt*mt*mt*prevX + 3*mt*mt*frac*cmd.x1 + 3*mt*frac*frac*cmd.x2 + frac*frac*frac*cmd.x;
+            const y_unflipped = mt*mt*mt*py + 3*mt*mt*frac*cmd.y1 + 3*mt*frac*frac*cmd.y2 + frac*frac*frac*cmd.y;
+            const y = -y_unflipped; // Flip Y
+            area += prevX * y - x * prevY;
+            prevX = x;
+            py = y_unflipped;
+          }
+          prevY = -cmd.y; // Update prevY to flipped value
+        } else if (cmd.type === 'Q') {
+          const steps = 20;
+          let py = prevY;
+          for (let t = 1; t <= steps; t++) {
+            const frac = t / steps;
+            const mt = 1 - frac;
+            const x = mt*mt*prevX + 2*mt*frac*cmd.x1 + frac*frac*cmd.x;
+            const y_unflipped = mt*mt*py + 2*mt*frac*cmd.y1 + frac*frac*cmd.y;
+            const y = -y_unflipped; // Flip Y
+            area += prevX * y - x * prevY;
+            prevX = x;
+            py = y_unflipped;
+          }
+          prevY = -cmd.y;
+        } else if (cmd.type === 'Z') {
+          area += prevX * firstY - firstX * prevY;
+          prevX = firstX;
+          prevY = firstY;
+        }
+      }
+
+      return area / 2;
+    }
+
+    // Simpler approach: calculate bounding box area and use containment
+    // This is more robust across different font winding directions
+    
+    // Calculate bounding box for each subpath
+    const subpathsWithBBox = subpaths.map((subpath, idx) => {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let totalX = 0, totalY = 0, pointCount = 0;
+      
+      for (const cmd of subpath) {
+        if (cmd.x !== undefined) {
+          minX = Math.min(minX, cmd.x);
+          maxX = Math.max(maxX, cmd.x);
+          totalX += cmd.x;
+          pointCount++;
+        }
+        if (cmd.y !== undefined) {
+          minY = Math.min(minY, cmd.y);
+          maxY = Math.max(maxY, cmd.y);
+          totalY += cmd.y;
+          if (pointCount === 0) pointCount++;
+        }
+      }
+      
+      const width = maxX - minX;
+      const height = maxY - minY;
+      const area = width * height;
+      
+      return {
+        idx,
+        subpath,
+        bbox: { minX, minY, maxX, maxY, width, height, area },
+        center: { x: totalX / (pointCount || 1), y: totalY / (pointCount || 1) }
+      };
+    });
+
+    // Sort by bounding box area (largest first)
+    subpathsWithBBox.sort((a, b) => b.bbox.area - a.bbox.area);
+
+    // Group subpaths by containment
+    // The largest subpath is the outer, smaller ones inside it are holes
+    const used = new Set();
+    const groups = [];
+
+    for (let i = 0; i < subpathsWithBBox.length; i++) {
+      if (used.has(i)) continue;
+      
+      const outer = subpathsWithBBox[i];
+      used.add(i);
+      
+      const group = {
+        outer: outer.subpath,
+        holes: []
+      };
+
+      // Find all subpaths contained within this outer
+      for (let j = i + 1; j < subpathsWithBBox.length; j++) {
+        if (used.has(j)) continue;
+        
+        const candidate = subpathsWithBBox[j];
+        
+        // Check if candidate's center is inside outer's bbox
+        if (candidate.center.x >= outer.bbox.minX && 
+            candidate.center.x <= outer.bbox.maxX &&
+            candidate.center.y >= outer.bbox.minY && 
+            candidate.center.y <= outer.bbox.maxY) {
+          
+          group.holes.push(candidate.subpath);
+          used.add(j);
+        }
+      }
+
+      groups.push(group);
+    }
+
+    // Create shapes from groups
+    groups.forEach(group => {
+      const outerShape = subpathToShape(group.outer, false);
+      if (!outerShape) return;
+
+      // Add holes
+      group.holes.forEach(holeSubpath => {
+        const holePath = subpathToShape(holeSubpath, true);
+        if (holePath) {
+          outerShape.holes.push(holePath);
+        }
+      });
+
+      shapes.push(outerShape);
+    });
+
+  } catch (e) {
+    console.error('Errore nel convertire pathD a Three.js shapes:', e);
+    console.error('PathD che ha causato l\'errore:', pathD.substring(0, 200) + '...');
+  }
+
+  return shapes;
 }
 
 function getLetterPathData(letter, ctx) {
@@ -4690,7 +4801,8 @@ function getLetterPathData(letter, ctx) {
     const innerX = letter.x - mw / 2;
     const innerY = letter.y;
     const combined = outerM.translate(innerX, innerY);
-    const d = S.openFonts[letter.fontName].getPath(letter.ch, 0, 0, letter.fontSize).toPathData(2);
+    // Use higher precision for better quality
+    const d = S.openFonts[letter.fontName].getPath(letter.ch, 0, 0, letter.fontSize).toPathData(4);
     const segs = pathToAbsoluteSegments(d);
     const transformed = _applyDOMMatrixToSegs(segs, combined);
     return segsToPathD(transformed);
@@ -4802,16 +4914,20 @@ function parseSVGPath(pathString) {
       result.push({ type: 'M', x: cmd.args[0], y: cmd.args[1] });
     } else if (type === 'L') {
       result.push({ type: 'L', x: cmd.args[0], y: cmd.args[1] });
+    } else if (type === 'H') {
+      result.push({ type: 'H', x: cmd.args[0] });
+    } else if (type === 'V') {
+      result.push({ type: 'V', y: cmd.args[0] });
     } else if (type === 'C') {
-      result.push({ 
-        type: 'C', 
+      result.push({
+        type: 'C',
         x1: cmd.args[0], y1: cmd.args[1],
         x2: cmd.args[2], y2: cmd.args[3],
         x: cmd.args[4], y: cmd.args[5]
       });
     } else if (type === 'Q') {
-      result.push({ 
-        type: 'Q', 
+      result.push({
+        type: 'Q',
         x1: cmd.args[0], y1: cmd.args[1],
         x: cmd.args[2], y: cmd.args[3]
       });
@@ -4902,25 +5018,27 @@ function buildExtrusionControls(colorGroups) {
 
 function updateExtrusion(color, newDepth) {
   if (!threeExtrusionLevels[color]) return;
-  
+
   threeExtrusionLevels[color].extrusion = newDepth;
-  
+
   // Update meshes for this color
   threeExtrusionLevels[color].meshes.forEach(mesh => {
-    if (!mesh.geometry) return;
-    
-    const oldGeometry = mesh.geometry;
-    
+    if (!mesh.geometry || !mesh.geometry.parameters) return;
+
+    // Get the original shapes from the geometry
+    const shapes = mesh.geometry.parameters.shapes;
+    const shapeArray = Array.isArray(shapes) ? shapes : [shapes];
+
     // Create new geometry with updated depth
-    const newGeometry = new THREE.ExtrudeGeometry(oldGeometry.parameters.shapes, {
+    const newGeometry = new THREE.ExtrudeGeometry(shapeArray, {
       depth: newDepth,
       bevelEnabled: true,
-      bevelThickness: 2,
-      bevelSize: 1,
-      bevelSegments: 3,
+      bevelThickness: 1,
+      bevelSize: 0.5,
+      bevelSegments: 2,
       curveSegments: 12
     });
-    
+
     mesh.geometry.dispose();
     mesh.geometry = newGeometry;
   });
@@ -5940,9 +6058,10 @@ async function mcpHandleAddSVG(operation) {
   saveState();
 
   // Calcola scala automatica per adattare SVG al canvas
-  const targetSize = Math.min(S.canvasW, S.canvasH) * 0.08; // 8% del lato più piccolo
+  // Target: 20% del lato più piccolo del canvas (più visibile)
+  const targetSize = Math.min(S.canvasW, S.canvasH) * 0.20;
   const svgMaxDim = Math.max(svgObj.width, svgObj.height);
-  const autoScale = targetSize / svgMaxDim;
+  const autoScale = svgMaxDim > 0 ? targetSize / svgMaxDim : 1;
 
   const scaleX = operation.scaleX !== undefined ? operation.scaleX : autoScale;
   const scaleY = operation.scaleY !== undefined ? operation.scaleY : autoScale;
