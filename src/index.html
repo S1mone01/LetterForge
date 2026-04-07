@@ -855,7 +855,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.4</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.5</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -1099,6 +1099,81 @@
         Dividi Lettera
       </button>
     </div>
+
+    <!-- AI Section - Moved above Info -->
+    <div class="sec ai-section" style="border-top:1px solid var(--border);padding:0">
+      <!-- Collapsible Header -->
+      <div onclick="toggleAIPanel()" style="cursor:pointer;padding:10px 12px 8px;display:flex;align-items:center;justify-content:space-between;user-select:none" title="Clicca per espandere/comprimere AI">
+        <div class="sec-title" style="margin:0;display:flex;align-items:center;gap:6px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93"></path><path d="M8.56 6.44A4 4 0 0 1 12 2"></path><path d="M12 10a6 6 0 0 0-6 6c0 3.5 3 6 6 6s6-2.5 6-6a6 6 0 0 0-6-6z"></path><circle cx="12" cy="16" r="2"></circle><path d="M12 18v4"></path><path d="M9 22h6"></path></svg>
+          AI Assistant
+        </div>
+        <svg id="ai-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.3s"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      
+      <!-- AI Panel Content -->
+      <div id="ai-panel" style="display:none;padding:0 12px 10px">
+        <!-- MCP Server Host Control -->
+        <div id="ai-mcp-control" style="padding:10px 0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <div style="font-size:11px;color:var(--text);font-weight:700">MCP Server (Host)</div>
+          </div>
+          
+          <!-- Server Port Input -->
+          <div style="margin-bottom:8px">
+            <input type="text" id="mcp-server-port" placeholder="3100" 
+                   style="width:100%;padding:8px 10px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:6px;outline:none"
+                   value="3100">
+          </div>
+          
+          <!-- Server Status & Controls -->
+          <div id="mcp-status" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <div id="mcp-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
+            <div id="mcp-status-text" style="font-size:10px;color:var(--muted)">Server non avviato</div>
+          </div>
+          
+          <!-- Start/Stop Button -->
+          <button id="mcp-start-btn" class="btn primary" onclick="toggleMCPServer()" style="width:100%;justify-content:center;margin-bottom:6px" title="Avvia/Arresta MCP Server">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Avvia Host MCP
+          </button>
+          
+          <div id="mcp-server-info" style="font-size:9px;color:var(--muted);line-height:1.5">
+            ℹ️ LetterForge ospita un server MCP - Collega la tua IA esterna per modificare il canvas
+          </div>
+        </div>
+
+        <!-- Chat Interface (hidden until connected) -->
+        <div id="ai-chat-interface" style="display:none">
+          <div id="ai-chat-container" style="max-height:250px;overflow-y:auto;margin-bottom:8px;padding:6px;background:var(--panel2);border-radius:6px;border:1px solid var(--border)">
+            <div id="ai-messages"></div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-end">
+            <textarea id="ai-input" placeholder="Chiedi all'AI di modificare il canvas..." 
+                      style="flex:1;padding:7px 10px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;border-radius:6px;outline:none;resize:none;min-height:32px;max-height:120px;line-height:1.4"
+                      onkeydown="handleAIInputKeydown(event)"
+                      oninput="autoExpandAIInput()"
+                      onmousedown="event.stopPropagation(); this.focus();"></textarea>
+            <button class="btn primary" onclick="sendAIPrompt()" style="padding:7px 12px;align-self:flex-end" title="Invia richiesta AI">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <button class="btn" style="flex:1;font-size:9px;padding:4px 6px" onclick="clearAIHistory()">
+              🗑️ Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="sec">
       <div class="sec-title">Info</div>
       <div id="info" class="hint">
@@ -1135,7 +1210,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.1.4</div>
+  <div class="un-ver" id="un-version">Versione 4.1.5</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -1534,6 +1609,11 @@ function addSVGToCanvas(name){
   const svgObj = S.svgs.find(s => s.name === name);
   if(!svgObj) return;
 
+  // Calcola scala automatica per adattare SVG al canvas
+  const targetSize = Math.min(S.canvasW, S.canvasH) * 0.08; // 8% del lato più piccolo
+  const svgMaxDim = Math.max(svgObj.width, svgObj.height);
+  const autoScale = targetSize / svgMaxDim;
+
   S.letters.push({
     id: uid++,
     ch: name,
@@ -1545,7 +1625,9 @@ function addSVGToCanvas(name){
     fill: '#111111',
     fontFamily: 'sans-serif',
     fontName: name,
-    sx: 1, sy: 1, rot: 0, skew: 0, op: 1,
+    sx: autoScale,
+    sy: autoScale,
+    rot: 0, skew: 0, op: 1,
     customPath: svgObj.pathData.replace(/<path d="([^"]+)"[^>]*>/, '$1'),
     isSvgImport: true,
     svgW: svgObj.width,
@@ -1997,18 +2079,12 @@ function importSVGs(files) {
         const svgRoot = doc.querySelector('svg');
         if (!svgRoot) { toast(`SVG non valido: ${f.name}`); return; }
 
-        let vbX = 0, vbY = 0, vbW = 0, vbH = 0;
+        let vbX = 0, vbY = 0;
         const vb = svgRoot.getAttribute('viewBox');
         if (vb) {
           const vp = vb.trim().split(/[\s,]+/).map(Number);
-          vbX = vp[0]||0; vbY = vp[1]||0; vbW = vp[2]||200; vbH = vp[3]||200;
-        } else {
-          vbW = parseFloat(svgRoot.getAttribute('width')) || 200;
-          vbH = parseFloat(svgRoot.getAttribute('height')) || 200;
+          vbX = vp[0]||0; vbY = vp[1]||0;
         }
-
-        const maxSide = 400;
-        const scale = (vbW > maxSide || vbH > maxSide) ? maxSide / Math.max(vbW, vbH) : 1;
         const rootMatrix = new DOMMatrix().translate(-vbX, -vbY);
 
         const shapes = [];
@@ -2046,6 +2122,26 @@ function importSVGs(files) {
         }
 
         if (!allSegs.length) { toast(`Geometria vuota dopo processing: ${f.name}`); return; }
+
+        // Calcola il bounding box REALE dal contenuto, non dagli attributi SVG
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        allSegs.forEach(s => {
+          if (s.x !== undefined) { minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x); }
+          if (s.y !== undefined) { minY = Math.min(minY, s.y); maxY = Math.max(maxY, s.y); }
+          if (s.x1 !== undefined) { minX = Math.min(minX, s.x1); maxX = Math.max(maxX, s.x1); }
+          if (s.y1 !== undefined) { minY = Math.min(minY, s.y1); maxY = Math.max(maxY, s.y1); }
+          if (s.x2 !== undefined) { minX = Math.min(minX, s.x2); maxX = Math.max(maxX, s.x2); }
+          if (s.y2 !== undefined) { minY = Math.min(minY, s.y2); maxY = Math.max(maxY, s.y2); }
+        });
+
+        if (minX === Infinity) { minX = 0; minY = 0; maxX = 100; maxY = 100; }
+
+        const realW = Math.max(maxX - minX, 1);
+        const realH = Math.max(maxY - minY, 1);
+
+        // Scala se il contenuto è troppo grande
+        const maxSide = 400;
+        const scale = (realW > maxSide || realH > maxSide) ? maxSide / Math.max(realW, realH) : 1;
 
         const scaledSegs = scale !== 1 ? scaleSegs(allSegs, scale) : allSegs;
         const rawD = segsToPathD(scaledSegs);
@@ -5357,6 +5453,1004 @@ window.render = function() {
     setTimeout(update3DPreview, 100);
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// AI INTEGRATION FUNCTIONS - MCP Server Host
+// ═══════════════════════════════════════════════════════════════════
+
+let aiPanelOpen = false;
+let mcpServerRunning = false;
+let aiProcessing = false;
+
+// Toggle AI panel open/closed
+function toggleAIPanel() {
+  aiPanelOpen = !aiPanelOpen;
+  const panel = document.getElementById('ai-panel');
+  const chevron = document.getElementById('ai-chevron');
+
+  if (aiPanelOpen) {
+    panel.style.display = 'block';
+    chevron.style.transform = 'rotate(180deg)';
+
+    // Auto-start check when panel is opened
+    checkAutoStart();
+  } else {
+    panel.style.display = 'none';
+    chevron.style.transform = 'rotate(0deg)';
+  }
+}
+
+// Check for saved MCP port and auto-start
+async function checkAutoStart() {
+  if (mcpServerRunning) return;
+
+  const savedPort = localStorage.getItem('mcp-server-port');
+  if (savedPort) {
+    document.getElementById('mcp-server-port').value = savedPort;
+  }
+}
+
+// Toggle MCP Server
+async function toggleMCPServer() {
+  if (mcpServerRunning) {
+    await stopMCPServer();
+  } else {
+    await startMCPServer();
+  }
+}
+
+// Start MCP Server
+async function startMCPServer() {
+  const port = parseInt(document.getElementById('mcp-server-port').value.trim());
+  
+  if (!port || isNaN(port) || port < 1024 || port > 65535) {
+    toast('Inserisci una porta valida (1024-65535)');
+    return;
+  }
+
+  // Save port for future auto-start
+  localStorage.setItem('mcp-server-port', port);
+
+  toast(`Avvio MCP Server sulla porta ${port}...`);
+  updateMCPStatus('starting', `Avvio in corso...`);
+
+  try {
+    // Start server via IPC
+    const response = await window.electronAPI.mcpStartServer(port);
+
+    if (response.success) {
+      mcpServerRunning = true;
+      updateMCPStatus('running', `Server attivo su http://localhost:${port}`);
+      
+      // Update button to "Stop"
+      const btn = document.getElementById('mcp-start-btn');
+      btn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+        Arresta Host MCP
+      `;
+      btn.classList.remove('primary');
+      btn.classList.add('danger');
+
+      // Update info
+      const info = document.getElementById('mcp-server-info');
+      info.innerHTML = `
+        <div style="margin-bottom:4px">
+          <span style="color:var(--accent)">✓ Server MCP attivo</span>
+        </div>
+        <div>🔗 URL: <code style="background:var(--panel2);padding:2px 4px;border-radius:3px">http://localhost:${port}</code></div>
+        <div style="margin-top:4px">📋 Tools disponibili: get_canvas_state, add_text, modify_element, move_element, delete_element, duplicate_element, recolor_element, resize_element, add_svg, select_elements, get_available_fonts, get_available_svgs</div>
+        <div style="margin-top:4px">🤖 Collega la tua IA esterna a questo URL per modificare il canvas!</div>
+      `;
+      
+      toast(`MCP Server avviato sulla porta ${port}! ✨`);
+      addAIMessage('system', `✅ MCP Server attivo su http://localhost:${port} - La tua IA può connettersi!`);
+      
+      // Start state sync
+      startMCPStateSync();
+    } else {
+      throw new Error(response.error || 'Avvio fallito');
+    }
+  } catch (error) {
+    console.error('MCP Server start failed:', error);
+    updateMCPStatus('error', `Errore: ${error.message}`);
+    toast('Errore: ' + error.message);
+  }
+}
+
+// Stop MCP Server
+async function stopMCPServer() {
+  mcpServerRunning = false;
+  
+  try {
+    await window.electronAPI.mcpStopServer();
+  } catch (error) {
+    console.error('Error stopping server:', error);
+  }
+  
+  // Update button to "Start"
+  const btn = document.getElementById('mcp-start-btn');
+  btn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+    </svg>
+    Avvia Host MCP
+  `;
+  btn.classList.remove('danger');
+  btn.classList.add('primary');
+
+  // Reset info
+  const info = document.getElementById('mcp-server-info');
+  info.innerHTML = 'ℹ️ LetterForge ospita un server MCP - Collega la tua IA esterna per modificare il canvas';
+  
+  updateMCPStatus('stopped', 'Server non avviato');
+  toast('MCP Server arrestato');
+  
+  // Stop state sync
+  stopMCPStateSync();
+}
+
+// Update MCP Status UI
+function updateMCPStatus(status, text) {
+  const dot = document.getElementById('mcp-status-dot');
+  const textEl = document.getElementById('mcp-status-text');
+  
+  textEl.textContent = text;
+  
+  switch (status) {
+    case 'running':
+      dot.style.background = '#00cc66';
+      dot.style.boxShadow = '0 0 6px #00cc66';
+      break;
+    case 'starting':
+      dot.style.background = '#ffaa00';
+      dot.style.boxShadow = '0 0 6px #ffaa00';
+      break;
+    case 'error':
+      dot.style.background = '#ff4455';
+      dot.style.boxShadow = '0 0 6px #ff4455';
+      break;
+    default:
+      dot.style.background = 'var(--muted)';
+      dot.style.boxShadow = 'none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MCP SERVER OPERATION HANDLER
+// ═══════════════════════════════════════════════════════════════════
+
+// Listen for operations from MCP server
+window.electronAPI.onMCPExecuteOperation(async (operation) => {
+  console.log('[MCP] Executing operation:', operation);
+  
+  try {
+    let result;
+    
+    switch (operation.type) {
+      case 'add':
+        result = await mcpHandleAddText(operation);
+        break;
+      case 'modify':
+        result = await mcpHandleModifyElement(operation);
+        break;
+      case 'move':
+        result = await mcpHandleMoveElement(operation);
+        break;
+      case 'delete':
+        result = await mcpHandleDeleteElement(operation);
+        break;
+      case 'duplicate':
+        result = await mcpHandleDuplicateElement(operation);
+        break;
+      case 'recolor':
+        result = await mcpHandleRecolorElement(operation);
+        break;
+      case 'resize':
+        result = await mcpHandleResizeElement(operation);
+        break;
+      case 'set_layer':
+        result = await mcpHandleSetElementLayer(operation);
+        break;
+      case 'add_svg':
+        result = await mcpHandleAddSVG(operation);
+        break;
+      case 'select':
+        result = await mcpHandleSelectElements(operation);
+        break;
+      default:
+        result = { success: false, error: `Unknown operation type: ${operation.type}` };
+    }
+    
+    // Send result back to main process
+    window.electronAPI.mcpOperationResult(result);
+  } catch (error) {
+    console.error('[MCP] Operation execution error:', error);
+    window.electronAPI.mcpOperationResult({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Periodically update MCP server with canvas state
+let mcpStateUpdateInterval = null;
+
+function startMCPStateSync() {
+  if (mcpStateUpdateInterval) return;
+  
+  // Update canvas state immediately
+  updateMCPCanvasState();
+  
+  // Then update every 500ms
+  mcpStateUpdateInterval = setInterval(() => {
+    updateMCPCanvasState();
+  }, 500);
+}
+
+function stopMCPStateSync() {
+  if (mcpStateUpdateInterval) {
+    clearInterval(mcpStateUpdateInterval);
+    mcpStateUpdateInterval = null;
+  }
+}
+
+function updateMCPCanvasState() {
+  if (!mcpServerRunning) return;
+  
+  const canvasState = {
+    letters: S.letters.map(el => ({
+      id: el.id,
+      ch: el.ch,
+      x: el.x,
+      y: el.y,
+      fontSize: el.fontSize,
+      fill: el.fill,
+      sx: el.sx,
+      sy: el.sy,
+      rot: el.rot,
+      skew: el.skew,
+      op: el.op,
+      borderWidth: el.borderWidth,
+      borderColor: el.borderColor,
+      layer: el.layer,
+      isSvgImport: el.isSvgImport,
+      svgW: el.svgW,
+      svgH: el.svgH,
+      fontName: el.fontName,
+      customPath: el.customPath,
+      selected: S.sel.has(el.id)
+    })),
+    canvasW: S.canvasW,
+    canvasH: S.canvasH,
+    svgs: S.svgs,
+    fonts: S.fonts,
+    uid: uid
+  };
+  
+  window.electronAPI.mcpUpdateCanvasState(canvasState);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MCP OPERATION HANDLERS
+// ═══════════════════════════════════════════════════════════════════
+
+async function mcpHandleAddText(operation) {
+  saveState();
+
+  // Validate fontFamily if provided
+  let fontFamily = operation.fontFamily || 'sans-serif';
+  let fontName = '';
+  
+  if (operation.fontFamily && S.fonts[operation.fontFamily]) {
+    // Use the CSS font-family from S.fonts
+    fontFamily = S.fonts[operation.fontFamily];
+    fontName = operation.fontFamily;
+  }
+
+  const newEl = {
+    id: uid++,
+    ch: operation.text,
+    x: operation.x,
+    y: operation.y,
+    originalX: operation.x,
+    originalY: operation.y,
+    fontSize: operation.fontSize || 80,
+    fill: operation.fill || '#111111',
+    fontFamily: fontFamily,
+    fontName: fontName,
+    isSvgImport: false,
+    sx: 1,
+    sy: 1,
+    rot: operation.rotation || 0,
+    skew: 0,
+    op: 1,
+    borderWidth: 0,
+    borderColor: '#000000',
+    layer: 2
+  };
+
+  S.letters.push(newEl);
+  S.sel.clear();
+  S.sel.add(newEl.id);
+
+  render();
+  upd();
+
+  return { success: true, elementId: newEl.id, message: `Added text: ${operation.text}` };
+}
+
+async function mcpHandleModifyElement(operation) {
+  const el = S.letters.find(e => e.id === operation.elementId);
+  if (!el) {
+    return { success: false, error: `Element not found: ${operation.elementId}` };
+  }
+
+  saveState();
+
+  const props = operation.properties;
+  if (props.x !== undefined) el.x = props.x;
+  if (props.y !== undefined) el.y = props.y;
+  if (props.fontSize !== undefined) el.fontSize = props.fontSize;
+  if (props.fill !== undefined) el.fill = props.fill;
+  if (props.sx !== undefined) el.sx = props.sx;
+  if (props.sy !== undefined) el.sy = props.sy;
+  if (props.rot !== undefined) el.rot = props.rot;
+  if (props.skew !== undefined) el.skew = props.skew;
+  if (props.op !== undefined) el.op = props.op;
+  if (props.borderWidth !== undefined) el.borderWidth = props.borderWidth;
+  if (props.borderColor !== undefined) el.borderColor = props.borderColor;
+  if (props.layer !== undefined) el.layer = props.layer;
+  
+  // Handle fontFamily changes
+  if (props.fontFamily !== undefined) {
+    if (S.fonts[props.fontFamily]) {
+      el.fontFamily = S.fonts[props.fontFamily];
+      el.fontName = props.fontFamily;
+    } else {
+      // Font not found, use default
+      el.fontFamily = 'sans-serif';
+      el.fontName = '';
+    }
+  }
+
+  render();
+  upd();
+
+  return { success: true, elementId: el.id, message: 'Element modified' };
+}
+
+async function mcpHandleMoveElement(operation) {
+  const el = S.letters.find(e => e.id === operation.elementId);
+  if (!el) {
+    return { success: false, error: `Element not found: ${operation.elementId}` };
+  }
+  
+  saveState();
+  
+  if (operation.x !== undefined) el.x = operation.x;
+  if (operation.y !== undefined) el.y = operation.y;
+  if (operation.dx !== undefined) el.x += operation.dx;
+  if (operation.dy !== undefined) el.y += operation.dy;
+  
+  render();
+  upd();
+  
+  return { success: true, elementId: el.id, message: `Moved element to (${el.x}, ${el.y})` };
+}
+
+async function mcpHandleDeleteElement(operation) {
+  const idsToDelete = new Set(operation.elementIds);
+  const deletedCount = S.letters.length;
+  
+  saveState();
+  
+  S.letters = S.letters.filter(el => !idsToDelete.has(el.id));
+  idsToDelete.forEach(id => S.sel.delete(id));
+  
+  render();
+  upd();
+  
+  return { success: true, deleted: deletedCount - S.letters.length, message: `Deleted ${deletedCount - S.letters.length} elements` };
+}
+
+async function mcpHandleDuplicateElement(operation) {
+  const el = S.letters.find(e => e.id === operation.elementId);
+  if (!el) {
+    return { success: false, error: `Element not found: ${operation.elementId}` };
+  }
+  
+  saveState();
+  
+  const newEl = {
+    ...el,
+    id: uid++,
+    x: el.x + (operation.offsetX || 50),
+    y: el.y + (operation.offsetY || 50)
+  };
+  
+  S.letters.push(newEl);
+  S.sel.clear();
+  S.sel.add(newEl.id);
+  
+  render();
+  upd();
+  
+  return { success: true, elementId: newEl.id, message: 'Element duplicated' };
+}
+
+async function mcpHandleRecolorElement(operation) {
+  const el = S.letters.find(e => e.id === operation.elementId);
+  if (!el) {
+    return { success: false, error: `Element not found: ${operation.elementId}` };
+  }
+  
+  saveState();
+  
+  el.fill = operation.fill;
+  
+  render();
+  upd();
+  
+  return { success: true, elementId: el.id, message: `Recolored to ${operation.fill}` };
+}
+
+async function mcpHandleResizeElement(operation) {
+  const el = S.letters.find(e => e.id === operation.elementId);
+  if (!el) {
+    return { success: false, error: `Element not found: ${operation.elementId}` };
+  }
+  
+  saveState();
+  
+  if (operation.scaleX !== undefined) el.sx *= operation.scaleX;
+  if (operation.scaleY !== undefined) el.sy *= operation.scaleY;
+  if (operation.fontSize !== undefined) el.fontSize = operation.fontSize;
+  
+  render();
+  upd();
+  
+  return { success: true, elementId: el.id, message: 'Element resized' };
+}
+
+async function mcpHandleSetElementLayer(operation) {
+  const el = S.letters.find(e => e.id === operation.elementId);
+  if (!el) {
+    return { success: false, error: `Element not found: ${operation.elementId}` };
+  }
+  
+  saveState();
+  
+  el.layer = operation.layer;
+  
+  render();
+  upd();
+  
+  return { success: true, elementId: el.id, message: `Layer set to ${operation.layer}` };
+}
+
+async function mcpHandleAddSVG(operation) {
+  const svgObj = S.svgs.find(s => s.name === operation.svgName);
+  if (!svgObj) {
+    return { success: false, error: `SVG not found: ${operation.svgName}` };
+  }
+
+  saveState();
+
+  // Calcola scala automatica per adattare SVG al canvas
+  const targetSize = Math.min(S.canvasW, S.canvasH) * 0.08; // 8% del lato più piccolo
+  const svgMaxDim = Math.max(svgObj.width, svgObj.height);
+  const autoScale = targetSize / svgMaxDim;
+
+  const scaleX = operation.scaleX !== undefined ? operation.scaleX : autoScale;
+  const scaleY = operation.scaleY !== undefined ? operation.scaleY : autoScale;
+
+  const newEl = {
+    id: uid++,
+    ch: operation.svgName,
+    x: operation.x,
+    y: operation.y,
+    originalX: operation.x,
+    originalY: operation.y,
+    fontSize: 100,
+    fill: '#111111',
+    fontFamily: 'sans-serif',
+    fontName: operation.svgName,
+    sx: scaleX,
+    sy: scaleY,
+    rot: 0,
+    skew: 0,
+    op: 1,
+    customPath: svgObj.pathData.replace(/<path d="([^"]+)"[^>]*>/, '$1'),
+    isSvgImport: true,
+    svgW: svgObj.width,
+    svgH: svgObj.height,
+    borderWidth: 0,
+    borderColor: '#000000',
+    layer: 2
+  };
+
+  S.letters.push(newEl);
+  S.sel.clear();
+  S.sel.add(newEl.id);
+
+  render();
+  upd();
+
+  return { success: true, elementId: newEl.id, message: `Added SVG: ${operation.svgName}` };
+}
+
+async function mcpHandleSelectElements(operation) {
+  S.sel.clear();
+  operation.elementIds.forEach(id => {
+    if (S.letters.find(e => e.id === id)) {
+      S.sel.add(id);
+    }
+  });
+  
+  render();
+  upd();
+  
+  return { success: true, selected: S.sel.size, message: `Selected ${S.sel.size} elements` };
+}
+
+function clearAIHistory() {
+  document.getElementById('ai-messages').innerHTML = '';
+  addAIMessage('system', '🗑️ Cronologia cancellata');
+  toast('Cronologia AI cancellata ✓');
+}
+
+// Auto-expand textarea input
+function autoExpandAIInput() {
+  const textarea = document.getElementById('ai-input');
+  if (!textarea) return;
+  
+  textarea.style.height = 'auto';
+  const newHeight = Math.min(textarea.scrollHeight, 120);
+  textarea.style.height = newHeight + 'px';
+}
+
+function handleAIInputKeydown(event) {
+  event.stopPropagation();
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendAIPrompt();
+  }
+}
+
+function addAIMessage(role, content) {
+  const messagesDiv = document.getElementById('ai-messages');
+  
+  const msgDiv = document.createElement('div');
+  msgDiv.style.cssText = `
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+    word-wrap: break-word;
+  `;
+  
+  if (role === 'user') {
+    msgDiv.style.background = 'rgba(200,255,0,0.08)';
+    msgDiv.style.border = '1px solid rgba(200,255,0,0.2)';
+    msgDiv.style.color = 'var(--text)';
+    msgDiv.innerHTML = `<div style="font-weight:700;color:var(--accent);margin-bottom:4px;font-size:9px;text-transform:uppercase">You</div>${escapeHtml(content)}`;
+  } else if (role === 'ai') {
+    msgDiv.style.background = 'rgba(255,107,53,0.08)';
+    msgDiv.style.border = '1px solid rgba(255,107,53,0.2)';
+    msgDiv.style.color = 'var(--text)';
+    msgDiv.innerHTML = `<div style="font-weight:700;color:var(--accent2);margin-bottom:4px;font-size:9px;text-transform:uppercase">AI</div>${content}`;
+  } else if (role === 'system') {
+    msgDiv.style.background = 'rgba(255,255,255,0.03)';
+    msgDiv.style.border = '1px solid var(--border)';
+    msgDiv.style.color = 'var(--muted)';
+    msgDiv.style.fontStyle = 'italic';
+    msgDiv.textContent = content;
+  } else if (role === 'error') {
+    msgDiv.style.background = 'rgba(255,68,85,0.08)';
+    msgDiv.style.border = '1px solid rgba(255,68,85,0.3)';
+    msgDiv.style.color = '#ff6677';
+    msgDiv.textContent = content;
+  }
+  
+  messagesDiv.appendChild(msgDiv);
+  
+  // Auto-scroll to bottom
+  const container = document.getElementById('ai-chat-container');
+  container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+async function sendAIPrompt() {
+  if (!mcpConnected) {
+    toast('Devi prima connetterti a un MCP Server');
+    return;
+  }
+
+  const input = document.getElementById('ai-input');
+  const prompt = input.value.trim();
+
+  if (!prompt) return;
+  if (aiProcessing) {
+    toast('AI sta ancora processando...');
+    return;
+  }
+
+  // Add user message
+  addAIMessage('user', prompt);
+  input.value = '';
+
+  // Show processing indicator
+  aiProcessing = true;
+  addAIMessage('system', '⏳ Elaborazione in corso...');
+
+  try {
+    // Build canvas state for AI
+    const canvasState = {
+      letters: S.letters.map(el => ({
+        id: el.id,
+        ch: el.ch,
+        x: el.x,
+        y: el.y,
+        fontSize: el.fontSize,
+        fill: el.fill,
+        sx: el.sx,
+        sy: el.sy,
+        rot: el.rot,
+        skew: el.skew,
+        op: el.op,
+        borderWidth: el.borderWidth,
+        borderColor: el.borderColor,
+        layer: el.layer,
+        isSvgImport: el.isSvgImport,
+        svgW: el.svgW,
+        svgH: el.svgH,
+        fontName: el.fontName,
+        customPath: el.customPath,
+        selected: S.sel.has(el.id)
+      })),
+      canvasW: S.canvasW,
+      canvasH: S.canvasH,
+      svgs: S.svgs,
+      fonts: S.fonts,
+      uid: uid
+    };
+
+    // Get MCP server URL
+    const serverUrl = document.getElementById('mcp-server-url').value;
+
+    // Send to MCP Server
+    const response = await window.electronAPI.mcpProcessPrompt(prompt, canvasState, serverUrl);
+
+    // Remove processing indicator
+    const messagesDiv = document.getElementById('ai-messages');
+    messagesDiv.removeChild(messagesDiv.lastChild);
+
+    if (!response.success) {
+      throw new Error(response.error);
+    }
+
+    const result = response.result;
+
+    // Show needs clarification if present
+    if (result.needs_clarification) {
+      addAIMessage('ai', `❓ ${result.needs_clarification}`);
+      aiProcessing = false;
+      return;
+    }
+
+    // Show explanation
+    if (result.explanation) {
+      addAIMessage('ai', result.explanation);
+    }
+
+    // Show warnings if any
+    if (result.warnings && result.warnings.length > 0) {
+      result.warnings.forEach(w => {
+        addAIMessage('system', `⚠️ ${w}`);
+      });
+    }
+
+    // Execute operations
+    if (result.operations && result.operations.length > 0) {
+      // Save state for undo
+      saveState();
+
+      // Execute operations
+      const execResult = aiExecuteOperationsLocally(result.operations);
+
+      // Update canvas
+      render();
+      upd();
+
+      // Show summary
+      const summary = `✓ ${result.operations.length} operazion${result.operations.length === 1 ? 'e' : 'i'} eseguit${result.operations.length === 1 ? 'a' : 'e'}`;
+      addAIMessage('system', summary);
+      
+      toast(summary);
+    }
+    
+  } catch (error) {
+    console.error('AI Error:', error);
+    // Remove processing indicator
+    const messagesDiv = document.getElementById('ai-messages');
+    if (messagesDiv.lastChild) {
+      messagesDiv.removeChild(messagesDiv.lastChild);
+    }
+    addAIMessage('error', `❌ Errore: ${error.message}`);
+    toast('Errore AI: ' + error.message);
+  } finally {
+    aiProcessing = false;
+  }
+}
+
+function aiExecuteOperationsLocally(operations) {
+  const changes = [];
+  
+  operations.forEach(op => {
+    switch (op.type) {
+      case 'modify':
+        changes.push(...aiExecuteModify(op));
+        break;
+      case 'add':
+        changes.push(...aiExecuteAdd(op));
+        break;
+      case 'duplicate':
+        changes.push(...aiExecuteDuplicate(op));
+        break;
+      case 'move':
+        changes.push(...aiExecuteMove(op));
+        break;
+      case 'resize':
+        changes.push(...aiExecuteResize(op));
+        break;
+      case 'delete':
+        changes.push(...aiExecuteDelete(op));
+        break;
+      case 'recolor':
+        changes.push(...aiExecuteRecolor(op));
+        break;
+    }
+  });
+  
+  return changes;
+}
+
+function aiFindTargets(target, letters) {
+  if (!target || target === 'all') {
+    return letters;
+  }
+  
+  if (target === 'selected') {
+    return letters.filter(el => S.sel.has(el.id));
+  }
+  
+  // Try to find by ID
+  const byId = letters.find(el => el.id == target);
+  if (byId) return [byId];
+  
+  // Try to find by name/content
+  const byName = letters.filter(el => 
+    el.ch === target || el.fontName === target
+  );
+  if (byName.length > 0) return byName;
+  
+  // Try positional description
+  if (target === 'first' && letters.length > 0) return [letters[0]];
+  if (target === 'last' && letters.length > 0) return [letters[letters.length - 1]];
+  if (target === 'center') {
+    const centerX = S.canvasW / 2;
+    const centerY = S.canvasH / 2;
+    let closest = letters[0];
+    let minDist = Infinity;
+    
+    letters.forEach(el => {
+      const dist = Math.sqrt(Math.pow(el.x - centerX, 2) + Math.pow(el.y - centerY, 2));
+      if (dist < minDist) {
+        minDist = dist;
+        closest = el;
+      }
+    });
+    
+    return closest ? [closest] : [];
+  }
+  
+  return [];
+}
+
+function aiExecuteModify(op) {
+  const targets = aiFindTargets(op.target, S.letters);
+  const changes = [];
+  
+  targets.forEach(el => {
+    const before = { ...el };
+    
+    if (op.properties.x !== undefined) el.x = op.properties.x;
+    if (op.properties.y !== undefined) el.y = op.properties.y;
+    if (op.properties.fontSize !== undefined) el.fontSize = op.properties.fontSize;
+    if (op.properties.fill !== undefined) el.fill = op.properties.fill;
+    if (op.properties.sx !== undefined) el.sx = op.properties.sx;
+    if (op.properties.sy !== undefined) el.sy = op.properties.sy;
+    if (op.properties.rot !== undefined) el.rot = op.properties.rot;
+    if (op.properties.skew !== undefined) el.skew = op.properties.skew;
+    if (op.properties.op !== undefined) el.op = op.properties.op;
+    if (op.properties.borderWidth !== undefined) el.borderWidth = op.properties.borderWidth;
+    if (op.properties.borderColor !== undefined) el.borderColor = op.properties.borderColor;
+    if (op.properties.layer !== undefined) el.layer = op.properties.layer;
+    
+    changes.push({ type: 'modify', before, after: { ...el } });
+  });
+  
+  return changes;
+}
+
+function aiExecuteAdd(op) {
+  const changes = [];
+  const props = op.properties || {};
+  
+  if (op.svgName) {
+    // Add SVG
+    const svgObj = S.svgs.find(s => s.name === op.svgName);
+    if (svgObj) {
+      const newEl = {
+        id: uid++,
+        ch: op.svgName,
+        x: props.x || S.canvasW / 2,
+        y: props.y || S.canvasH / 2,
+        originalX: props.x || S.canvasW / 2,
+        originalY: props.y || S.canvasH / 2,
+        fontSize: 100,
+        fill: props.fill || '#111111',
+        fontFamily: 'sans-serif',
+        fontName: op.svgName,
+        sx: props.sx || 1,
+        sy: props.sy || 1,
+        rot: props.rot || 0,
+        skew: props.skew || 0,
+        op: props.op || 1,
+        customPath: svgObj.pathData.replace(/<path d="([^"]+)"[^>]*>/, '$1'),
+        isSvgImport: true,
+        svgW: svgObj.width,
+        svgH: svgObj.height,
+        borderWidth: 0,
+        borderColor: '#000000',
+        layer: props.layer || 2
+      };
+      S.letters.push(newEl);
+      changes.push({ type: 'add', element: { ...newEl } });
+    }
+  } else {
+    // Add text
+    const newEl = {
+      id: uid++,
+      ch: op.text || 'Text',
+      x: props.x || S.canvasW / 2,
+      y: props.y || S.canvasH / 2,
+      originalX: props.x || S.canvasW / 2,
+      originalY: props.y || S.canvasH / 2,
+      fontSize: props.fontSize || 80,
+      fill: props.fill || '#111111',
+      fontFamily: props.fontFamily || 'sans-serif',
+      fontName: props.fontName || '',
+      sx: props.sx || 1,
+      sy: props.sy || 1,
+      rot: props.rot || 0,
+      skew: props.skew || 0,
+      op: props.op || 1,
+      borderWidth: props.borderWidth || 0,
+      borderColor: props.borderColor || '#000000',
+      layer: props.layer || 2
+    };
+    S.letters.push(newEl);
+    changes.push({ type: 'add', element: { ...newEl } });
+  }
+  
+  return changes;
+}
+
+function aiExecuteDuplicate(op) {
+  const targets = aiFindTargets(op.target, S.letters);
+  const changes = [];
+  
+  targets.forEach(el => {
+    const newEl = {
+      ...el,
+      id: uid++,
+      x: el.x + (op.offsetX || 50),
+      y: el.y + (op.offsetY || 50)
+    };
+    S.letters.push(newEl);
+    changes.push({ type: 'duplicate', original: { ...el }, duplicate: { ...newEl } });
+  });
+  
+  return changes;
+}
+
+function aiExecuteMove(op) {
+  const targets = aiFindTargets(op.target, S.letters);
+  const changes = [];
+  
+  targets.forEach(el => {
+    const before = { x: el.x, y: el.y };
+    
+    if (op.properties.x !== undefined) {
+      el.x = op.properties.x;
+    } else if (op.properties.dx !== undefined) {
+      el.x += op.properties.dx;
+    }
+    
+    if (op.properties.y !== undefined) {
+      el.y = op.properties.y;
+    } else if (op.properties.dy !== undefined) {
+      el.y += op.properties.dy;
+    }
+    
+    changes.push({ type: 'move', elementId: el.id, before, after: { x: el.x, y: el.y } });
+  });
+  
+  return changes;
+}
+
+function aiExecuteResize(op) {
+  const targets = aiFindTargets(op.target, S.letters);
+  const changes = [];
+  
+  targets.forEach(el => {
+    const before = { sx: el.sx, sy: el.sy, fontSize: el.fontSize };
+    
+    if (op.properties.sx !== undefined) el.sx = op.properties.sx;
+    if (op.properties.sy !== undefined) el.sy = op.properties.sy;
+    if (op.properties.scale !== undefined) {
+      el.sx *= op.properties.scale;
+      el.sy *= op.properties.scale;
+    }
+    if (op.properties.fontSize !== undefined) el.fontSize = op.properties.fontSize;
+    
+    changes.push({ type: 'resize', elementId: el.id, before, after: { sx: el.sx, sy: el.sy, fontSize: el.fontSize } });
+  });
+  
+  return changes;
+}
+
+function aiExecuteDelete(op) {
+  const targets = aiFindTargets(op.target, S.letters);
+  const changes = [];
+  
+  targets.forEach(el => {
+    changes.push({ type: 'delete', element: { ...el } });
+    S.sel.delete(el.id);
+  });
+  
+  // Remove from array
+  const targetIds = new Set(targets.map(t => t.id));
+  S.letters = S.letters.filter(el => !targetIds.has(el.id));
+  
+  return changes;
+}
+
+function aiExecuteRecolor(op) {
+  const targets = aiFindTargets(op.target, S.letters);
+  const changes = [];
+  
+  targets.forEach(el => {
+    const before = { fill: el.fill };
+    
+    if (op.properties.fill !== undefined) {
+      el.fill = op.properties.fill;
+      changes.push({ type: 'recolor', elementId: el.id, before, after: { fill: el.fill } });
+    }
+  });
+  
+  return changes;
+}
 </script>
 
 <!-- 3D Preview Overlay -->

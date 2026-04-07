@@ -1,6 +1,6 @@
 {
   "name": "letterforge-pro",
-  "version": "4.1.4",
+  "version": "4.1.5",
   "description": "LetterForge Pro – editor tipografico SVG desktop",
   "main": "main.js",
   "scripts": {
@@ -19,6 +19,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "mcp-server.js",
       "src/**/*"
     ],
     "extraResources": [],

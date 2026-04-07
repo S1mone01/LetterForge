@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path  = require('path');
 const fs    = require('fs');
 
+// MCP Server
+const mcpServer = require('./mcp-server');
+
 // Auto-update (only loaded in production)
 let autoUpdater = null;
 if (app.isPackaged) {
@@ -508,6 +511,63 @@ app.whenReady().then(() => {
       return { success: true };
     } catch (error) {
       console.error('Errore nell\'apertura della cartella SVG:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ── MCP Server Integration handlers ─────────────────────────────────
+  ipcMain.handle('mcp-start-server', async (event, port) => {
+    try {
+      const result = await mcpServer.start(port);
+      
+      // Set up operation handler
+      mcpServer.on('execute-operation', async (operation, resolve) => {
+        // Send operation to renderer for execution
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win) {
+          win.webContents.send('mcp-execute-operation', operation);
+          
+          // Wait for renderer to respond (with timeout)
+          const timeout = setTimeout(() => {
+            resolve({ success: false, error: 'Operation timeout' });
+          }, 10000);
+          
+          ipcMain.once('mcp-operation-result', (event, result) => {
+            clearTimeout(timeout);
+            resolve(result);
+          });
+        } else {
+          resolve({ success: false, error: 'No window available' });
+        }
+      });
+      
+      // Set up canvas state sync
+      mcpServer.on('state-updated', (state) => {
+        console.log('[MCP Server] Canvas state updated');
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('MCP server start error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('mcp-stop-server', async (event) => {
+    try {
+      return await mcpServer.stop();
+    } catch (error) {
+      console.error('MCP server stop error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('mcp-update-canvas-state', async (event, canvasState) => {
+    try {
+      mcpServer.updateCanvasState(canvasState);
+      return { success: true };
+    } catch (error) {
+      console.error('MCP update canvas state error:', error);
       return { success: false, error: error.message };
     }
   });

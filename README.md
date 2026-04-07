@@ -35,6 +35,14 @@
 - **Salva progetto**: salva lo stato completo (elementi, canvas, libreria)
 - **Carica progetto**: riprendi il lavoro da dove hai lasciato
 
+### 🤖 AI Assistant (NUOVO!)
+- **Editing intelligente** basato su prompt testuali
+- **Analisi del contesto** del canvas completo
+- **Operazioni automatiche**: modifica, aggiungi, duplica, sposta, ridimensiona
+- **Comprensione intelligente**: targeting relativo, operazioni composte
+- **Integrazione completa** con undo/redo
+- Vedi [AI-INTEGRATION.md](AI-INTEGRATION.md) per dettagli
+
 ### 🔄 Auto-Update Integrato
 - Controllo automatico all'avvio (dopo 2 secondi)
 - Notifica visiva per nuovi aggiornamenti

@@ -1,16 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    // La funzione che avevi già per i font
+    // Font e SVG loaders
     onFontsLoaded: (callback) => ipcRenderer.on('fonts-loaded', (_event, value) => callback(value)),
-
-    // AGGIUNTO: Il nuovo canale per gli SVG automatici
     onSVGsLoaded: (callback) => ipcRenderer.on('svgs-loaded', (_event, value) => callback(value)),
 
-    // La funzione per salvare l'SVG
+    // Salva SVG
     saveSVG: (svgString) => ipcRenderer.invoke('save-svg', svgString),
 
-    // Canale per aggiornamenti splash screen (usato solo dalla splash)
+    // Splash screen
     onSplashProgress: (callback) => ipcRenderer.on('splash-progress', (_event, value) => callback(value)),
     onSplashHide: (callback) => ipcRenderer.on('splash-hide', (_event) => callback()),
 
@@ -22,10 +20,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openFontFolder: () => ipcRenderer.invoke('open-font-folder'),
     openSVGFolder: () => ipcRenderer.invoke('open-svg-folder'),
 
-    // ── Auto-update IPC handlers ──────────────────────────────────────────
+    // Auto-update
     onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_event, value) => callback(value)),
     onAppVersion: (callback) => ipcRenderer.on('app-version', (_event, value) => callback(value)),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     downloadUpdate: () => ipcRenderer.invoke('download-update'),
-    quitAndInstall: () => ipcRenderer.invoke('quit-and-install')
+    quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
+
+    // MCP Server
+    mcpStartServer: (port) => ipcRenderer.invoke('mcp-start-server', port),
+    mcpStopServer: () => ipcRenderer.invoke('mcp-stop-server'),
+    mcpUpdateCanvasState: (canvasState) => ipcRenderer.invoke('mcp-update-canvas-state', canvasState),
+    onMCPExecuteOperation: (callback) => ipcRenderer.on('mcp-execute-operation', (_event, operation) => callback(operation)),
+    mcpOperationResult: (result) => ipcRenderer.send('mcp-operation-result', result),
 });
