@@ -716,6 +716,26 @@
   #update-notify .un-icon{display:flex;align-items:center;gap:8px;margin-bottom:8px}
   #update-notify .un-icon svg{width:18px;height:18px;color:var(--accent)}
 
+  /* Hide number input spinners in 3D panel */
+  #preview-3d-panel input[type="number"]{
+    -moz-appearance:textfield;
+  }
+  #preview-3d-panel input[type="number"]::-webkit-outer-spin-button,
+  #preview-3d-panel input[type="number"]::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+
+  /* Hide number input spinners in extrusion controls */
+  #extrusion-controls input[type="number"]{
+    -moz-appearance:textfield;
+  }
+  #extrusion-controls input[type="number"]::-webkit-outer-spin-button,
+  #extrusion-controls input[type="number"]::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+
   /* Custom confirm dialog */
   #custom-confirm{
     display:none;position:fixed;inset:0;z-index:99999;
@@ -870,7 +890,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.8</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.9</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -1008,8 +1028,8 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             STL
           </button>
-          <button class="btn btn-icon" onclick="toggle3DPreview()" title="Chiudi" style="padding:4px 6px;min-width:28px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <button class="btn btn-icon" onclick="close3DPreview()" title="Indietro" style="padding:4px 6px;min-width:28px;background:#ff4444;color:#fff;border-color:#ff4444;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
           </button>
         </div>
       </div>
@@ -1198,7 +1218,7 @@
     <div class="sec">
       <div class="sec-title">Info</div>
       <div id="info" class="hint">
-  <b>Spazio + Trascina</b> = Pan del foglio<br>
+  <b>Tasto destro + Trascina</b> = Pan del foglio<br>
   <b>Rotella</b> = Zoom | <b>Ctrl+Rotella</b> = Scorri<br>
   Shift+Click = Selezione multipla<br>
   Ctrl+Z / Ctrl+Y = Annulla / Ripristina<br>
@@ -1231,7 +1251,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.1.8</div>
+  <div class="un-ver" id="un-version">Versione 4.1.9</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -1269,7 +1289,7 @@ const S = {
   lockScale:true,
   history:[], historyIndex:-1,
   snapThreshold:10,
-  spaceDown:false, panning:false, panStart:null,
+  panning:false, panStart:null,
   rotating:false, // true quando l'utente sta ruotando attivamente
   rotHandleAngle: null, // angolo corrente del controllo di rotazione (in gradi)
   rotHandleDistance: null, // distanza fissa dal centro durante la rotazione
@@ -1313,16 +1333,11 @@ document.getElementById('cw').addEventListener('wheel', e => {
 document.addEventListener('keydown', e => {
   if(e.code === 'Space' && !e.target.matches('input,textarea')){
     e.preventDefault();
-    if(!S.spaceDown){
-      S.spaceDown = true;
-      document.getElementById('cw').classList.add('pan-mode');
-    }
   }
 });
 document.addEventListener('keyup', e => {
   if(e.code === 'Space'){
-    S.spaceDown = false;
-    if(!S.panning) document.getElementById('cw').classList.remove('pan-mode');
+    e.preventDefault();
   }
 });
 
@@ -2641,7 +2656,7 @@ function smd(e){
     // Non fare nulla se il click è avvenuto su un input
     return;
   }
-  if(S.spaceDown || e.button === 1){
+  if(e.button === 2){
     e.preventDefault(); e.stopPropagation(); startPan(e); return;
   }
   if(e.target.closest('.lg') || e.target.closest('.svgobj') || e.target.closest('.lg-handle')) return;
@@ -2665,7 +2680,6 @@ function stopPan(){
   S.panning=false;
   const cw=document.getElementById('cw');
   cw.classList.remove('panning');
-  if(!S.spaceDown) cw.classList.remove('pan-mode');
 }
 
 document.addEventListener('mousemove', e=>{
@@ -2966,7 +2980,7 @@ function upd(){
   const gg=document.getElementById('gg'),ns=document.getElementById('nsel'),info=document.getElementById('info');
   if(!sel.length){
     gg.innerHTML='';ns.style.display='block';
-    info.innerHTML='<b>Spazio + Trascina</b> = Pan<br><b>Rotella</b> = Zoom | <b>Ctrl+Rotella</b> = Scorri<br>Shift+Click = selezione multipla';
+    info.innerHTML='<b>Tasto destro + Trascina</b> = Pan<br><b>Rotella</b> = Zoom | <b>Ctrl+Rotella</b> = Scorri<br>Shift+Click = selezione multipla';
     // Resetta tutti i campi di input quando non c'è selezione
     resetPropertyFields();
     return;
@@ -3773,7 +3787,10 @@ svgEl.addEventListener('auxclick', e => {
   if(e.button === 1) { e.preventDefault(); e.stopPropagation(); }
 }, {passive: false});
 svgEl.addEventListener('contextmenu', e => {
-  if(S.panning || S.spaceDown) { e.preventDefault(); }
+  e.preventDefault();
+});
+document.getElementById('cw').addEventListener('contextmenu', e => {
+  e.preventDefault();
 });
 saveState();
 
@@ -6713,9 +6730,9 @@ function aiExecuteRecolor(op) {
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download STL
     </button>
-    <button class="btn primary" onclick="close3DPreview()" onmousedown="event.stopPropagation()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      Chiudi
+    <button class="btn" onclick="close3DPreview()" onmousedown="event.stopPropagation()" style="background:#ff4444;color:#fff;border-color:#ff4444;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
+      Indietro
     </button>
   </div>
   <div id="preview-3d-canvas" style="position:absolute;top:56px;left:0;right:280px;bottom:0;"></div>
