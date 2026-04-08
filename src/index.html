@@ -685,6 +685,14 @@
   .nsel{color:var(--muted);font-size:10px;text-align:center;padding:14px 0}
   .svg-badge{display:inline-block;padding:1px 7px;background:rgba(255,107,53,.15);color:#ff6b35;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.06em}
   .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:14px;height:14px;
+    background:var(--accent2);
+    border-radius:50%;
+    cursor:pointer;
+    box-shadow:0 1px 3px rgba(0,0,0,.3);
+  }
 
   /* Auto-update notification panel */
   #update-notify{
@@ -862,7 +870,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.6</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.8</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -993,11 +1001,17 @@
     </div>
     <!-- 3D Preview Panel -->
     <div id="preview-3d-panel" style="display:none;position:fixed;top:46px;right:0;width:420px;height:calc(100vh - 46px);background:var(--panel);border-left:1px solid var(--border);z-index:100;flex-direction:column;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div class="sec-title" style="margin:0;font-size:11px;">ANTEPRIMA 3D</div>
-        <button class="btn btn-icon" onclick="toggle3DPreview()" title="Chiudi" style="padding:4px 6px;min-width:28px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
+        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+          <button onclick="exportToSTL()" title="Esporta STL" style="background:#c8ff00;color:#000;border:2px solid #c8ff00;border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:bold;font-size:12px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            STL
+          </button>
+          <button class="btn btn-icon" onclick="toggle3DPreview()" title="Chiudi" style="padding:4px 6px;min-width:28px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
       </div>
       <div id="threejs-container" style="flex:1;position:relative;overflow:hidden;"></div>
       <div style="padding:10px 14px;border-top:1px solid var(--border);max-height:40%;overflow-y:auto;">
@@ -1217,7 +1231,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.1.6</div>
+  <div class="un-ver" id="un-version">Versione 4.1.8</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -1476,25 +1490,17 @@ sfz.addEventListener('drop',e=>{e.preventDefault();sfz.classList.remove('drag');
 
 function openUserFontFolder(){
   if(window.electronAPI && window.electronAPI.openFontFolder){
-    window.electronAPI.openFontFolder().then(result => {
-      if(!result.success){
-        toast('Errore nell\'apertura della cartella font');
-      }
-    }).catch(err => {
-      toast('Errore nell\'apertura della cartella font');
-    });
+    window.electronAPI.openFontFolder()
+      .then(result => { if(!result.success) toast('Errore nell\'apertura della cartella font'); })
+      .catch(() => toast('Errore nell\'apertura della cartella font'));
   }
 }
 
 function openUserSVGFolder(){
   if(window.electronAPI && window.electronAPI.openSVGFolder){
-    window.electronAPI.openSVGFolder().then(result => {
-      if(!result.success){
-        toast('Errore nell\'apertura della cartella SVG');
-      }
-    }).catch(err => {
-      toast('Errore nell\'apertura della cartella SVG');
-    });
+    window.electronAPI.openSVGFolder()
+      .then(result => { if(!result.success) toast('Errore nell\'apertura della cartella SVG'); })
+      .catch(() => toast('Errore nell\'apertura della cartella SVG'));
   }
 }
 
@@ -1523,7 +1529,6 @@ function importFontsFromFolder(files){
 
 // ── SVG IMPORT LOGIC E FUNZIONI CONDIVISE ───────────────────────────────────
 
-// HELPER: Appiattisce un SVG (anche complesso) per usarlo nella libreria laterale
 // HELPER: Appiattisce un SVG e ne estrae il Bounding Box perfetto per l'anteprima
 function processSingleSVGForLibrary(name, content) {
   try {
@@ -1684,10 +1689,7 @@ function pathToAbsoluteSegments(d) {
     const ox = () => rel ? cx : 0;
     const oy = () => rel ? cy : 0;
 
-    const repeat = () => {
-      if (i < tokens.length && tokens[i].type === 'num') return true;
-      return false;
-    };
+    const repeat = () => i < tokens.length && tokens[i].type === 'num';
 
     do {
       if (UC === 'Z') {
@@ -2207,11 +2209,6 @@ function importSVGs(files) {
 
 document.getElementById('svgfi').addEventListener('change',function(){importSVGs(this.files);this.value='';});
 
-function buildSVGLayer(){ document.getElementById('svg-layer').innerHTML=''; }
-function updateSVGLayer(){}
-function renderSVGLayer(forceRebuild=false){ if(forceRebuild) buildSVGLayer(); }
-function svgObjMd(e,i){}
-
 function addText(){
   const txt=document.getElementById('ti').value;
   if(!txt.trim())return;
@@ -2578,11 +2575,9 @@ function handleMd(e,i,axis,dir){
     const dy = p.y - centerY;
     S.rotHandleDistance = Math.sqrt(dx * dx + dy * dy);
 
-    // Calcola l'angolo iniziale dalla posizione del mouse rispetto al centro
-    const startMouseAngle = Math.atan2(dy, dx) * 180 / Math.PI;
-    S.rotHandleAngle = startMouseAngle;
-
     const startAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+    S.rotHandleAngle = startAngle;
+
     S.ds = {
       centerX,
       centerY,
@@ -2634,7 +2629,7 @@ function gmd(e,i){
   const p=pt(e);
   S.dragging=true;S.dragType='letter';S.ds={x:p.x,y:p.y};
   S.dl=S.letters.map(l=>({x:l.x,y:l.y}));
-  render();renderSVGLayer();renderHandles();upd();
+  render();renderHandles();upd();
   document.getElementById('svg').classList.add('dragging-letter');
   saveState();
 }
@@ -2657,7 +2652,7 @@ function smd(e){
   sb.setAttribute('x', p.x); sb.setAttribute('y', p.y);
   sb.setAttribute('width', 0); sb.setAttribute('height', 0);
   sb.style.display = 'block';
-  render(); renderSVGLayer(); renderHandles(); upd();
+  render(); renderHandles(); upd();
 }
 
 function startPan(e){
@@ -3097,7 +3092,7 @@ function resetPropertyFields(){
   if(layerBtn2) layerBtn2.classList.remove('active');
   if(layerBtn3) layerBtn3.classList.remove('active');
 }
-function v(id,val){const el = document.getElementById(id);if(el){const active=document.activeElement;if(active!==el&&el!==active){el.value=val;}}}
+function v(id,val){const el=document.getElementById(id);if(el&&document.activeElement!==el){el.value=val;}}
 function t(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
 
 // Applica una trasformazione a tutti gli elementi selezionati
@@ -3415,7 +3410,6 @@ function applyProjectData(data) {
   document.getElementById('gr').style.display = S.gridOn ? 'block' : 'none';
   const gridBtn2 = document.getElementById('grid-btn');
   if(gridBtn2) gridBtn2.style.color = S.gridOn ? 'var(--accent)' : '';
-  
   // Ripristina lettere
   S.letters = data.letters || [];
   
@@ -3461,11 +3455,6 @@ function _buildLetterMatrix(l, mw) {
   if (l.skew) m = m.skewX(l.skew);
   m = m.translate(-l.x, -l.y);
   return m;
-}
-
-// Applica DOMMatrix a segmenti assoluti
-function _applyDOMMatrixToSegs(segs, m) {
-  return applyMatrixToSegs(segs, m); // riusa la funzione già presente
 }
 
 // bbox reale di un path trasformato (usa DOM temporaneo offscreen, NO zoom)
@@ -3525,7 +3514,7 @@ async function exportSVG() {
           const pM = pTfStr ? parseTransformToMatrix(pTfStr) : new DOMMatrix();
           const combined = innerM.multiply(pM);
           const segs = pathToAbsoluteSegments(d);
-          allSegs.push(..._applyDOMMatrixToSegs(segs, combined));
+          allSegs.push(...applyMatrixToSegs(segs, combined));
         });
         if (!allSegs.length) return;
         const pathD = segsToPathD(allSegs);
@@ -3539,7 +3528,7 @@ async function exportSVG() {
         const innerY = l.y;
         const combined = outerM.translate(innerX, innerY);
         const segs = pathToAbsoluteSegments(l.customPath);
-        const transformed = _applyDOMMatrixToSegs(segs, combined);
+        const transformed = applyMatrixToSegs(segs, combined);
         const pathD = segsToPathD(transformed);
         const bbox = _realBBox(pathD);
         if (!bbox) return;
@@ -3553,7 +3542,7 @@ async function exportSVG() {
         // Use higher precision for better export quality
         const d = S.openFonts[l.fontName].getPath(l.ch, 0, 0, l.fontSize).toPathData(4);
         const segs = pathToAbsoluteSegments(d);
-        const transformed = _applyDOMMatrixToSegs(segs, combined);
+        const transformed = applyMatrixToSegs(segs, combined);
         const pathD = segsToPathD(transformed);
         const bbox = _realBBox(pathD);
         if (!bbox) return;
@@ -3695,155 +3684,6 @@ ${svgContent}</svg>`;
 
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function identityMatrix(){ return [1,0,0,1,0,0]; }
-
-function multiplyMatrix(a, b){
-  return [
-    a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1],
-    a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3],
-    a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]
-  ];
-}
-
-function parseTransformString(str){
-  let m = identityMatrix();
-  if(!str) return m;
-  const re = /(translate|rotate|scale|skewX|skewY|matrix)\s*\(([^)]+)\)/g;
-  let match;
-  while((match = re.exec(str)) !== null){
-    const fn = match[1], args = match[2].split(/[\s,]+/).map(Number);
-    let cm = identityMatrix();
-    if(fn==='translate'){ cm = [1,0,0,1,args[0]||0,args[1]||0]; }
-    else if(fn==='rotate'){
-      const rad = args[0]*Math.PI/180, c=Math.cos(rad), s=Math.sin(rad);
-      cm = [c,s,-s,c,0,0];
-    }
-    else if(fn==='scale'){ cm = [args[0]||1,0,0,args[1]||args[0]||1,0,0]; }
-    else if(fn==='skewX'){ const t=Math.tan(args[0]*Math.PI/180); cm = [1,0,t,1,0,0]; }
-    else if(fn==='skewY'){ const t=Math.tan(args[0]*Math.PI/180); cm = [1,t,0,1,0,0]; }
-    else if(fn==='matrix'){ cm = args.slice(0,6); }
-    m = multiplyMatrix(m, cm);
-  }
-  return m;
-}
-
-function buildTransformMatrix(gx, gy, rotDeg, sx, sy, skewDeg, innerX, innerY){
-  // translate(gx,gy) rotate(rot) scale(sx,sy) skewX(skew) translate(-innerX,-innerY)
-  let m = identityMatrix();
-  m = multiplyMatrix(m, [1,0,0,1,gx,gy]);
-  if(rotDeg){ const r=rotDeg*Math.PI/180; m = multiplyMatrix(m,[Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r),0,0]); }
-  if(sx!==1||sy!==1){ m = multiplyMatrix(m,[sx,0,0,sy,0,0]); }
-  if(skewDeg){ const t=Math.tan(skewDeg*Math.PI/180); m = multiplyMatrix(m,[1,t,0,1,0,0]); }
-  m = multiplyMatrix(m, [1,0,0,1,-innerX,-innerY]);
-  return m;
-}
-
-function buildGroupTransformMatrix(l){
-  // translate(l.x,l.y) [rotate scale skew] translate(-l.x,-l.y) translate(l.x-origX, l.y-origY)
-  let m = identityMatrix();
-  m = multiplyMatrix(m, [1,0,0,1,l.x,l.y]);
-  if(l.rot){ const r=l.rot*Math.PI/180; m = multiplyMatrix(m,[Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r),0,0]); }
-  if(l.sx!==1||l.sy!==1){ m = multiplyMatrix(m,[l.sx,0,0,l.sy,0,0]); }
-  if(l.skew){ const t=Math.tan(l.skew*Math.PI/180); m = multiplyMatrix(m,[1,t,0,1,0,0]); }
-  m = multiplyMatrix(m, [1,0,0,1,-l.x,-l.y]);
-  m = multiplyMatrix(m, [1,0,0,1,l.x-(l.originalX||l.x), l.y-(l.originalY||l.y)]);
-  return m;
-}
-
-function transformPoint(p, m){
-  return [m[0]*p[0]+m[2]*p[1]+m[4], m[1]*p[0]+m[3]*p[1]+m[5]];
-}
-
-function parsePathD(d){
-  const cmds = [];
-  const re = /([MmLlHhVvCcSsQqTtAaZz])|([+-]?\d*\.?\d+(?:e[+-]?\d+)?)/gi;
-  let currentCmd = null;
-  let args = [];
-
-  function flush(){
-    if(currentCmd && args.length){
-      cmds.push({ type: currentCmd, values: args.slice() });
-      args = [];
-    }
-  }
-
-  let match;
-  while((match = re.exec(d)) !== null){
-    if(match[1]){
-      flush();
-      currentCmd = match[1];
-    } else if(match[2] !== undefined){
-      args.push(parseFloat(match[2]));
-    }
-  }
-  flush();
-  return cmds;
-}
-
-function transformCmds(cmds, m){
-  return cmds.map(c => {
-    const t = c.type.toUpperCase();
-    const vals = c.values;
-    if(t === 'Z') return { type: 'Z' };
-
-    let result = { type: c.type };
-    // M, L, T: 2 args (x,y)
-    if(t === 'M' || t === 'L' || t === 'T'){
-      const [x,y] = transformPoint([vals[0],vals[1]], m);
-      result.x = x; result.y = y;
-    }
-    // H: 1 arg (x)
-    else if(t === 'H'){
-      const [x] = transformPoint([vals[0],0], m);
-      result.x = x;
-    }
-    // V: 1 arg (y)
-    else if(t === 'V'){
-      const [,y] = transformPoint([0,vals[0]], m);
-      result.y = y;
-    }
-    // C: 6 args (x1,y1,x2,y2,x,y)
-    else if(t === 'C' || t === 'S'){
-      const [x1,y1] = transformPoint([vals[0],vals[1]], m);
-      const [x2,y2] = transformPoint([vals[2],vals[3]], m);
-      const [x,y] = transformPoint([vals[4],vals[5]], m);
-      result.x1=x1; result.y1=y1; result.x2=x2; result.y2=y2; result.x=x; result.y=y;
-    }
-    // Q: 4 args (x1,y1,x,y)
-    else if(t === 'Q'){
-      const [x1,y1] = transformPoint([vals[0],vals[1]], m);
-      const [x,y] = transformPoint([vals[2],vals[3]], m);
-      result.x1=x1; result.y1=y1; result.x=x; result.y=y;
-    }
-    // A: 7 args (rx,ry,xrot,laf,sf,x,y) - rx,ry not transformed, but x,y are
-    else if(t === 'A'){
-      result.rx=vals[0]; result.ry=vals[1];
-      // For arcs, we rotate the large-arc/sweep flags if the matrix flips
-      result.xrot = vals[2]; // TODO: adjust for rotation
-      result.laf = vals[3]; result.sf = vals[4];
-      const [x,y] = transformPoint([vals[5],vals[6]], m);
-      result.x=x; result.y=y;
-    }
-    return result;
-  });
-}
-
-function cmdsToPathD(cmds){
-  return cmds.map(c => {
-    if(c.type === 'Z') return 'Z';
-    if(c.type === 'M') return `M ${r(c.x)} ${r(c.y)}`;
-    if(c.type === 'L') return `L ${r(c.x)} ${r(c.y)}`;
-    if(c.type === 'H') return `H ${r(c.x)}`;
-    if(c.type === 'V') return `V ${r(c.y)}`;
-    if(c.type === 'C') return `C ${r(c.x1)} ${r(c.y1)}, ${r(c.x2)} ${r(c.y2)}, ${r(c.x)} ${r(c.y)}`;
-    if(c.type === 'S') return `S ${r(c.x1)} ${r(c.y1)}, ${r(c.x)} ${r(c.y)}`;
-    if(c.type === 'Q') return `Q ${r(c.x1)} ${r(c.y1)}, ${r(c.x)} ${r(c.y)}`;
-    if(c.type === 'T') return `T ${r(c.x)} ${r(c.y)}`;
-    if(c.type === 'A') return `A ${r(c.rx)} ${r(c.ry)} ${r(c.xrot||0)} ${c.laf||0} ${c.sf||0} ${r(c.x)} ${r(c.y)}`;
-    return '';
-  }).join(' ');
-}
-
 function r(v){ return v !== undefined ? (Math.round(v*100)/100) : 0; }
 
 function splitSelectedLetter(){
@@ -3924,16 +3764,10 @@ function toast(msg){
 
 const svgEl = document.getElementById('svg');
 svgEl.addEventListener('mousedown', e => {
-  // Non gestire il mousedown se l'utente sta interagendo con un input
-  if(e.target.tagName === 'input' || e.target.tagName === 'INPUT' || 
-     e.target.tagName === 'textarea' || e.target.tagName === 'TEXTAREA' ||
-     e.target.closest('input') || e.target.closest('textarea')) {
-    return;
-  }
+  if(e.button === 1) { e.preventDefault(); e.stopPropagation(); return; }
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' ||
+     e.target.closest('input') || e.target.closest('textarea')) return;
   smd(e);
-});
-svgEl.addEventListener('mousedown', e => {
-  if(e.button === 1) { e.preventDefault(); e.stopPropagation(); }
 }, {passive: false});
 svgEl.addEventListener('auxclick', e => {
   if(e.button === 1) { e.preventDefault(); e.stopPropagation(); }
@@ -4166,7 +4000,8 @@ let threeGraphicsSettings = {
   bgColor: '#1a1a22',
   ambientIntensity: 0.6,
   specular: 0x444444,
-  shininess: 30
+  shininess: 30,
+  smoothShading: true
 };
 
 function open3DPreview() {
@@ -4355,7 +4190,7 @@ function build3DObjects() {
         const pM = pTfStr ? parseTransformToMatrix(pTfStr) : new DOMMatrix();
         const combined = innerM.multiply(pM);
         const segs = pathToAbsoluteSegments(d);
-        allSegs.push(..._applyDOMMatrixToSegs(segs, combined));
+        allSegs.push(...applyMatrixToSegs(segs, combined));
       });
       if (!allSegs.length) return;
       const pathD = segsToPathD(allSegs);
@@ -4368,7 +4203,7 @@ function build3DObjects() {
       const innerY = l.y;
       const combined = outerM.translate(innerX, innerY);
       const segs = pathToAbsoluteSegments(l.customPath);
-      const transformed = _applyDOMMatrixToSegs(segs, combined);
+      const transformed = applyMatrixToSegs(segs, combined);
       const pathD = segsToPathD(transformed);
       const bbox = _realBBox(pathD);
       if (!bbox) return;
@@ -4388,7 +4223,7 @@ function build3DObjects() {
         if (!segs || segs.length === 0) {
           throw new Error('No path segments generated');
         }
-        const transformed = _applyDOMMatrixToSegs(segs, combined);
+        const transformed = applyMatrixToSegs(segs, combined);
         const pathD = segsToPathD(transformed);
         if (!pathD || pathD.length === 0) {
           throw new Error('Empty path string after transformation');
@@ -4444,7 +4279,7 @@ function build3DObjects() {
       shapes.forEach(shape => {
         const geometry = new THREE.ExtrudeGeometry(shape, {
           depth: extrusionDepth,
-          bevelEnabled: true,
+          bevelEnabled: threeGraphicsSettings.smoothShading,
           bevelThickness: 1,
           bevelSize: 0.5,
           bevelSegments: 2,
@@ -4784,7 +4619,7 @@ function getLetterPathData(letter, ctx) {
       const pM = pTfStr ? parseTransformToMatrix(pTfStr) : new DOMMatrix();
       const combined = innerM.multiply(pM);
       const segs = pathToAbsoluteSegments(d);
-      allSegs.push(..._applyDOMMatrixToSegs(segs, combined));
+      allSegs.push(...applyMatrixToSegs(segs, combined));
     });
     
     return allSegs.length ? segsToPathD(allSegs) : null;
@@ -4794,7 +4629,7 @@ function getLetterPathData(letter, ctx) {
     const innerY = letter.y;
     const combined = outerM.translate(innerX, innerY);
     const segs = pathToAbsoluteSegments(letter.customPath);
-    const transformed = _applyDOMMatrixToSegs(segs, combined);
+    const transformed = applyMatrixToSegs(segs, combined);
     return segsToPathD(transformed);
     
   } else if (S.openFonts[letter.fontName]) {
@@ -4804,7 +4639,7 @@ function getLetterPathData(letter, ctx) {
     // Use higher precision for better quality
     const d = S.openFonts[letter.fontName].getPath(letter.ch, 0, 0, letter.fontSize).toPathData(4);
     const segs = pathToAbsoluteSegments(d);
-    const transformed = _applyDOMMatrixToSegs(segs, combined);
+    const transformed = applyMatrixToSegs(segs, combined);
     return segsToPathD(transformed);
     
   } else {
@@ -4982,7 +4817,7 @@ function buildExtrusionControls(colorGroups) {
     slider.max = '100';
     slider.value = threeExtrusionLevels[color]?.extrusion || 20;
     slider.style.cssText = 'flex:1;accent-color:var(--accent);';
-    
+
     const numberInput = document.createElement('input');
     numberInput.type = 'number';
     numberInput.min = '0';
@@ -5032,7 +4867,7 @@ function updateExtrusion(color, newDepth) {
     // Create new geometry with updated depth
     const newGeometry = new THREE.ExtrudeGeometry(shapeArray, {
       depth: newDepth,
-      bevelEnabled: true,
+      bevelEnabled: threeGraphicsSettings.smoothShading,
       bevelThickness: 1,
       bevelSize: 0.5,
       bevelSegments: 2,
@@ -5070,10 +4905,6 @@ function change3DBgColor(color) {
   if (threeScene) {
     threeScene.background = new THREE.Color(color);
   }
-  // Force re-render
-  if (threeRenderer && threeScene && threeCamera) {
-    threeRenderer.render(threeScene, threeCamera);
-  }
 }
 
 function change3DAmbientLight(value) {
@@ -5099,7 +4930,7 @@ function change3DSpecular(value) {
 }
 
 function change3DShininess(value) {
-  const shininess = (value / 100) * 100; // 0-100 range
+  const shininess = parseFloat(value);
   threeGraphicsSettings.shininess = shininess;
   document.getElementById('shininess-value').textContent = value + '%';
   
@@ -5109,6 +4940,71 @@ function change3DShininess(value) {
       mesh.material.shininess = shininess;
     }
   });
+}
+
+function toggle3DSmoothing(enabled) {
+  threeGraphicsSettings.smoothShading = enabled;
+  const label = document.getElementById('smoothing-label');
+  if (label) label.textContent = enabled ? 'Attiva' : 'Disattiva';
+  
+  // Salva valori di estrusione correnti
+  const savedExtrusions = {};
+  for (const color in threeExtrusionLevels) {
+    savedExtrusions[color] = threeExtrusionLevels[color].extrusion;
+  }
+  
+  // Salva posizione camera e target
+  const savedCameraPos = threeCamera ? threeCamera.position.clone() : null;
+  const savedTarget = threeControls ? threeControls.target.clone() : null;
+  
+  // Distruggi tutte le mesh correnti
+  threeMeshes.forEach(mesh => {
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) mesh.material.dispose();
+    threeScene.remove(mesh);
+  });
+  threeMeshes = [];
+  threeExtrusionLevels = {};
+  
+  // Ricostruisci le mesh con il nuovo bevel setting
+  build3DObjects();
+  
+  // Ripristina valori di estrusione nelle mesh
+  for (const color in savedExtrusions) {
+    if (threeExtrusionLevels[color]) {
+      threeExtrusionLevels[color].extrusion = savedExtrusions[color];
+      updateExtrusion(color, savedExtrusions[color]);
+    }
+  }
+  
+  // Aggiorna UI slider con valori salvati
+  const extrusionContainer = document.getElementById('extrusion-controls');
+  if (extrusionContainer) {
+    const sliders = extrusionContainer.querySelectorAll('input[type="range"]');
+    const numberInputs = extrusionContainer.querySelectorAll('input[type="number"]');
+    const colors = Object.keys(savedExtrusions);
+    
+    colors.forEach((color, index) => {
+      if (index < sliders.length) {
+        sliders[index].value = savedExtrusions[color];
+      }
+      if (index < numberInputs.length) {
+        numberInputs[index].value = savedExtrusions[color];
+      }
+    });
+  }
+  
+  // Ripristina posizione camera
+  if (savedCameraPos && threeCamera) {
+    threeCamera.position.copy(savedCameraPos);
+  }
+  if (savedTarget && threeControls) {
+    threeControls.target.copy(savedTarget);
+    threeControls.update();
+  }
+  
+  // Toast per feedback utente
+  toast(enabled ? 'Smussatura attivata ✓' : 'Smussatura disattivata ✓');
 }
 
 // ── ELECTRON AUTO-UPDATE INTEGRATION ─────────────────────────────────────
@@ -5275,9 +5171,9 @@ function normalizeColor(colorStr) {
   // Parse rgb()
   const rgbMatch = colorStr.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   if (rgbMatch) {
-    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
-    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
-    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
+    const r = parseInt(rgbMatch[1], 10).toString(16).padStart(2, '0');
+    const g = parseInt(rgbMatch[2], 10).toString(16).padStart(2, '0');
+    const b = parseInt(rgbMatch[3], 10).toString(16).padStart(2, '0');
     return '#' + r + g + b;
   }
   return null;
@@ -5321,21 +5217,6 @@ function buildColorHeightsList(colorsData) {
       valueDisplay.textContent = newHeight + ' mm';
       update3DPreview();
     };
-    
-    // Style the slider thumb
-    const style = document.createElement('style');
-    style.textContent = `
-      input[type=range]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 14px;
-        height: 14px;
-        background: var(--accent2);
-        border-radius: 50%;
-        cursor: pointer;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-      }
-    `;
-    sliderContainer.appendChild(style);
     
     sliderContainer.appendChild(slider);
     
@@ -5491,14 +5372,14 @@ function update3DPreview() {
   
   colorsData.forEach(colorItem => {
     const height = threeJSState.colorHeights[colorItem.color] || 20;
-    
+
     colorItem.elements.forEach(el => {
       const d = el.getAttribute('d');
       if (!d) return;
-      
+
       const shape = pathToThreeShape(d, 1);
       if (!shape || shape.curves.length === 0) return;
-      
+
       const geometry = new THREE.ExtrudeGeometry(shape, {
         depth: height,
         bevelEnabled: false,
@@ -5535,35 +5416,183 @@ function update3DPreview() {
 
 function fitCameraToObject() {
   if (!threeJSState.isInitialized || threeJSState.meshes.length === 0) return;
-  
+
   const box = new THREE.Box3();
-  threeJSState.meshes.forEach(mesh => {
+  threeMeshes.forEach(mesh => {
     box.union(new THREE.Box3().setFromObject(mesh));
   });
-  
+
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  
+
   const maxDim = Math.max(size.x, size.y, size.z);
   const fov = threeJSState.camera.fov * (Math.PI / 180);
   let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
   cameraZ *= 1.5; // Zoom out a bit
-  
+
   threeJSState.camera.position.set(center.x, center.y - cameraZ * 0.5, cameraZ);
   threeJSState.camera.lookAt(center);
   threeJSState.controls.target.copy(center);
   threeJSState.controls.update();
 }
 
-// Hook into render functions to update 3D preview when SVG changes
-const originalRenderSVGLayer = window.renderSVGLayer;
-window.renderSVGLayer = function(forceRebuild) {
-  if (originalRenderSVGLayer) originalRenderSVGLayer(forceRebuild);
-  if (document.getElementById('preview-3d-panel').style.display !== 'none') {
-    setTimeout(update3DPreview, 100);
+// Export 3D scene to STL file
+function exportToSTL() {
+  if (!threeScene || threeMeshes.length === 0) {
+    toast('Nessun elemento 3D da esportare!');
+    return;
   }
-};
 
+  try {
+    // Merge all geometries into one
+    const mergedGeometry = new THREE.BufferGeometry();
+    const geometries = [];
+    
+    threeMeshes.forEach(mesh => {
+      const geom = mesh.geometry.clone();
+      geom.applyMatrix4(mesh.matrixWorld);
+      geometries.push(geom);
+    });
+
+    // Manual STL binary export
+    const stlBuffer = createSTLBinaryBuffer(geometries);
+    
+    // Download file
+    const blob = new Blob([stlBuffer], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'letterforge-design.stl';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast('STL esportato con successo! ✓');
+  } catch (error) {
+    console.error('STL export error:', error);
+    toast('Errore nell\'esportazione STL: ' + error.message);
+  }
+}
+
+function createSTLBinaryBuffer(geometries) {
+  // Calculate total triangle count
+  let totalTriangles = 0;
+  geometries.forEach(geom => {
+    if (geom.index) {
+      totalTriangles += geom.index.count / 3;
+    } else {
+      totalTriangles += geom.attributes.position.count / 3;
+    }
+  });
+
+  // Binary STL format:
+  // 80 bytes header
+  // 4 bytes triangle count
+  // Per triangle: 12 bytes normal + 36 bytes vertices (3×12) + 2 bytes attribute = 50 bytes
+  const bufferSize = 80 + 4 + (totalTriangles * 50);
+  const buffer = new ArrayBuffer(bufferSize);
+  const view = new DataView(buffer);
+  
+  // Header (80 bytes) - fill with zeros
+  for (let i = 0; i < 80; i++) {
+    view.setUint8(i, 0);
+  }
+  
+  // Triangle count
+  view.setUint32(80, totalTriangles, true);
+  
+  let offset = 84;
+  
+  // Write triangles
+  geometries.forEach(geom => {
+    const positions = geom.attributes.position.array;
+    const normals = geom.attributes.normal ? geom.attributes.normal.array : null;
+    const index = geom.index;
+    
+    if (index) {
+      // Indexed geometry
+      for (let i = 0; i < index.count; i += 3) {
+        const i0 = index.getX(i);
+        const i1 = index.getX(i + 1);
+        const i2 = index.getX(i + 2);
+        
+        // Normal (12 bytes: 3 floats)
+        if (normals) {
+          view.setFloat32(offset, normals[i0 * 3], true);
+          view.setFloat32(offset + 4, normals[i0 * 3 + 1], true);
+          view.setFloat32(offset + 8, normals[i0 * 3 + 2], true);
+        } else {
+          // Calculate normal from vertices
+          const ax = positions[i0 * 3], ay = positions[i0 * 3 + 1], az = positions[i0 * 3 + 2];
+          const bx = positions[i1 * 3], by = positions[i1 * 3 + 1], bz = positions[i1 * 3 + 2];
+          const cx = positions[i2 * 3], cy = positions[i2 * 3 + 1], cz = positions[i2 * 3 + 2];
+          
+          const nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+          const ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+          const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+          const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+          
+          view.setFloat32(offset, len > 0 ? nx / len : 0, true);
+          view.setFloat32(offset + 4, len > 0 ? ny / len : 0, true);
+          view.setFloat32(offset + 8, len > 0 ? nz / len : 0, true);
+        }
+        offset += 12;
+        
+        // Vertex 1 (12 bytes)
+        view.setFloat32(offset, positions[i0 * 3], true);
+        view.setFloat32(offset + 4, positions[i0 * 3 + 1], true);
+        view.setFloat32(offset + 8, positions[i0 * 3 + 2], true);
+        offset += 12;
+        
+        // Vertex 2 (12 bytes)
+        view.setFloat32(offset, positions[i1 * 3], true);
+        view.setFloat32(offset + 4, positions[i1 * 3 + 1], true);
+        view.setFloat32(offset + 8, positions[i1 * 3 + 2], true);
+        offset += 12;
+        
+        // Vertex 3 (12 bytes)
+        view.setFloat32(offset, positions[i2 * 3], true);
+        view.setFloat32(offset + 4, positions[i2 * 3 + 1], true);
+        view.setFloat32(offset + 8, positions[i2 * 3 + 2], true);
+        offset += 12;
+        
+        // Attribute byte count (2 bytes)
+        view.setUint16(offset, 0, true);
+        offset += 2;
+      }
+    } else {
+      // Non-indexed geometry
+      for (let i = 0; i < positions.length; i += 9) {
+        // Normal (use zero if not available)
+        if (normals) {
+          view.setFloat32(offset, normals[i], true);
+          view.setFloat32(offset + 4, normals[i + 1], true);
+          view.setFloat32(offset + 8, normals[i + 2], true);
+        } else {
+          view.setFloat32(offset, 0, true);
+          view.setFloat32(offset + 4, 0, true);
+          view.setFloat32(offset + 8, 0, true);
+        }
+        offset += 12;
+        
+        // 3 vertices (36 bytes)
+        for (let j = 0; j < 9; j++) {
+          view.setFloat32(offset, positions[i + j], true);
+          offset += 4;
+        }
+        
+        // Attribute byte count
+        view.setUint16(offset, 0, true);
+        offset += 2;
+      }
+    }
+  });
+  
+  return buffer;
+}
+
+// Hook into render to update 3D preview when canvas changes
 const originalRender = window.render;
 window.render = function() {
   if (originalRender) originalRender();
@@ -5778,6 +5807,9 @@ window.electronAPI.onMCPExecuteOperation(async (operation) => {
       case 'select':
         result = await mcpHandleSelectElements(operation);
         break;
+      case 'resize_canvas':
+        result = await mcpHandleResizeCanvas(operation);
+        break;
       default:
         result = { success: false, error: `Unknown operation type: ${operation.type}` };
     }
@@ -5817,37 +5849,64 @@ function stopMCPStateSync() {
 
 function updateMCPCanvasState() {
   if (!mcpServerRunning) return;
-  
-  const canvasState = {
-    letters: S.letters.map(el => ({
+
+  // Calculate bounding box for each element
+  const lettersWithBBox = S.letters.map((el, idx) => {
+    const bbox = getLetterBBoxTransformed(idx);
+    return {
       id: el.id,
+      index: idx,
+      type: el.isSvgImport ? 'svg' : (el.customPath ? 'custom' : 'text'),
       ch: el.ch,
       x: el.x,
       y: el.y,
       fontSize: el.fontSize,
       fill: el.fill,
-      sx: el.sx,
-      sy: el.sy,
-      rot: el.rot,
-      skew: el.skew,
-      op: el.op,
+      fontFamily: el.fontFamily,
+      rotation: el.rot || 0,
+      skew: el.skew || 0,
+      scaleX: el.sx || 1,
+      scaleY: el.sy || 1,
+      opacity: el.op || 1,
       borderWidth: el.borderWidth,
       borderColor: el.borderColor,
       layer: el.layer,
       isSvgImport: el.isSvgImport,
       svgW: el.svgW,
       svgH: el.svgH,
+      svgName: el.svgName,
       fontName: el.fontName,
       customPath: el.customPath,
-      selected: S.sel.has(el.id)
-    })),
+      selected: S.sel.has(el.id),
+      // Bounding box in canvas coordinates
+      bbox: bbox ? {
+        x: Math.round(bbox.x),
+        y: Math.round(bbox.y),
+        x2: Math.round(bbox.x2),
+        y2: Math.round(bbox.y2),
+        w: Math.round(bbox.w),
+        h: Math.round(bbox.h),
+        cx: Math.round(bbox.cx),
+        cy: Math.round(bbox.cy)
+      } : null
+    };
+  });
+
+  const canvasState = {
+    letters: lettersWithBBox,
     canvasW: S.canvasW,
     canvasH: S.canvasH,
-    svgs: S.svgs,
-    fonts: S.fonts,
+    zoom: S.zoom,
+    svgs: S.svgs.map(s => ({
+      name: s.name,
+      width: s.width,
+      height: s.height
+    })),
+    fonts: Object.keys(S.fonts),
+    lastElement: lettersWithBBox.length > 0 ? lettersWithBBox[lettersWithBBox.length - 1] : null,
     uid: uid
   };
-  
+
   window.electronAPI.mcpUpdateCanvasState(canvasState);
 }
 
@@ -5861,43 +5920,91 @@ async function mcpHandleAddText(operation) {
   // Validate fontFamily if provided
   let fontFamily = operation.fontFamily || 'sans-serif';
   let fontName = '';
-  
+
   if (operation.fontFamily && S.fonts[operation.fontFamily]) {
     // Use the CSS font-family from S.fonts
     fontFamily = S.fonts[operation.fontFamily];
     fontName = operation.fontFamily;
   }
 
-  const newEl = {
-    id: uid++,
-    ch: operation.text,
-    x: operation.x,
-    y: operation.y,
-    originalX: operation.x,
-    originalY: operation.y,
-    fontSize: operation.fontSize || 80,
-    fill: operation.fill || '#111111',
-    fontFamily: fontFamily,
-    fontName: fontName,
-    isSvgImport: false,
-    sx: 1,
-    sy: 1,
-    rot: operation.rotation || 0,
-    skew: 0,
-    op: 1,
-    borderWidth: 0,
-    borderColor: '#000000',
-    layer: 2
-  };
+  // Split text into individual characters
+  const text = operation.text || '';
+  const characters = text.split('');
 
-  S.letters.push(newEl);
+  // If empty text, add a single space
+  if (characters.length === 0) {
+    characters.push(' ');
+  }
+
+  // Calculate spacing using the same method as manual addText
+  const fontSize = operation.fontSize || 80;
+  const ctx = document.getElementById('dc').getContext('2d');
+  ctx.font = `${fontSize}px ${fontFamily}`;
+
+  // Calculate total width using actual character measurements
+  let totalWidth = 0;
+  const charWidths = characters.map(ch => {
+    const w = ctx.measureText(ch).width;
+    totalWidth += w + fontSize * 0.05; // Add spacing like manual method
+    return w;
+  });
+
+  // Starting position (center the text block)
+  let startX = operation.x || (S.canvasW / 2);
+  let startY = operation.y || (S.canvasH / 2);
+
+  // Adjust startX to center the text
+  startX = startX - (totalWidth / 2);
+
+  const addedElements = [];
+
+  // Create separate element for each character
+  let currentX = startX;
+  characters.forEach((char, index) => {
+    const w = charWidths[index];
+    const x = currentX + w / 2; // Center character at its position
+
+    const newEl = {
+      id: uid++,
+      ch: char,
+      x: x,
+      y: startY,
+      originalX: x,
+      originalY: startY,
+      fontSize: fontSize,
+      fill: operation.fill || '#111111',
+      fontFamily: fontFamily,
+      fontName: fontName,
+      isSvgImport: false,
+      sx: 1,
+      sy: 1,
+      rot: operation.rotation || 0,
+      skew: 0,
+      op: 1,
+      borderWidth: 0,
+      borderColor: '#000000',
+      layer: 2
+    };
+
+    S.letters.push(newEl);
+    addedElements.push(newEl.id);
+
+    // Move to next character position with spacing
+    currentX += w + fontSize * 0.05;
+  });
+
+  // Select all the newly added elements
   S.sel.clear();
-  S.sel.add(newEl.id);
+  addedElements.forEach(id => S.sel.add(id));
 
   render();
   upd();
 
-  return { success: true, elementId: newEl.id, message: `Added text: ${operation.text}` };
+  return { 
+    success: true, 
+    elementIds: addedElements, 
+    message: `Added ${addedElements.length} character(s): ${text}` 
+  };
 }
 
 async function mcpHandleModifyElement(operation) {
@@ -6020,17 +6127,42 @@ async function mcpHandleResizeElement(operation) {
   if (!el) {
     return { success: false, error: `Element not found: ${operation.elementId}` };
   }
-  
+
   saveState();
-  
+
   if (operation.scaleX !== undefined) el.sx *= operation.scaleX;
   if (operation.scaleY !== undefined) el.sy *= operation.scaleY;
   if (operation.fontSize !== undefined) el.fontSize = operation.fontSize;
-  
+
   render();
   upd();
-  
+
   return { success: true, elementId: el.id, message: 'Element resized' };
+}
+
+async function mcpHandleResizeCanvas(operation) {
+  saveState();
+
+  const newWidth = operation.width || S.canvasW;
+  const newHeight = operation.height || S.canvasH;
+
+  // Update canvas dimensions
+  S.canvasW = newWidth;
+  S.canvasH = newHeight;
+
+  // Update UI inputs
+  document.getElementById('cvW').value = S.canvasW;
+  document.getElementById('cvH').value = S.canvasH;
+
+  render();
+  upd();
+
+  return { 
+    success: true, 
+    message: `Canvas resized to ${newWidth}x${newHeight}`,
+    width: newWidth,
+    height: newHeight
+  };
 }
 
 async function mcpHandleSetElementLayer(operation) {
@@ -6577,6 +6709,10 @@ function aiExecuteRecolor(op) {
   <div style="position:absolute;top:0;left:0;right:0;height:56px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;z-index:10;">
     <div class="logo" style="margin-right:16px">Letter<span>Forge</span> 3D</div>
     <div style="flex:1"></div>
+    <button class="btn btn-accent" onclick="exportToSTL()" onmousedown="event.stopPropagation()" style="margin-right:8px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download STL
+    </button>
     <button class="btn primary" onclick="close3DPreview()" onmousedown="event.stopPropagation()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       Chiudi
@@ -6619,6 +6755,16 @@ function aiExecuteRecolor(op) {
         <label style="color:var(--muted);font-size:10px;min-width:70px;">Lucentezza</label>
         <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DShininess(this.value)">
         <span id="shininess-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
+      </div>
+      
+      <!-- Smoothing Toggle -->
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="color:var(--muted);font-size:10px;min-width:70px;">Smussatura</label>
+        <label class="switch" style="flex-shrink:0;">
+          <input type="checkbox" id="smoothing-toggle" checked onchange="toggle3DSmoothing(this.checked)">
+          <span class="slider"></span>
+        </label>
+        <span id="smoothing-label" style="color:var(--text);font-size:10px;">Attiva</span>
       </div>
     </div>
     

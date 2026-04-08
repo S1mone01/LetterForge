@@ -178,10 +178,65 @@ class MCPServer extends EventEmitter {
     return [
       {
         name: 'get_canvas_state',
-        description: 'Get the current state of the canvas including all elements, their properties, and available resources',
+        description: 'Get the current state of the canvas including all elements, their properties, bounding boxes, and available resources. Returns canvas dimensions (canvasW, canvasH), all elements with their bounding boxes (bbox), the last element for reference, available fonts and SVGs.',
         inputSchema: {
           type: 'object',
           properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'get_element_bounds',
+        description: 'Get the bounding box and dimensions of specific elements. Returns x, y, x2, y2, width, height, center coordinates for each element.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            elementIds: {
+              type: 'array',
+              items: { type: 'number' },
+              description: 'Array of element IDs to get bounds for. If empty, returns bounds for all elements.'
+            }
+          },
+          required: []
+        }
+      },
+      {
+        name: 'get_last_element',
+        description: 'Get the last element added to the canvas with its position and dimensions. Useful for positioning new elements relative to the last one.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'calculate_position_relative',
+        description: 'Calculate the position to place a new element relative to an existing element. Supports positions like: left, right, above, below, top-left, top-right, bottom-left, bottom-right, with optional padding.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            referenceElementId: { type: 'number', description: 'ID of the reference element' },
+            position: {
+              type: 'string',
+              enum: ['left', 'right', 'above', 'below', 'top-left', 'top-right', 'bottom-left', 'bottom-right'],
+              description: 'Position relative to the reference element'
+            },
+            padding: { type: 'number', description: 'Padding/gap from the reference element in pixels (default: 20)' },
+            targetWidth: { type: 'number', description: 'Width of the new element (for accurate positioning)' },
+            targetHeight: { type: 'number', description: 'Height of the new element (for accurate positioning)' }
+          },
+          required: ['referenceElementId', 'position']
+        }
+      },
+      {
+        name: 'resize_canvas',
+        description: 'Resize the canvas to new dimensions. Useful when adding large text that does not fit.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            width: { type: 'number', description: 'New canvas width in pixels' },
+            height: { type: 'number', description: 'New canvas height in pixels' }
+          },
           required: []
         }
       },
@@ -426,7 +481,19 @@ class MCPServer extends EventEmitter {
     switch (name) {
       case 'get_canvas_state':
         return await this.toolGetCanvasState();
-      
+
+      case 'get_element_bounds':
+        return await this.toolGetElementBounds(args);
+
+      case 'get_last_element':
+        return await this.toolGetLastElement();
+
+      case 'calculate_position_relative':
+        return await this.toolCalculatePositionRelative(args);
+
+      case 'resize_canvas':
+        return await this.toolResizeCanvas(args);
+
       case 'add_text':
         return await this.toolAddText(args);
       
@@ -485,6 +552,264 @@ class MCPServer extends EventEmitter {
       content: [{
         type: 'text',
         text: JSON.stringify(this.canvasState, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: Get element bounds
+   */
+  async toolGetElementBounds(args) {
+    if (!this.canvasState) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ error: 'No canvas state available' })
+        }]
+      };
+    }
+
+    const letters = this.canvasState.letters || [];
+    let targetElements = letters;
+
+    // Filter by element IDs if provided
+    if (args.elementIds && args.elementIds.length > 0) {
+      targetElements = letters.filter(l => args.elementIds.includes(l.id));
+    }
+
+    const boundsData = targetElements.map(el => ({
+      id: el.id,
+      index: el.index,
+      type: el.type,
+      ch: el.ch,
+      position: { x: el.x, y: el.y },
+      bbox: el.bbox,
+      dimensions: el.bbox ? {
+        width: el.bbox.w,
+        height: el.bbox.h,
+        centerX: el.bbox.cx,
+        centerY: el.bbox.cy
+      } : null
+    }));
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          elements: boundsData,
+          canvasDimensions: {
+            width: this.canvasState.canvasW,
+            height: this.canvasState.canvasH
+          }
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: Get last element
+   */
+  async toolGetLastElement() {
+    if (!this.canvasState) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ error: 'No canvas state available' })
+        }]
+      };
+    }
+
+    const lastElement = this.canvasState.lastElement;
+
+    if (!lastElement) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: true, lastElement: null, message: 'Canvas is empty' })
+        }]
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          lastElement: {
+            id: lastElement.id,
+            index: lastElement.index,
+            type: lastElement.type,
+            ch: lastElement.ch,
+            position: { x: lastElement.x, y: lastElement.y },
+            fontSize: lastElement.fontSize,
+            bbox: lastElement.bbox,
+            dimensions: lastElement.bbox ? {
+              width: lastElement.bbox.w,
+              height: lastElement.bbox.h,
+              rightEdge: lastElement.bbox.x2,
+              bottomEdge: lastElement.bbox.y2,
+              centerX: lastElement.bbox.cx,
+              centerY: lastElement.bbox.cy
+            } : null,
+            svgDimensions: (lastElement.isSvgImport && lastElement.svgW && lastElement.svgH) ? {
+              width: lastElement.svgW,
+              height: lastElement.svgH
+            } : null
+          }
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: Calculate position relative
+   */
+  async toolCalculatePositionRelative(args) {
+    if (!this.canvasState) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ error: 'No canvas state available' })
+        }]
+      };
+    }
+
+    const letters = this.canvasState.letters || [];
+    const refElement = letters.find(l => l.id === args.referenceElementId);
+
+    if (!refElement) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: `Element with ID ${args.referenceElementId} not found`,
+            availableElementIds: letters.map(l => l.id)
+          })
+        }]
+      };
+    }
+
+    if (!refElement.bbox) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: 'Reference element has no bounding box data',
+            element: refElement
+          })
+        }]
+      };
+    }
+
+    const bbox = refElement.bbox;
+    const padding = args.padding || 20;
+    let x, y;
+
+    // Calculate position based on requested placement
+    switch (args.position) {
+      case 'left':
+        x = bbox.x - (args.targetWidth || 0) - padding;
+        y = bbox.cy - (args.targetHeight || 0) / 2;
+        break;
+
+      case 'right':
+        x = bbox.x2 + padding;
+        y = bbox.cy - (args.targetHeight || 0) / 2;
+        break;
+
+      case 'above':
+        x = bbox.cx - (args.targetWidth || 0) / 2;
+        y = bbox.y - (args.targetHeight || 0) - padding;
+        break;
+
+      case 'below':
+        x = bbox.cx - (args.targetWidth || 0) / 2;
+        y = bbox.y2 + padding;
+        break;
+
+      case 'top-left':
+        x = bbox.x - (args.targetWidth || 0) - padding;
+        y = bbox.y - (args.targetHeight || 0) - padding;
+        break;
+
+      case 'top-right':
+        x = bbox.x2 + padding;
+        y = bbox.y - (args.targetHeight || 0) - padding;
+        break;
+
+      case 'bottom-left':
+        x = bbox.x - (args.targetWidth || 0) - padding;
+        y = bbox.y2 + padding;
+        break;
+
+      case 'bottom-right':
+        x = bbox.x2 + padding;
+        y = bbox.y2 + padding;
+        break;
+
+      default:
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              error: `Invalid position: ${args.position}`,
+              validPositions: ['left', 'right', 'above', 'below', 'top-left', 'top-right', 'bottom-left', 'bottom-right']
+            })
+          }]
+        };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          referenceElement: {
+            id: refElement.id,
+            ch: refElement.ch,
+            bbox: bbox
+          },
+          calculatedPosition: {
+            x: Math.round(x),
+            y: Math.round(y),
+            position: args.position,
+            padding: padding,
+            targetDimensions: {
+              width: args.targetWidth || 0,
+              height: args.targetHeight || 0
+            }
+          },
+          suggestion: `Place new element at x=${Math.round(x)}, y=${Math.round(y)}`
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: Resize canvas
+   */
+  async toolResizeCanvas(args) {
+    const operation = {
+      type: 'resize_canvas',
+      width: args.width,
+      height: args.height
+    };
+
+    const result = await this.executeOperation(operation);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          operation,
+          result,
+          newDimensions: {
+            width: args.width || this.canvasState?.canvasW,
+            height: args.height || this.canvasState?.canvasH
+          }
+        })
       }]
     };
   }

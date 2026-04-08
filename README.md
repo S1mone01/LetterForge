@@ -35,13 +35,33 @@
 - **Salva progetto**: salva lo stato completo (elementi, canvas, libreria)
 - **Carica progetto**: riprendi il lavoro da dove hai lasciato
 
-### 🤖 AI Assistant (NUOVO!)
+### 🤖 AI Assistant & MCP Server
+
+**AI Assistant Integrato:**
 - **Editing intelligente** basato su prompt testuali
 - **Analisi del contesto** del canvas completo
 - **Operazioni automatiche**: modifica, aggiungi, duplica, sposta, ridimensiona
-- **Comprensione intelligente**: targeting relativo, operazioni composte
-- **Integrazione completa** con undo/redo
-- Vedi [AI-INTEGRATION.md](AI-INTEGRATION.md) per dettagli
+
+**MCP Server (Host Locale):**
+LetterForge include un server MCP integrato che permette a client AI esterni (Claude, GPT, script personalizzati) di controllare il canvas tramite HTTP.
+
+- **Endpoint**: `http://localhost:3100/mcp`
+- **Protocollo**: JSON-RPC 2.0 / MCP
+- **Tools disponibili**: `get_canvas_state`, `add_text`, `modify_element`, `move_element`, `delete_element`, `duplicate_element`, `add_svg`, `resize_canvas`, `calculate_position_relative`, e altri
+- **Avvio**: Clicca "Avvia Host MCP" nel pannello AI Assistant
+- **Health Check**: `GET http://localhost:3100/health`
+
+**Esempio di utilizzo (Python):**
+```python
+import requests
+MCP_URL = "http://localhost:3100/mcp"
+response = requests.post(MCP_URL, json={
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {"name": "add_text", "arguments": {"text": "Hello!", "x": 400, "y": 250}},
+    "id": 1
+})
+```
 
 ### 🔄 Auto-Update Integrato
 - Controllo automatico all'avvio (dopo 2 secondi)
@@ -188,65 +208,65 @@ LetterForge-Desktop/
 
 ## 🔄 Sistema di Auto-Update
 
-LetterForge Pro include un sistema di aggiornamento automatico integrato.
+LetterForge Pro include un sistema di aggiornamento automatico integrato che controlla i GitHub Releases all'avvio.
 
 ### Come Funziona
 
 ```
-┌─────────────────────┐
-│   App si avvia      │
-└──────────┬──────────┘
-           │
-    (2 secondi)
-           │
-           ▼
-┌─────────────────────┐
-│  Check automatico   │
-│  su GitHub Releases │
-└──────────┬──────────┘
-           │
-     ┌─────┴─────┐
-     │           │
-     ▼           ▼
-┌─────────┐ ┌────────────┐
-│ Update  │ │ Nessun     │
-│ Available│ │ Update     │
-└────┬────┘ └────────────┘
-     │
-     ▼
-┌─────────────────────┐
-│ Notifica in alto   │
-│ a sinistra          │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ "Scarica e installa"│
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Download (vedi %)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ "↻ Riavvia e       │
-│ installa"           │
-└─────────────────────┘
+App si avvia → (2s delay) → Check GitHub → Update disponibile? → Notifica → Download → Installa
 ```
 
 ### Per gli Sviluppatori: Pubblicare un Aggiornamento
 
-```bash
-# 1. Aggiorna la versione in package.json
-# 2. Aggiorna la versione in src/index.html (2 punti)
-# 3. Pubblica
-set GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXX
-npm run release
-```
+**Prerequisiti:**
+- Node.js 18+
+- GitHub Personal Access Token con scope `repo`
 
-📚 **Guida completa**: Vedi [`UPDATE-PROCESS.md`](UPDATE-PROCESS.md)
+**Procedura (3 step):**
+
+1. **Aggiorna la versione** in:
+   - `package.json`: `"version": "X.Y.Z"`
+   - `src/index.html`: `<span id="app-version">vX.Y.Z</span>` e `<div class="un-ver" id="un-version">Versione X.Y.Z</div>`
+
+2. **Imposta il token GitHub**:
+   ```powershell
+   # PowerShell
+   $env:GITHUB_TOKEN="ghp_XXXXXXXXXXXXXXXXXXXX"
+   
+   # CMD
+   set GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXXXX
+   ```
+
+3. **Build e pubblica**:
+   ```bash
+   npm run release
+   ```
+
+**Cosa viene pubblicato:**
+| File | Scopo |
+|------|-------|
+| `LetterForge Pro Setup X.Y.Z.exe` | Installer NSIS |
+| `latest.yml` | Metadata per auto-update |
+| `blockmap` | Update differenziale (più veloce) |
+
+### Comandi Utili
+
+| Comando | Descrizione |
+|---------|-------------|
+| `npm start` | Sviluppo (dev mode, no auto-update) |
+| `npm run build:win` | Build installer (senza publish) |
+| `npm run release` | Build + publish automatico |
+
+### Troubleshooting
+
+| Problema | Soluzione |
+|----------|-----------|
+| Build fallisce | Esegui come Administrator |
+| Errore 404 | Verifica GITHUB_TOKEN e nome repo |
+| Update non rilevato | Controlla che `latest.yml` sia su GitHub |
+| Download fallisce | Verifica che il release sia pubblico |
+
+**⚠️ Sicurezza:** Mai committare `GITHUB_TOKEN` nel version control!
 
 ---
 
@@ -404,15 +424,14 @@ Per visualizzare i log dell'auto-update:
 
 ---
 
-## 📚 Documentazione Aggiuntiva
+## 📚 Documentazione
 
 | File | Descrizione |
 |------|-------------|
-| [`README.md`](README.md) | Questo file - panoramica generale |
-| [`UPDATE-PROCESS.md`](UPDATE-PROCESS.md) | Guida completa per pubblicare aggiornamenti |
-| [`QUICKSTART.md`](QUICKSTART.md) | Reference rapido per gli aggiornamenti |
-| [`RELEASE.md`](RELEASE.md) | Istruzioni dettagliate per il rilascio |
-| [`AUTOUPDATE.md`](AUTOUPDATE.md) | Configurazione del sistema auto-update |
+| [`README.md`](README.md) | Questo file - panoramica completa |
+| [`QWEN.md`](QWEN.md) | Convenzioni di sviluppo e architettura |
+
+**Nota:** La documentazione dettagliata su MCP e Auto-Update è ora inclusa in questo file.
 
 ---
 
