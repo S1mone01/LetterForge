@@ -1,5 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Try to load OpenJSCAD modeling from node_modules
+let jscadModeling = null;
+try {
+  // In Electron, we can use require directly
+  jscadModeling = require('@jscad/modeling');
+  console.log('✓ OpenJSCAD modeling loaded in preload');
+} catch (err) {
+  console.warn('OpenJSCAD modeling not available:', err.message);
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
     // Font e SVG loaders
     onFontsLoaded: (callback) => ipcRenderer.on('fonts-loaded', (_event, value) => callback(value)),
@@ -33,4 +43,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mcpUpdateCanvasState: (canvasState) => ipcRenderer.invoke('mcp-update-canvas-state', canvasState),
     onMCPExecuteOperation: (callback) => ipcRenderer.on('mcp-execute-operation', (_event, operation) => callback(operation)),
     mcpOperationResult: (result) => ipcRenderer.send('mcp-operation-result', result),
+
+    // OpenJSCAD loader
+    loadOpenJSCAD: async () => {
+      if (jscadModeling) {
+        return jscadModeling;
+      }
+      throw new Error('OpenJSCAD modeling not available');
+    }
 });

@@ -6,6 +6,995 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<!-- OpenJSCAD CSG Engine (browser bundle from CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@jscad/modeling@2.13.0/dist/jscad-modeling.min.js"></script>
+<script>
+// Initialize OpenJSCAD bridge after library loads
+if (typeof jscadModeling !== 'undefined') {
+  window.OpenJSCAD = jscadModeling;
+  console.log('✓ OpenJSCAD loaded from CDN');
+} else {
+  console.warn('⚠ OpenJSCAD CDN failed to load');
+}
+</script>
+<!-- OpenJSCAD CSG Engine -->
+<script>
+/**
+ * OpenJSCAD Bridge - Replaces custom CSG with OpenJSCAD for watertight meshes
+ * 
+ * Architecture:
+ * - SVG pathD → OpenJSCAD geom2 (via parseSVGPathToJSCAD)
+ * - geom2 → geom3 (via extrudeLinear)
+ * - Boolean ops (union/subtract) in OpenJSCAD ONLY
+ * - geom3 → Three.js BufferGeometry (for rendering only)
+ */
+
+window.OpenJSCADBridge = {
+  jscad: window.OpenJSCAD || null,
+  initialized: false,
+
+  /**
+   * Initialize OpenJSCAD from CDN or preload
+   */
+  async init() {
+    if (this.initialized) return true;
+    
+    try {
+      // Try CDN first (window.OpenJSCAD)
+      if (window.OpenJSCAD) {
+        this.jscad = window.OpenJSCAD;
+        this.initialized = true;
+        console.log('✓ OpenJSCAD Bridge initialized (CDN)');
+        return true;
+      }
+      
+      // Fallback: try preload
+      if (window.electronAPI && window.electronAPI.loadOpenJSCAD) {
+        this.jscad = await window.electronAPI.loadOpenJSCAD();
+        this.initialized = true;
+        console.log('✓ OpenJSCAD Bridge initialized (preload)');
+        return true;
+      }
+    } catch (err) {
+      console.warn('⚠ OpenJSCAD not available, falling back to custom CSG:', err.message);
+    }
+    return false;
+  },
+
+  /**
+   * Parse SVG path 'd' attribute → OpenJSCAD geom2
+   * Handles: M, L, H, V, C, Q, Z commands
+   * Supports holes (inner contours detected by winding order)
+   */
+  parseSVGPathToGeom2(pathD) {
+    if (!this.jscad) {
+      throw new Error('OpenJSCAD not initialized');
+    }
+
+    const { geometries, transforms } = this.jscad;
+    const { geom2 } = geometries;
+
+    // Use a more robust parser if available
+    let commands;
+    if (typeof pathToAbsoluteSegments === 'function') {
+      const segs = pathToAbsoluteSegments(pathD);
+      commands = segs.map(s => ({ ...s, type: s.cmd }));
+    } else {
+      commands = parseSVGPath(pathD);
+    }
+    
+    if (!commands || !commands.length) return null;
+
+    // Group into subpaths by M command
+    const subpaths = [];
+    let currentSubpath = [];
+
+    commands.forEach(cmd => {
+      if (cmd.type === 'M') {
+        if (currentSubpath.length > 0) {
+          subpaths.push(currentSubpath);
+        }
+        currentSubpath = [cmd];
+      } else {
+        currentSubpath.push(cmd);
+      }
+    });
+    if (currentSubpath.length > 0) subpaths.push(currentSubpath);
+
+    if (subpaths.length === 0) return null;
+
+    // Convert each subpath to OpenJSCAD contour (array of points)
+    const contours = [];
+    
+    subpaths.forEach(subpath => {
+      const points = [];
+      let currentX = 0, currentY = 0;
+      let started = false;
+
+      for (const cmd of subpath) {
+        if (cmd.type === 'M') {
+          currentX = cmd.x;
+          currentY = cmd.y;
+          // Flip Y: Three.js Y points UP, canvas Y points DOWN
+          points.push([cmd.x, -cmd.y]);
+          started = true;
+        } else if (cmd.type === 'L' && started) {
+          currentX = cmd.x;
+          currentY = cmd.y;
+          // Flip Y
+          points.push([cmd.x, -cmd.y]);
+        } else if (cmd.type === 'H' && started) {
+          currentX = cmd.x;
+          // Flip Y using currentY
+          points.push([cmd.x, -currentY]);
+        } else if (cmd.type === 'V' && started) {
+          currentY = cmd.y;
+          // Flip Y
+          points.push([currentX, -cmd.y]);
+        } else if (cmd.type === 'C' && started) {
+          // Cubic bezier: approximate with line segments
+          const segments = 12;
+          for (let i = 1; i <= segments; i++) {
+            const t = i / segments;
+            const mt = 1 - t;
+            const x = mt*mt*mt*currentX + 3*mt*mt*t*cmd.x1 + 3*mt*t*t*cmd.x2 + t*t*t*cmd.x;
+            const y = mt*mt*mt*currentY + 3*mt*mt*t*cmd.y1 + 3*mt*t*t*cmd.y2 + t*t*t*cmd.y;
+            // Flip Y
+            points.push([x, -y]);
+          }
+          currentX = cmd.x;
+          currentY = cmd.y;
+        } else if (cmd.type === 'Q' && started) {
+          // Quadratic bezier: approximate with line segments
+          const segments = 8;
+          for (let i = 1; i <= segments; i++) {
+            const t = i / segments;
+            const mt = 1 - t;
+            const x = mt*mt*currentX + 2*mt*t*cmd.x1 + t*t*cmd.x;
+            const y = mt*mt*currentY + 2*mt*t*cmd.y1 + t*t*cmd.y;
+            // Flip Y
+            points.push([x, -y]);
+          }
+          currentX = cmd.x;
+          currentY = cmd.y;
+        } else if (cmd.type === 'Z' && started) {
+          // Close path - ensure first point is repeated if not already
+          if (points.length > 0 && subpath.length > 0) {
+            const firstCmd = subpath[0];
+            // Flip Y
+            points.push([firstCmd.x, -firstCmd.y]);
+          }
+        }
+      }
+
+      if (points.length >= 3) {
+        // Filter out duplicate or near-duplicate points (tolerance: 0.01 units)
+        const filtered = [points[0]];
+        const tolerance = 0.01;
+        
+        for (let i = 1; i < points.length; i++) {
+          const prev = filtered[filtered.length - 1];
+          const curr = points[i];
+          const dx = curr[0] - prev[0];
+          const dy = curr[1] - prev[1];
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          
+          // Only add point if it's far enough from previous point
+          if (dist > tolerance) {
+            filtered.push(curr);
+          }
+        }
+        
+        // Remove last point if it's too close to first point (closing point)
+        if (filtered.length > 3) {
+          const first = filtered[0];
+          const last = filtered[filtered.length - 1];
+          const dx = last[0] - first[0];
+          const dy = last[1] - first[1];
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          
+          if (dist < tolerance) {
+            filtered.pop(); // Remove duplicate closing point
+          }
+        }
+        
+        // Only add contour if it has at least 3 valid points
+        if (filtered.length >= 3) {
+          contours.push(filtered);
+        }
+      }
+    });
+
+    if (contours.length === 0) return null;
+
+    // ROBUST WINDING DETECTION
+    // Calculate signed areas and sort by absolute area (largest first)
+    const contourData = contours.map(pts => ({
+      points: pts,
+      area: this._calculateSignedArea(pts)
+    })).sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
+
+    // If the largest contour is CW (negative area), the path is mirrored or reversed.
+    // In this case, we flip the interpretation for all contours.
+    const isReversed = contourData[0].area < 0;
+    
+    const outerContours = [];
+    const holeContours = [];
+
+    contourData.forEach(c => {
+      // Normalize: if reversed, flip the area interpretation
+      const normArea = isReversed ? -c.area : c.area;
+      // If reversed, reverse points to make what was CW now CCW
+      const normPoints = isReversed ? [...c.points].reverse() : c.points;
+      
+      if (normArea > 0.001) {
+        outerContours.push({ points: normPoints, area: normArea });
+      } else if (normArea < -0.001) {
+        holeContours.push({ points: normPoints, area: Math.abs(normArea) });
+      }
+    });
+
+    if (outerContours.length === 0) return null;
+
+    // Create initial geom2 with largest outer contour
+    let geom = null;
+    try {
+      geom = this.jscad.geometries.geom2.fromPoints(outerContours[0].points);
+    } catch (err) {
+      console.warn('⚠ Failed to create initial geom2:', err.message);
+      return null;
+    }
+
+    // Add remaining outer contours via union
+    for (let i = 1; i < outerContours.length; i++) {
+      try {
+        const additional = this.jscad.geometries.geom2.fromPoints(outerContours[i].points);
+        geom = this.jscad.booleans.union(geom, additional);
+      } catch (err) {
+        console.warn('⚠ Failed to union outer contour:', err.message);
+      }
+    }
+
+    // Subtract holes from the geom2
+    for (const hole of holeContours) {
+      try {
+        // Since holePoints are CW from the loop above, and subtract needs a solid (CCW),
+        // we flip them to CCW for the subtraction.
+        const holePointsCCW = [...hole.points].reverse();
+        const holeGeom = this.jscad.geometries.geom2.fromPoints(holePointsCCW);
+        geom = this.jscad.booleans.subtract(geom, holeGeom);
+      } catch (err) {
+        console.warn('⚠ Failed to subtract hole contour:', err.message);
+      }
+    }
+
+    // Final validation: check if geom2 has any valid outlines
+    try {
+      const outlines = this.jscad.geometries.geom2.toOutlines(geom);
+      if (!outlines || outlines.length === 0) {
+        console.warn('⚠ geom2 has no outlines after operations');
+        return null;
+      }
+    } catch (err) {
+      console.warn('⚠ geom2 validation failed:', err.message);
+      return null;
+    }
+
+    console.log(`✓ Created geom2: ${outerContours.length} outer, ${holeContours.length} holes (reversed: ${isReversed})`);
+    return geom;
+  },
+
+  /**
+   * Extrude geom2 to geom3 with linear extrusion
+   */
+  extrudeGeom2ToGeom3(geom2, depth = 20) {
+    if (!this.jscad) throw new Error('OpenJSCAD not initialized');
+
+    // Validate geom2 before extrusion
+    const outlines = this.jscad.geometries.geom2.toOutlines(geom2);
+    if (!outlines || outlines.length === 0) {
+      console.warn('⚠ geom2 has no outlines - cannot extrude');
+      return null;
+    }
+
+    // Check if all outlines are degenerate (too few points)
+    const hasValidOutline = outlines.some(outline => outline.length >= 3);
+    if (!hasValidOutline) {
+      console.warn('⚠ geom2 outlines are degenerate - cannot extrude');
+      return null;
+    }
+
+    try {
+      return this.jscad.extrusions.extrudeLinear(
+        { height: depth, twistAngle: 0, twistSteps: 1 },
+        geom2
+      );
+    } catch (err) {
+      console.error('⚠ extrudeLinear failed:', err.message);
+      return null;
+    }
+  },
+
+  /**
+   * Union two geom3 solids
+   */
+  unionGeom3(geomA, geomB) {
+    if (!this.jscad) throw new Error('OpenJSCAD not initialized');
+    return this.jscad.booleans.union(geomA, geomB);
+  },
+
+  /**
+   * Subtract geomB from geomA
+   */
+  subtractGeom3(geomA, geomB) {
+    if (!this.jscad) throw new Error('OpenJSCAD not initialized');
+    return this.jscad.booleans.subtract(geomA, geomB);
+  },
+
+  /**
+   * Convert OpenJSCAD geom3 → Three.js BufferGeometry
+   * Guarantees: watertight, manifold, slicer-ready
+   */
+  geom3ToThreeGeometry(geom3) {
+    if (!this.jscad) throw new Error('OpenJSCAD not initialized');
+
+    const { geometries } = this.jscad;
+    
+    // Get polygons using OpenJSCAD's toPolygons function
+    const polygons = geometries.geom3.toPolygons(geom3);
+
+    const positions = [];
+    const normals = [];
+
+    polygons.forEach(polygon => {
+      // In OpenJSCAD v2, polygon has 'vertices' property (array of [x,y,z] arrays)
+      const vertices = polygon.vertices;
+      if (!vertices || vertices.length < 3) return;
+
+      // Calculate face normal from first 3 vertices
+      const v0 = vertices[0];
+      const v1 = vertices[1];
+      const v2 = vertices[2];
+
+      const ax = v1[0] - v0[0], ay = v1[1] - v0[1], az = v1[2] - v0[2];
+      const bx = v2[0] - v0[0], by = v2[1] - v0[1], bz = v2[2] - v0[2];
+      
+      let nx = ay * bz - az * by;
+      let ny = az * bx - ax * bz;
+      let nz = ax * by - ay * bx;
+      
+      const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+      if (len > 1e-10) {
+        nx /= len; ny /= len; nz /= len;
+      } else {
+        // Degenerate face, skip
+        return;
+      }
+
+      // Triangulate (fan triangulation for polygons with >3 vertices)
+      for (let i = 1; i < vertices.length - 1; i++) {
+        const a = vertices[0];
+        const b = vertices[i];
+        const c = vertices[i + 1];
+
+        positions.push(a[0], a[1], a[2]);
+        positions.push(b[0], b[1], b[2]);
+        positions.push(c[0], c[1], c[2]);
+
+        normals.push(nx, ny, nz);
+        normals.push(nx, ny, nz);
+        normals.push(nx, ny, nz);
+      }
+    });
+
+    if (positions.length === 0) {
+      throw new Error('geom3ToThreeGeometry: No valid triangles generated');
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    
+    console.log(`  → Converted geom3 to Three.js: ${positions.length / 9} triangles`);
+    return geometry;
+  },
+
+  /**
+   * Perform boolean operation on two Three.js meshes using OpenJSCAD
+   * Returns a new Three.js mesh with watertight geometry
+   */
+  booleanOperation(operation, meshA, meshB, color) {
+    if (!this.initialized) {
+      throw new Error('OpenJSCAD Bridge not initialized');
+    }
+
+    try {
+      // Convert Three.js meshes to OpenJSCAD geom3
+      const geomA = this.threeMeshToGeom3(meshA);
+      const geomB = this.threeMeshToGeom3(meshB);
+
+      if (!geomA || !geomB) {
+        throw new Error('Failed to convert meshes to OpenJSCAD');
+      }
+
+      console.log(`Mesh A polygons, Mesh B polygons`);
+
+      // Perform boolean operation
+      let resultGeom;
+      switch (operation) {
+        case 'union':
+          resultGeom = this.unionGeom3(geomA, geomB);
+          break;
+        case 'subtract':
+          resultGeom = this.subtractGeom3(geomA, geomB);
+          break;
+        default:
+          throw new Error(`Unknown operation: ${operation}`);
+      }
+
+      const resultPolygons = this.jscad.geometries.geom3.toPolygons(resultGeom);
+      console.log(`Result: ${resultPolygons.length} polygons`);
+
+      if (resultPolygons.length === 0) {
+        throw new Error('Boolean operation resulted in empty geometry');
+      }
+
+      // Convert back to Three.js geometry
+      const threeGeometry = this.geom3ToThreeGeometry(resultGeom);
+      
+      const material = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(color),
+        specular: 0x333333,
+        shininess: 30,
+        side: THREE.DoubleSide
+      });
+
+      const resultMesh = new THREE.Mesh(threeGeometry, material);
+      resultMesh.userData.isBooleanResult = true;
+      resultMesh.userData.originalColor = color;
+
+      return resultMesh;
+
+    } catch (err) {
+      console.error(`OpenJSCAD ${operation} error:`, err);
+      throw err;
+    }
+  },
+
+  /**
+   * Convert Three.js mesh to OpenJSCAD geom3
+   */
+  threeMeshToGeom3(mesh) {
+    if (!this.jscad) throw new Error('OpenJSCAD not initialized');
+
+    const { geometries } = this.jscad;
+
+    mesh.updateMatrixWorld(true);
+    const geo = mesh.geometry;
+    if (!geo || !geo.attributes.position) return null;
+
+    // Use non-indexed for simplicity
+    const work = geo.index ? geo.toNonIndexed() : geo.clone();
+    work.applyMatrix4(mesh.matrixWorld);
+
+    const pos = work.attributes.position.array;
+    const polygons = [];
+
+    for (let i = 0; i < pos.length; i += 9) {
+      const a = [pos[i], pos[i+1], pos[i+2]];
+      const b = [pos[i+3], pos[i+4], pos[i+5]];
+      const c = [pos[i+6], pos[i+7], pos[i+8]];
+
+      // Skip degenerate triangles using helper function
+      if (OpenJSCADBridge._isDegenerateTriangleStatic(a, b, c)) continue;
+
+      // Create poly3 using OpenJSCAD's fromPoints
+      const poly = geometries.poly3.fromPoints([a, b, c]);
+      polygons.push(poly);
+    }
+
+    work.dispose();
+
+    if (polygons.length === 0) return null;
+
+    return geometries.geom3.create(polygons);
+  },
+
+  /**
+   * Calculate signed area of a 2D polygon contour
+   * Positive = CCW, Negative = CW
+   */
+  _calculateSignedArea(points) {
+    let area = 0;
+    const n = points.length;
+    
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      area += points[i][0] * points[j][1];
+      area -= points[j][0] * points[i][1];
+    }
+    
+    return area / 2;
+  },
+
+  /**
+   * Check if a triangle is degenerate (area too small)
+   */
+  _isDegenerateTriangle(a, b, c) {
+    const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2];
+    const bcx = c[0] - b[0], bcy = c[1] - b[1], bcz = c[2] - b[2];
+
+    // Cross product magnitude
+    const crossX = aby * bcz - abz * bcy;
+    const crossY = abz * bcx - abx * bcz;
+    const crossZ = abx * bcy - aby * bcx;
+
+    const area = Math.sqrt(crossX*crossX + crossY*crossY + crossZ*crossZ);
+
+    return area < 1e-10;
+  },
+  
+  /**
+   * Standalone degenerate triangle check (for use in callbacks)
+   */
+  _isDegenerateTriangleStatic(a, b, c) {
+    const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2];
+    const bcx = c[0] - b[0], bcy = c[1] - b[1], bcz = c[2] - b[2];
+    const crossX = aby * bcz - abz * bcy;
+    const crossY = abz * bcx - abx * bcz;
+    const crossZ = abx * bcy - aby * bcx;
+    const area = Math.sqrt(crossX*crossX + crossY*crossY + crossZ*crossZ);
+    return area < 1e-10;
+  }
+};
+
+// Auto-initialize when script loads (or when DOM is ready)
+(function initBridge() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      window.OpenJSCADBridge.init().then(ready => {
+        if (ready) {
+          console.log('✓ OpenJSCAD Bridge ready for CSG operations');
+        } else {
+          console.warn('⚠ OpenJSCAD Bridge not available, will use custom CSG as fallback');
+        }
+      });
+    });
+  } else {
+    // DOM already loaded, init immediately
+    window.OpenJSCADBridge.init().then(ready => {
+      if (ready) {
+        console.log('✓ OpenJSCAD Bridge ready for CSG operations');
+      } else {
+        console.warn('⚠ OpenJSCAD Bridge not available, will use custom CSG as fallback');
+      }
+    });
+  }
+})();
+</script>
+
+<!-- CSG — Legacy fallback (only used when OpenJSCAD is unavailable) -->
+<script>
+window.CSG = (function () {
+  'use strict';
+
+  var EPS = 1e-5;
+  var COPLANAR = 0, FRONT = 1, BACK = 2, SPANNING = 3;
+
+  // ── Vertex ─────────────────────────────────────────────────────────────────
+  // pos and normal are ALWAYS owned by this vertex (never shared references)
+  function Vertex(x, y, z, nx, ny, nz) {
+    this.x = x; this.y = y; this.z = z;
+    this.nx = nx || 0; this.ny = ny || 0; this.nz = nz || 1;
+  }
+  Vertex.prototype.clone = function () {
+    return new Vertex(this.x, this.y, this.z, this.nx, this.ny, this.nz);
+  };
+  Vertex.prototype.flip = function () {
+    this.nx = -this.nx; this.ny = -this.ny; this.nz = -this.nz;
+  };
+  Vertex.prototype.lerp = function (o, t) {
+    return new Vertex(
+      this.x + (o.x - this.x) * t, this.y + (o.y - this.y) * t, this.z + (o.z - this.z) * t,
+      this.nx + (o.nx - this.nx) * t, this.ny + (o.ny - this.ny) * t, this.nz + (o.nz - this.nz) * t
+    );
+  };
+
+  // ── Plane ──────────────────────────────────────────────────────────────────
+  function Plane(nx, ny, nz, w) { this.nx = nx; this.ny = ny; this.nz = nz; this.w = w; }
+  Plane.fromVertices = function (a, b, c) {
+    var ex = b.x-a.x, ey = b.y-a.y, ez = b.z-a.z;
+    var fx = c.x-a.x, fy = c.y-a.y, fz = c.z-a.z;
+    var nx = ey*fz - ez*fy, ny = ez*fx - ex*fz, nz = ex*fy - ey*fx;
+    var len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+    if (len < 1e-10) return null;
+    nx /= len; ny /= len; nz /= len;
+    return new Plane(nx, ny, nz, nx*a.x + ny*a.y + nz*a.z);
+  };
+  Plane.prototype.clone = function () { return new Plane(this.nx, this.ny, this.nz, this.w); };
+  Plane.prototype.flip  = function () { this.nx=-this.nx; this.ny=-this.ny; this.nz=-this.nz; this.w=-this.w; };
+  Plane.prototype.splitPolygon = function (poly, cf, cb, ff, fb) {
+    var types = [], pt = 0;
+    var verts = poly.vertices;
+    for (var i = 0; i < verts.length; i++) {
+      var t = this.nx*verts[i].x + this.ny*verts[i].y + this.nz*verts[i].z - this.w;
+      var type = t < -EPS ? BACK : t > EPS ? FRONT : COPLANAR;
+      pt |= type; types.push(type);
+    }
+    if      (pt === COPLANAR) { (this.nx*poly.plane.nx+this.ny*poly.plane.ny+this.nz*poly.plane.nz > 0 ? cf : cb).push(poly); }
+    else if (pt === FRONT)    { ff.push(poly); }
+    else if (pt === BACK)     { fb.push(poly); }
+    else {
+      var f = [], b = [], n = verts.length;
+      for (var i = 0; i < n; i++) {
+        var j = (i+1) % n;
+        var ti = types[i], tj = types[j];
+        var vi = verts[i], vj = verts[j];
+        if (ti !== BACK)  f.push(vi.clone());
+        if (ti !== FRONT) b.push(vi.clone());
+        if ((ti|tj) === SPANNING) {
+          var denom = this.nx*(vj.x-vi.x) + this.ny*(vj.y-vi.y) + this.nz*(vj.z-vi.z);
+          var tt = Math.abs(denom) < 1e-30 ? 0.5 : (this.w - (this.nx*vi.x+this.ny*vi.y+this.nz*vi.z)) / denom;
+          tt = tt < 0 ? 0 : tt > 1 ? 1 : tt;
+          var v = vi.lerp(vj, tt);
+          f.push(v); b.push(v.clone());
+        }
+      }
+      if (f.length >= 3) ff.push(new Polygon(f, poly.shared));
+      if (b.length >= 3) fb.push(new Polygon(b, poly.shared));
+    }
+  };
+
+  // ── Polygon ────────────────────────────────────────────────────────────────
+  function Polygon(vertices, shared) {
+    this.vertices = vertices;
+    this.shared = shared || null;
+    this.plane = Plane.fromVertices(vertices[0], vertices[1], vertices[2]);
+  }
+  Polygon.prototype.clone = function () {
+    return new Polygon(this.vertices.map(function (v) { return v.clone(); }), this.shared);
+  };
+  Polygon.prototype.flip = function () {
+    this.vertices.reverse().forEach(function (v) { v.flip(); });
+    if (this.plane) this.plane.flip();
+  };
+
+  // ── Node ───────────────────────────────────────────────────────────────────
+  function Node(polys) {
+    this.plane = null; this.front = null; this.back = null; this.polygons = [];
+    if (polys && polys.length) this.build(polys);
+  }
+  Node.prototype.invert = function () {
+    this.polygons.forEach(function (p) { p.flip(); });
+    if (this.plane) this.plane.flip();
+    if (this.front) this.front.invert();
+    if (this.back)  this.back.invert();
+    var t = this.front; this.front = this.back; this.back = t;
+  };
+  Node.prototype.clipPolygons = function (polys) {
+    if (!this.plane) return polys.slice();
+    var f = [], b = [];
+    for (var i = 0; i < polys.length; i++) this.plane.splitPolygon(polys[i], f, b, f, b);
+    if (this.front) f = this.front.clipPolygons(f);
+    if (this.back)  b = this.back.clipPolygons(b); else b = [];
+    return f.concat(b);
+  };
+  Node.prototype.clipTo = function (node) {
+    this.polygons = node.clipPolygons(this.polygons);
+    if (this.front) this.front.clipTo(node);
+    if (this.back)  this.back.clipTo(node);
+  };
+  Node.prototype.allPolygons = function () {
+    return this.polygons.concat(
+      this.front ? this.front.allPolygons() : [],
+      this.back  ? this.back.allPolygons()  : []
+    );
+  };
+  Node.prototype.build = function (polys) {
+    if (!polys.length) return;
+    if (!this.plane) {
+      for (var i = 0; i < polys.length; i++) { if (polys[i].plane) { this.plane = polys[i].plane.clone(); break; } }
+    }
+    if (!this.plane) return;
+    var f = [], b = [];
+    for (var i = 0; i < polys.length; i++) {
+      // Skip polygons without a valid plane
+      if (!polys[i].plane) continue;
+      this.plane.splitPolygon(polys[i], this.polygons, this.polygons, f, b);
+    }
+    if (f.length) { if (!this.front) this.front = new Node(); this.front.build(f); }
+    if (b.length) { if (!this.back)  this.back  = new Node(); this.back.build(b); }
+  };
+
+  // ── CSG ────────────────────────────────────────────────────────────────────
+  function CSG() { this.polygons = []; }
+
+  CSG.prototype.union = function (o) {
+    var a = new Node(this.clone().polygons), b = new Node(o.clone().polygons);
+    a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert();
+    a.build(b.allPolygons());
+    return CSG._fromPolys(a.allPolygons());
+  };
+  CSG.prototype.subtract = function (o) {
+    var a = new Node(this.clone().polygons), b = new Node(o.clone().polygons);
+    a.invert(); a.clipTo(b); b.clipTo(a); b.invert(); b.clipTo(a); b.invert();
+    a.build(b.allPolygons()); a.invert();
+    return CSG._fromPolys(a.allPolygons());
+  };
+  CSG.prototype.intersect = function (o) {
+    var a = new Node(this.clone().polygons), b = new Node(o.clone().polygons);
+    a.invert(); b.clipTo(a); b.invert(); a.clipTo(b); b.clipTo(a);
+    a.build(b.allPolygons()); a.invert();
+    return CSG._fromPolys(a.allPolygons());
+  };
+  CSG.prototype.clone = function () {
+    var c = new CSG(); c.polygons = this.polygons.map(function (p) { return p.clone(); }); return c;
+  };
+  CSG._fromPolys = function (polys) { var c = new CSG(); c.polygons = polys; return c; };
+
+  // ── fromMesh ───────────────────────────────────────────────────────────────
+  // CRITICAL: always use toNonIndexed() so every triangle has independent
+  // vertex objects — no shared references that corrupt during BSP operations.
+  // CRITICAL: bevel MUST be disabled. Bevel geometry is non-manifold by design.
+  CSG.fromMesh = function (mesh, color) {
+    var csg = new CSG();
+    mesh.updateMatrixWorld(true);
+    var mw = mesh.matrixWorld;
+    var mn = new THREE.Matrix3().getNormalMatrix(mw);
+    var geo = mesh.geometry;
+    if (!geo || !geo.attributes.position) return csg;
+
+    // Always work non-indexed
+    var work = geo.index ? geo.toNonIndexed() : geo.clone();
+    // Recompute normals on the flat (non-beveled) geometry
+    work.computeVertexNormals();
+
+    var pos = work.attributes.position.array;
+    var nor = work.attributes.normal.array;
+    var shared = { color: color !== undefined ? color : 0x888888 };
+    var polys = [];
+
+    for (var i = 0; i < pos.length; i += 9) {
+      var verts = [];
+      for (var k = 0; k < 3; k++) {
+        var b3 = i + k*3;
+        // Position: apply full 4x4 world matrix
+        var p = new THREE.Vector3(pos[b3], pos[b3+1], pos[b3+2]).applyMatrix4(mw);
+        // Normal: apply 3x3 normal matrix
+        var n = new THREE.Vector3(nor[b3], nor[b3+1], nor[b3+2]).applyMatrix3(mn).normalize();
+        verts.push(new Vertex(p.x, p.y, p.z, n.x, n.y, n.z));
+      }
+      
+      // Skip degenerate triangles (vertices too close together)
+      var distAB = Math.sqrt((verts[0].x-verts[1].x)**2 + (verts[0].y-verts[1].y)**2 + (verts[0].z-verts[1].z)**2);
+      var distBC = Math.sqrt((verts[1].x-verts[2].x)**2 + (verts[1].y-verts[2].y)**2 + (verts[1].z-verts[2].z)**2);
+      var distAC = Math.sqrt((verts[0].x-verts[2].x)**2 + (verts[0].y-verts[2].y)**2 + (verts[0].z-verts[2].z)**2);
+      if (distAB < 1e-6 || distBC < 1e-6 || distAC < 1e-6) continue;
+      
+      // Skip degenerate triangles BEFORE building the plane
+      var plane = Plane.fromVertices(verts[0], verts[1], verts[2]);
+      if (!plane) continue;
+      var poly = new Polygon(verts, shared);
+      poly.plane = plane;
+      polys.push(poly);
+    }
+    work.dispose();
+    csg.polygons = polys;
+    return csg;
+  };
+
+  // ── toMesh ─────────────────────────────────────────────────────────────────
+  // Converts CSG polygons → a single manifold Three.js mesh.
+  // Uses vertex welding, normal unification, and degenerate removal to produce
+  // watertight meshes suitable for 3D printing slicers.
+  CSG.prototype.toMesh = function (color) {
+    var WELD = 1e-4, INV = 1.0 / 1e-4;
+    var keyMap = new Map();
+    var wPos = [];
+    var idxArr = [];
+    var vi = 0;
+
+    function weld(x, y, z) {
+      var ix = Math.round(x * INV), iy = Math.round(y * INV), iz = Math.round(z * INV);
+      var key = ix + ',' + iy + ',' + iz;
+      if (keyMap.has(key)) return keyMap.get(key);
+      wPos.push(ix * WELD, iy * WELD, iz * WELD);
+      keyMap.set(key, vi);
+      return vi++;
+    }
+
+    this.polygons.forEach(function (poly) {
+      var vs = poly.vertices;
+      // Fan-triangulate polygon (handles tris and quads from BSP splits)
+      for (var i = 1; i < vs.length - 1; i++) {
+        var a = weld(vs[0].x, vs[0].y, vs[0].z);
+        var b = weld(vs[i].x, vs[i].y, vs[i].z);
+        var cc = weld(vs[i+1].x, vs[i+1].y, vs[i+1].z);
+        if (a === b || b === cc || a === cc) continue; // skip degenerate
+        idxArr.push(a, b, cc);
+      }
+    });
+
+    if (idxArr.length === 0) return null;
+
+    // ── Build final geometry ──
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(wPos), 3));
+    geo.setIndex(idxArr);
+    // toNonIndexed gives each triangle its own 3 vertices → correct per-face normals
+    var finalGeo = geo.toNonIndexed();
+    geo.dispose();
+
+    // ── REPAIR: Close boundary holes to ensure watertight mesh ──
+    finalGeo = CSG._closeBoundaryHoles(finalGeo);
+
+    // Compute face normals (flat shading, most slicer-compatible)
+    finalGeo.computeVertexNormals();
+
+    var col = color !== undefined ? color : 0x888888;
+    var mat = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(col),
+      specular: 0x333333, shininess: 30, side: THREE.DoubleSide
+    });
+    var mesh = new THREE.Mesh(finalGeo, mat);
+    mesh.userData.isBooleanResult = true;
+    return mesh;
+  };
+
+  // ── Repair: Close boundary holes to create watertight mesh ──
+  CSG._closeBoundaryHoles = function (geometry) {
+    var positions = geometry.attributes.position.array;
+    var triCount = positions.length / 9;
+    var WELD = 1e-4, INV = 1.0 / 1e-4;
+
+    // Build vertex map
+    var vertMap = new Map();
+    var vertPositions = [];
+    var vi = 0;
+
+    function getVertIdx(x, y, z) {
+      var ix = Math.round(x * INV), iy = Math.round(y * INV), iz = Math.round(z * INV);
+      var key = ix + ',' + iy + ',' + iz;
+      if (vertMap.has(key)) return vertMap.get(key);
+      vertMap.set(key, vi);
+      vertPositions.push([x, y, z]);
+      return vi++;
+    }
+
+    // Build edge map
+    var edgeMap = new Map();
+
+    for (var i = 0; i < triCount; i++) {
+      var baseIdx = i * 9;
+      var v0 = getVertIdx(positions[baseIdx], positions[baseIdx + 1], positions[baseIdx + 2]);
+      var v1 = getVertIdx(positions[baseIdx + 3], positions[baseIdx + 4], positions[baseIdx + 5]);
+      var v2 = getVertIdx(positions[baseIdx + 6], positions[baseIdx + 7], positions[baseIdx + 8]);
+
+      if (v0 === v1 || v1 === v2 || v0 === v2) continue;
+
+      var edges = [
+        [Math.min(v0, v1), Math.max(v0, v1)],
+        [Math.min(v1, v2), Math.max(v1, v2)],
+        [Math.min(v0, v2), Math.max(v0, v2)]
+      ];
+
+      edges.forEach(function (e) {
+        var key = e[0] + '_' + e[1];
+        if (!edgeMap.has(key)) edgeMap.set(key, {count: 0, edge: e});
+        edgeMap.get(key).count++;
+      });
+    }
+
+    // Find boundary edges
+    var boundaryEdges = [];
+    edgeMap.forEach(function (data, key) {
+      if (data.count === 1) {
+        boundaryEdges.push(data.edge);
+      }
+    });
+
+    if (boundaryEdges.length === 0) return geometry;
+
+    console.log('CSG Repair: Found ' + boundaryEdges.length + ' boundary edges');
+
+    // Chain boundary edges
+    var edgeChains = [];
+    var used = new Set();
+
+    boundaryEdges.forEach(function (edge, idx) {
+      if (used.has(idx)) return;
+
+      var chain = [edge];
+      used.add(idx);
+      var current = edge;
+
+      for (var attempt = 0; attempt < boundaryEdges.length; attempt++) {
+        var extended = false;
+        for (var j = 0; j < boundaryEdges.length; j++) {
+          if (used.has(j)) continue;
+
+          var next = boundaryEdges[j];
+          var chainEnd = chain[chain.length - 1][1];
+
+          if (next[0] === chainEnd) {
+            chain.push(next);
+            used.add(j);
+            extended = true;
+            break;
+          }
+        }
+        if (!extended) break;
+      }
+
+      if (chain.length >= 2) edgeChains.push(chain);
+    });
+
+    if (edgeChains.length === 0) return geometry;
+
+    console.log('CSGRepair: Closing ' + edgeChains.length + ' boundary loops');
+
+    // Fill holes with centroid triangulation
+    var newPositions = [];
+    var originalCount = positions.length;
+
+    edgeChains.forEach(function (chain) {
+      var verts = [chain[0][0]];
+      for (var i = 0; i < chain.length; i++) {
+        verts.push(chain[i][1]);
+      }
+      if (verts[0] === verts[verts.length - 1]) verts.pop();
+      if (verts.length < 3) return;
+
+      // Calculate centroid
+      var centroid = [0, 0, 0];
+      verts.forEach(function (vIdx) {
+        var pos = vertPositions[vIdx];
+        centroid[0] += pos[0];
+        centroid[1] += pos[1];
+        centroid[2] += pos[2];
+      });
+      centroid[0] /= verts.length;
+      centroid[1] /= verts.length;
+      centroid[2] /= verts.length;
+
+      // Add centroid vertex
+      vertPositions.push(centroid);
+
+      // Create fan triangulation
+      for (var i = 0; i < verts.length; i++) {
+        var v0 = verts[i];
+        var v1 = verts[(i + 1) % verts.length];
+        var p0 = vertPositions[v0];
+        var p1 = vertPositions[v1];
+
+        newPositions.push(
+          p0[0], p0[1], p0[2],
+          p1[0], p1[1], p1[2],
+          centroid[0], centroid[1], centroid[2]
+        );
+      }
+    });
+
+    if (newPositions.length === 0) return geometry;
+
+    console.log('CSGRepair: Adding ' + (newPositions.length / 9) + ' repair triangles');
+
+    // Merge geometries
+    var mergedPositions = new Float32Array(originalCount + newPositions.length);
+    mergedPositions.set(positions);
+    mergedPositions.set(newPositions, originalCount);
+
+    var newGeo = new THREE.BufferGeometry();
+    newGeo.setAttribute('position', new THREE.Float32BufferAttribute(mergedPositions, 3));
+    newGeo.computeVertexNormals();
+
+    return newGeo;
+  };
+
+  return CSG;
+})();
+</script>
+
 <title>LetterForge Pro</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap');
@@ -738,7 +1727,7 @@
 
   /* Custom confirm dialog */
   #custom-confirm{
-    display:none;position:fixed;inset:0;z-index:99999;
+    display:none;position:fixed;inset:0;z-index:100000;
     background:rgba(0,0,0,.6);backdrop-filter:blur(4px);
     align-items:center;justify-content:center;
   }
@@ -858,9 +1847,13 @@
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M21 3l-7 7"></path><path d="M3 3l7 7"></path><path d="M16 21h5v-5"></path><path d="M8 21H3v-5"></path><path d="M21 21l-7-7"></path><path d="M3 21l7-7"></path></svg>
     Snap
   </button>
-  <button class="btn" style="margin-left: 16px; border-color: var(--accent); color: var(--accent);" onclick="mergeSelected()" title="Unisci gli elementi in un unico oggetto" onmousedown="event.stopPropagation()">
+  <button class="btn" style="margin-left: 16px; border-color: var(--accent); color: var(--accent);" onclick="mergeSelected()" title="Unisci gli elementi selezionati: il secondo prende il colore del primo e vengono raggruppati" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M12 8v8"></path><path d="M8 12h8"></path></svg>
     Unisci
+  </button>
+  <button class="btn" style="margin-left: 8px; border-color: #ff6b35; color: #ff6b35;" onclick="unmergeSelected()" title="Separa gli elementi del gruppo selezionato" onmousedown="event.stopPropagation()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M12 22v-8.5"></path><path d="M3 12l9-9"></path></svg>
+    Separa
   </button>
   <div class="spacer"></div>
   <button class="btn" onclick="deleteUnselected()" onmousedown="event.stopPropagation()">
@@ -890,7 +1883,7 @@
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.1.9</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.0</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -1251,7 +2244,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.1.9</div>
+  <div class="un-ver" id="un-version">Versione 4.2.0</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -1293,8 +2286,18 @@ const S = {
   rotating:false, // true quando l'utente sta ruotando attivamente
   rotHandleAngle: null, // angolo corrente del controllo di rotazione (in gradi)
   rotHandleDistance: null, // distanza fissa dal centro durante la rotazione
+  groupCounter: 0, // contatore per generare ID gruppo univoci
 };
 let uid=0;
+
+// ── Helper: ottieni tutti gli indici degli elementi con lo stesso groupId ──
+function getGroupIndices(idx) {
+  const elem = S.letters[idx];
+  if (!elem || !elem.groupId) return [idx];
+  return S.letters
+    .map((el, i) => (el.groupId === elem.groupId) ? i : -1)
+    .filter(i => i !== -1);
+}
 
 function setZoom(z){
   S.zoom = Math.min(12, Math.max(0.1, z));
@@ -2428,19 +3431,29 @@ function getLetterBBoxTransformed(i){
 }
 
 // Calcola il bounding box combinato di tutti gli elementi selezionati
+// Se un elemento fa parte di un gruppo, include tutto il gruppo
 function getGroupBBox(){
   const sel = [...S.sel];
   if(sel.length === 0) return null;
-  if(sel.length === 1) return getLetterBBoxTransformed(sel[0]);
   
-  const bboxes = sel.map(i => getLetterBBoxTransformed(i)).filter(b => b !== null);
+  // Espandi la selezione per includere interi gruppi
+  const expandedSel = new Set();
+  sel.forEach(i => {
+    const indices = getGroupIndices(i);
+    indices.forEach(idx => expandedSel.add(idx));
+  });
+  
+  const expandedArr = [...expandedSel];
+  if(expandedArr.length === 1) return getLetterBBoxTransformed(expandedArr[0]);
+
+  const bboxes = expandedArr.map(i => getLetterBBoxTransformed(i)).filter(b => b !== null);
   if(bboxes.length === 0) return null;
-  
+
   const x = Math.min(...bboxes.map(b => b.x));
   const y = Math.min(...bboxes.map(b => b.y));
   const x2 = Math.max(...bboxes.map(b => b.x2));
   const y2 = Math.max(...bboxes.map(b => b.y2));
-  
+
   return {
     x, y, x2, y2,
     w: x2 - x,
@@ -2451,32 +3464,6 @@ function getGroupBBox(){
 }
 
 // Applica una trasformazione a tutti gli elementi selezionati come un gruppo
-function applyTransformToGroup(transformFn){
-  const sel = [...S.sel];
-  if(sel.length < 2) return;
-  
-  const groupBBox = getGroupBBox();
-  if(!groupBBox) return;
-  
-  // Per ogni elemento, calcoliamo la trasformazione relativa al centro del gruppo
-  sel.forEach(i => {
-    const l = S.letters[i];
-    const letterBBox = getLetterBBoxTransformed(i);
-    if(!letterBBox) return;
-    
-    // Offset dell'elemento rispetto al centro del gruppo
-    const offsetX = letterBBox.cx - groupBBox.cx;
-    const offsetY = letterBBox.cy - groupBBox.cy;
-    
-    // Applichiamo la trasformazione all'offset
-    const newOffset = transformFn(offsetX, offsetY, letterBBox);
-    
-    // Aggiorniamo la posizione dell'elemento
-    l.x = groupBBox.cx + newOffset.x - (letterBBox.w / 2) * (l.sx || 1);
-    l.y = groupBBox.cy + newOffset.y - (letterBBox.h / 2) * (l.sy || 1);
-  });
-}
-
 function renderHandles(){
   const layer=document.getElementById('handles-layer');
   layer.innerHTML='';
@@ -2636,13 +3623,36 @@ function handleMd(e,i,axis,dir){
 function gmd(e,i){
   if(e.target.closest('.lg-handle'))return;
   e.stopPropagation();
-  if(e.shiftKey){
-    S.sel.has(i)?S.sel.delete(i):S.sel.add(i);
+  
+  // Se l'elemento fa parte di un gruppo, seleziona tutto il gruppo
+  const elem = S.letters[i];
+  if (elem && elem.groupId) {
+    const groupIndices = getGroupIndices(i);
+    if (e.shiftKey) {
+      // Shift+Click: toggle selezione dell'intero gruppo
+      const allSelected = groupIndices.every(idx => S.sel.has(idx));
+      if (allSelected) {
+        groupIndices.forEach(idx => S.sel.delete(idx));
+      } else {
+        groupIndices.forEach(idx => S.sel.add(idx));
+      }
+    } else {
+      // Click normale: seleziona tutto il gruppo
+      S.sel.clear();
+      groupIndices.forEach(idx => S.sel.add(idx));
+    }
   } else {
-    if(!S.sel.has(i)){S.sel.clear();S.sel.add(i);}
+    // Elemento non raggruppato: comportamento normale
+    if(e.shiftKey){
+      S.sel.has(i)?S.sel.delete(i):S.sel.add(i);
+    } else {
+      if(!S.sel.has(i)){S.sel.clear();S.sel.add(i);}
+    }
   }
+  
   const p=pt(e);
   S.dragging=true;S.dragType='letter';S.ds={x:p.x,y:p.y};
+  
   S.dl=S.letters.map(l=>({x:l.x,y:l.y}));
   render();renderHandles();upd();
   document.getElementById('svg').classList.add('dragging-letter');
@@ -2717,33 +3727,40 @@ document.addEventListener('mousemove', e=>{
 
   if(S.dragType==='letter' && S.sel.size>0){
     const dx=p.x-S.ds.x, dy=p.y-S.ds.y;
+    
+    // Espandi la selezione per includere interi gruppi
+    const expandedSel = new Set();
+    S.sel.forEach(idx => {
+      getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
+    });
+    const expandedArr = [...expandedSel];
 
-    if(S.sel.size === 1){
+    if(expandedArr.length === 1){
       // Singola selezione: logica esistente con snap
-      let nx=S.dl[[...S.sel][0]].x+dx, ny=S.dl[[...S.sel][0]].y+dy;
+      let nx=S.dl[expandedArr[0]].x+dx, ny=S.dl[expandedArr[0]].y+dy;
       if(S.snapEnabled){
-        for(const o of S.letters.filter((_,idx)=>!S.sel.has(idx))){
+        for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
           if(Math.abs(o.y-ny)<S.snapThreshold){ ny=o.y; break; }
         }
       }
-      S.letters[[...S.sel][0]].x=nx; S.letters[[...S.sel][0]].y=ny;
+      S.letters[expandedArr[0]].x=nx; S.letters[expandedArr[0]].y=ny;
 
       if(S.snapEnabled){
-        const sel0=S.letters[[...S.sel][0]];
+        const sel0=S.letters[expandedArr[0]];
         const cw=document.getElementById('cw');
         const ctm=svg.getScreenCTM();
         const screenY=ctm.f + sel0.y * ctm.d;
         const cwRect=cw.getBoundingClientRect();
         const relY=screenY - cwRect.top + cw.scrollTop;
         let snapped=false;
-        for(const o of S.letters.filter((_,idx)=>!S.sel.has(idx))){
+        for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
           if(Math.abs(o.y-sel0.y)<S.snapThreshold){snapped=true;break;}
         }
         if(snapped){ snapLine.style.top=relY+'px'; snapLine.style.display='block'; }
       }
     } else {
-      // Selezione multipla: muovi tutti gli elementi come un gruppo con snap
-      const selArr = Array.from(S.sel);
+      // Selezione multipla/gruppo: muovi tutti gli elementi come un gruppo con snap
+      const selArr = expandedArr;
       
       // Calcola il centro del gruppo dalle posizioni originali
       let groupCx = 0, groupCy = 0;
@@ -2767,7 +3784,7 @@ document.addEventListener('mousemove', e=>{
         const groupBBox = getGroupBBox();
         if(groupBBox){
           // Snap verticale: controlla se il centro o i bordi del gruppo sono vicini ad altri elementi
-          for(const o of S.letters.filter((_,idx)=>!S.sel.has(idx))){
+          for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
             // Snap del centro del gruppo con il centro di altri elementi
             if(Math.abs(o.y - newGroupCy) < S.snapThreshold){
               snappedY = o.y;
@@ -2779,9 +3796,9 @@ document.addEventListener('mousemove', e=>{
               break;
             }
           }
-          
+
           // Snap orizzontale (opzionale, per ora solo verticale)
-          for(const o of S.letters.filter((_,idx)=>!S.sel.has(idx))){
+          for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
             if(Math.abs(o.x - newGroupCx) < S.snapThreshold){
               snappedX = o.x;
               break;
@@ -3141,7 +4158,14 @@ function apY(val){
 function apRot(val){
   v('prot', val);
   v('vrot', val);
-  const sel = [...S.sel];
+  
+  // Espandi selezione per includere interi gruppi
+  const expandedSel = new Set();
+  [...S.sel].forEach(idx => {
+    getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
+  });
+  const sel = [...expandedSel];
+  
   if(sel.length === 1){
     S.letters[sel[0]].rot = val;
   } else if(sel.length > 1){
@@ -3155,8 +4179,14 @@ function apRot(val){
 
 function apScale(ax,val){
   const lock=document.getElementById('lock-scale').checked;
-  const sel = [...S.sel];
   
+  // Espandi selezione per includere interi gruppi
+  const expandedSel = new Set();
+  [...S.sel].forEach(idx => {
+    getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
+  });
+  const sel = [...expandedSel];
+
   if(ax==='x'){
     t('vsx',val.toFixed(2));
     if(sel.length === 1){
@@ -3190,12 +4220,44 @@ function apScale(ax,val){
   render(); renderHandles(); upd(); saveState();
 }
 
-function apSkew(val){t('vsk',val+'°');aps(l=>l.skew=val);}
-function apFill(val){
-  aps(l=>l.fill=val);
-  v('pfill', val);
+function apSkew(val){
+  t('vsk',val+'°');
+  // Espandi selezione per includere interi gruppi
+  const expandedSel = new Set();
+  [...S.sel].forEach(idx => {
+    getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
+  });
+  [...expandedSel].forEach(i => S.letters[i].skew=val);
+  render(); renderHandles(); upd(); saveState();
 }
-function apFS(val){aps(l=>l.fontSize=val);}
+function apFill(val){
+  // Espandi selezione per includere interi gruppi
+  const expandedSel = new Set();
+  [...S.sel].forEach(idx => {
+    getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
+  });
+  
+  // Se stiamo cambiando il colore, gli elementi escono dal gruppo
+  // perché il gruppo si basa sullo stesso colore
+  [...expandedSel].forEach(i => {
+    if (S.letters[i].groupId) {
+      delete S.letters[i].groupId;
+    }
+    S.letters[i].fill = val;
+  });
+  
+  v('pfill', val);
+  render(); renderHandles(); upd(); saveState();
+}
+function apFS(val){
+  // Espandi selezione per includere interi gruppi
+  const expandedSel = new Set();
+  [...S.sel].forEach(idx => {
+    getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
+  });
+  [...expandedSel].forEach(i => S.letters[i].fontSize=val);
+  render(); renderHandles(); upd(); saveState();
+}
 function toggleFontSizeDropdown(){
   const dd=document.getElementById('fsize-dropdown');
   dd.style.display=dd.style.display==='block'?'none':'block';
@@ -3305,12 +4367,6 @@ function applySize(){
   // Assicura che il canvas sia scrollabile dopo il ridimensionamento
   const cw=document.getElementById('cw');
   if(cw) cw.scrollTop=0;
-}
-function toggleGrid(){
-  S.gridOn=!S.gridOn;
-  document.getElementById('gr').style.display=S.gridOn?'block':'none';
-  const gridBtn = document.getElementById('grid-btn');
-  if(gridBtn) gridBtn.style.color=S.gridOn?'var(--accent)':'';
 }
 
 function setSelectedLayer(layer){
@@ -3794,69 +4850,66 @@ document.getElementById('cw').addEventListener('contextmenu', e => {
 });
 saveState();
 
+// ── Unisci selezionati: assegna stesso groupId e统一 colore ─────────────
 function mergeSelected() {
   const sel = [...S.sel];
-  if (sel.length < 2) { toast('Seleziona almeno 2 lettere per unirle!'); return; }
+  if (sel.length < 2) { toast('Seleziona almeno 2 oggetti per unirli!'); return; }
 
-  const svgRoot = document.getElementById('svg');
-  const tempG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  svgRoot.appendChild(tempG);
+  // Genera nuovo ID gruppo
+  const groupId = ++S.groupCounter;
 
-  sel.forEach(i => {
-    const node = document.querySelector(`g.lg[data-i="${i}"]`);
-    if(node) tempG.appendChild(node.cloneNode(true));
+  // Colore del primo oggetto
+  const masterColor = S.letters[sel[0]].fill;
+
+  // Assegna groupId a tutti e统一 colore al primo
+  sel.forEach((i, idx) => {
+    S.letters[i].groupId = groupId;
+    if (idx > 0) {
+      // Il secondo (e successivi) prendono il colore del primo
+      S.letters[i].fill = masterColor;
+    }
   });
 
-  tempG.querySelectorAll('rect[fill="rgba(200,255,0,0.13)"]').forEach(e => e.remove());
-  tempG.querySelectorAll('g.lg-handle').forEach(e => e.remove());
-  tempG.querySelectorAll('g.lg').forEach(g => {
-    g.removeAttribute('class');
-    g.removeAttribute('data-i');
-  });
-
-  const bbox = tempG.getBBox();
-  const cx = bbox.x + bbox.width / 2;
-  const cy = bbox.y + bbox.height / 2;
-
-  let inner = tempG.innerHTML;
-  inner = inner.replace(/fill="[^"]*"/g, 'fill="currentColor"');
-
-  // Extract paths for border support
-  const groupPaths = [];
-  const pathElements = tempG.querySelectorAll('path');
-  pathElements.forEach(p => {
-    groupPaths.push(p.getAttribute('d'));
-  });
-
-  S.letters.push({
-    id: uid++,
-    ch: 'Grp',
-    x: cx, y: cy,
-    originalX: cx, originalY: cy,
-    rot: 0, sx: 1, sy: 1, skew: 0, op: 1,
-    fontSize: bbox.height,
-    fontFamily: 'sans-serif',
-    fontName: 'Gruppo Unito',
-    fill: S.letters[sel[0]].fill,
-    isGroup: true,
-    groupW: bbox.width,
-    groupH: bbox.height,
-    groupHTML: inner,
-    groupPaths: groupPaths,
-    borderWidth: 0,
-    borderColor: '#000000',
-    layer: Math.max(...sel.map(i => S.letters[i].layer || 2))
-  });
-
-  tempG.remove();
-
-  sel.sort((a,b)=>b-a).forEach(i => S.letters.splice(i, 1));
+  // Seleziona tutto il gruppo
   S.sel.clear();
-  S.sel.add(S.letters.length - 1);
+  sel.forEach(i => S.sel.add(i));
 
-  render(); renderHandles(); upd(); saveState();
-  if(!S.snapEnabled){ document.getElementById('snap-btn')?.classList.remove('snap-on'); }
-  toast('Elementi uniti in un Gruppo! ✓');
+  render();
+  renderHandles();
+  upd();
+  saveState();
+
+  toast(`Oggetti uniti nel Gruppo ${groupId}! ✓ (colore unified)`);
+}
+
+// ── Separa gruppo: rimuove groupId dagli elementi selezionati ─────────────
+function unmergeSelected() {
+  const sel = [...S.sel];
+  if (sel.length === 0) { toast('Nessun oggetto selezionato!'); return; }
+
+  // Espandi la selezione per includere tutti gli elementi dei gruppi
+  const expandedSel = new Set();
+  sel.forEach(idx => {
+    getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
+  });
+
+  // Verifica che almeno un elemento abbia un groupId
+  const hasGroup = [...expandedSel].some(i => S.letters[i] && S.letters[i].groupId);
+  if (!hasGroup) { toast('Gli elementi selezionati non fanno parte di un gruppo!'); return; }
+
+  // Rimuovi groupId da tutti gli elementi del gruppo
+  [...expandedSel].forEach(i => {
+    if (S.letters[i]) {
+      delete S.letters[i].groupId;
+    }
+  });
+
+  render();
+  renderHandles();
+  upd();
+  saveState();
+
+  toast('Elementi separati dal gruppo! ✓');
 }
 
 requestAnimationFrame(() => {
@@ -4007,6 +5060,7 @@ let threeRenderer = null;
 let threeControls = null;
 let threeMeshes = [];
 let threeExtrusionLevels = {};
+let threeVisibilityState = {}; // Track visibility per color
 let threeAnimationId = null;
 let threeGridHelper = null;
 let threeAmbientLight = null;
@@ -4020,6 +5074,13 @@ let threeGraphicsSettings = {
   shininess: 30,
   smoothShading: true
 };
+
+// 3D Object Selection
+let threeSelectedMesh = null;
+let threeSelectionOrder = []; // Track selection order for boolean ops
+let threeRaycaster = new THREE.Raycaster();
+let threeMouse = new THREE.Vector2();
+let threeSelectionIndicator = []; // Visual indicators for selected objects
 
 function open3DPreview() {
   if (S.letters.length === 0) {
@@ -4039,46 +5100,69 @@ function open3DPreview() {
   
   // Start animation loop
   start3DAnimation();
+
+  // Initialize selection HUD
+  setTimeout(() => update3DSelectionHUD(), 150);
 }
 
 function close3DPreview() {
-  // Stop animation loop
-  if (threeAnimationId) {
-    cancelAnimationFrame(threeAnimationId);
-    threeAnimationId = null;
-  }
-  
-  // Dispose scene
-  if (threeScene) {
-    threeScene.traverse(obj => {
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) {
-        if (Array.isArray(obj.material)) {
-          obj.material.forEach(m => m.dispose());
-        } else {
-          obj.material.dispose();
-        }
-      }
-    });
-    threeScene.clear();
-  }
-  
-  // Dispose renderer
-  if (threeRenderer) {
-    threeRenderer.dispose();
-    const container = document.getElementById('preview-3d-canvas');
-    if (container && threeRenderer.domElement.parentNode === container) {
-      container.removeChild(threeRenderer.domElement);
+  customConfirm('Chiudere l\'anteprima 3D?', () => {
+    // Stop animation loop
+    if (threeAnimationId) {
+      cancelAnimationFrame(threeAnimationId);
+      threeAnimationId = null;
     }
-    threeRenderer = null;
-  }
-  
-  threeMeshes = [];
-  threeExtrusionLevels = {};
-  
-  // Hide overlay
-  const overlay = document.getElementById('preview-3d-overlay');
-  overlay.style.display = 'none';
+
+    // Remove event listeners
+    if (threeRenderer && threeRenderer.domElement) {
+      threeRenderer.domElement.removeEventListener('click', on3DObjectClick);
+      threeRenderer.domElement.removeEventListener('dblclick', on3DObjectDblClick);
+    }
+
+    // Dispose scene
+    if (threeScene) {
+      threeScene.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach(m => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      });
+      threeScene.clear();
+    }
+
+    // Dispose renderer
+    if (threeRenderer) {
+      threeRenderer.dispose();
+      const container = document.getElementById('preview-3d-canvas');
+      if (container && threeRenderer.domElement.parentNode === container) {
+        container.removeChild(threeRenderer.domElement);
+      }
+      threeRenderer = null;
+    }
+
+    threeMeshes = [];
+    threeExtrusionLevels = {};
+    threeSelectionOrder = [];
+    threeSelectedMesh = null;
+    
+    // Clear selection indicators
+    threeSelectionIndicator.forEach(ind => {
+      if (threeScene) threeScene.remove(ind);
+    });
+    threeSelectionIndicator = [];
+
+    // Remove selection HUD
+    const hudEl = document.getElementById('sel3d-hud');
+    if (hudEl) hudEl.remove();
+
+    // Hide overlay
+    const overlay = document.getElementById('preview-3d-overlay');
+    overlay.style.display = 'none';
+  });
 }
 
 // Keyboard shortcuts for 3D preview
@@ -4138,6 +5222,10 @@ function init3DScene() {
   threeControls.rotateSpeed = 0.6;
   threeControls.zoomSpeed = 1.2;
   threeControls.panSpeed = 0.8;
+
+  // Add click handler for 3D object selection
+  threeRenderer.domElement.addEventListener('click', on3DObjectClick);
+  threeRenderer.domElement.addEventListener('dblclick', on3DObjectDblClick);
   
   // Add lighting
   threeAmbientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -4172,6 +5260,9 @@ function build3DObjects() {
   // Clear previous meshes
   threeMeshes = [];
   threeExtrusionLevels = {};
+  // DO NOT reset threeVisibilityState here to preserve user toggles during rebuilds
+  // but ensure it's initialized
+  if (!threeVisibilityState) threeVisibilityState = {};
 
   // STEP 1: Use EXACT same logic as exportSVG() to build items
   const ctx = document.getElementById('dc').getContext('2d');
@@ -4186,6 +5277,7 @@ function build3DObjects() {
     const opacity = (l.op != null) ? l.op : 1;
     const bw = l.borderWidth || 0;
     const bc = l.borderColor || '#000000';
+    const groupId = l.groupId || null; // Aggiungi groupId se presente
 
     ctx.font = `${l.fontSize}px ${l.fontFamily}`;
     const mw = l.isGroup ? l.groupW : (l.isSvgImport ? (l.svgW || 100) : ctx.measureText(l.ch).width);
@@ -4213,7 +5305,7 @@ function build3DObjects() {
       const pathD = segsToPathD(allSegs);
       const bbox = _realBBox(pathD);
       if (!bbox) return;
-      items.push({ pathD, bbox, color, opacity, bw: 0, bc, renderOrder });
+      items.push({ pathD, bbox, color, opacity, bw: 0, bc, renderOrder, groupId });
 
     } else if (l.customPath) {
       const innerX = l.isSvgImport ? l.x - (l.svgW || mw) / 2 : l.x - mw / 2;
@@ -4224,7 +5316,7 @@ function build3DObjects() {
       const pathD = segsToPathD(transformed);
       const bbox = _realBBox(pathD);
       if (!bbox) return;
-      items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder });
+      items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder, groupId });
 
     } else if (S.openFonts[l.fontName]) {
       const innerX = l.x - mw / 2;
@@ -4249,7 +5341,7 @@ function build3DObjects() {
         if (!bbox) {
           throw new Error('Could not calculate bounding box');
         }
-        items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder });
+        items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder, groupId });
       } catch(e) {
         console.warn('3D: Font path generation failed for:', `"${l.ch}" in font "${l.fontName}"`, '- using fallback box', e);
         // Fallback: create a simple box
@@ -4259,7 +5351,7 @@ function build3DObjects() {
         const x = l.x - estW / 2;
         const y = l.y - estH;
         const pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
-        items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder });
+        items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder, groupId });
       }
 
     } else {
@@ -4270,7 +5362,7 @@ function build3DObjects() {
       const x = l.x - estW / 2;
       const y = l.y - estH;
       const pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
-      items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder });
+      items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder, groupId });
     }
   });
 
@@ -4280,7 +5372,7 @@ function build3DObjects() {
     return;
   }
 
-  // STEP 2: Convert paths to 3D meshes
+  // STEP 2: Convert paths to 3D meshes using OpenJSCAD ONLY
   const extrusionDepth = 20;
 
   // Group items by color for extrusion controls
@@ -4288,43 +5380,72 @@ function build3DObjects() {
 
   items.forEach((item) => {
     try {
-      const shapes = pathD_to_ThreeShapes(item.pathD);
+      // UNIFIED SYSTEM: Use OpenJSCAD exclusively for all 3D generation
+      if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) {
+        console.error('❌ OpenJSCAD not available - 3D generation requires OpenJSCAD');
+        toast('Errore: OpenJSCAD non disponibile');
+        return;
+      }
 
-      // Track meshes by color
-      const meshIndices = [];
+      // Convert SVG path → OpenJSCAD geom2 → extrude to geom3
+      const geom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(item.pathD);
+      if (!geom2) {
+        console.warn('⚠ Failed to create geom2 from path (color:', item.color, '):', item.pathD.substring(0, 100));
+        return;
+      }
 
-      shapes.forEach(shape => {
-        const geometry = new THREE.ExtrudeGeometry(shape, {
-          depth: extrusionDepth,
-          bevelEnabled: threeGraphicsSettings.smoothShading,
-          bevelThickness: 1,
-          bevelSize: 0.5,
-          bevelSegments: 2,
-          curveSegments: 12
-        });
+      const geom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(geom2, extrusionDepth);
+      if (!geom3) {
+        console.warn('⚠ Failed to extrude geom2 (color:', item.color, ') - skipping this element');
+        return;
+      }
 
-        const threeColor = new THREE.Color(item.color);
-        const material = new THREE.MeshPhongMaterial({
-          color: threeColor,
-          specular: 0x444444,
-          shininess: 30,
-          side: THREE.DoubleSide,
-          transparent: item.opacity < 1,
-          opacity: item.opacity
-        });
+      console.log(`✓ OpenJSCAD: Created watertight solid for color ${item.color}`);
 
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.z = 0;
+      // Convert OpenJSCAD geom3 to Three.js mesh
+      const geometry = window.OpenJSCADBridge.geom3ToThreeGeometry(geom3);
+      geometry.userData.isJSCAD = true;
+      geometry.userData.csgDepth = extrusionDepth;
+      // Store original pathD and geom2 for rebuild operations
+      geometry.userData.originalPathD = item.pathD;
+      geometry.userData.originalGeom2 = geom2;
 
-        threeScene.add(mesh);
-        threeMeshes.push(mesh);
-        meshIndices.push(threeMeshes.length - 1);
+      const threeColor = new THREE.Color(item.color);
+      const material = new THREE.MeshPhongMaterial({
+        color: threeColor,
+        specular: 0x444444,
+        shininess: 30,
+        side: THREE.DoubleSide,
+        transparent: item.opacity < 1,
+        opacity: item.opacity
       });
+
+      const mesh = new THREE.Mesh(geometry, material);
+
+      // Position mesh to match 2D canvas coordinates
+      const bbox = item.bbox; // {x, y, x2, y2}
+
+      mesh.position.x = 0;
+      mesh.position.y = 0;
+      mesh.position.z = 0;
+
+      // Tag with 2D bounding box for smart STL export grouping
+      mesh.userData.bbox2D = item.bbox;
+      mesh.userData.colorHex = item.color;
+      mesh.userData.groupId = item.groupId;
+      mesh.userData.isJSCAD = true;
+
+      threeScene.add(mesh);
+      threeMeshes.push(mesh);
 
       if (!threeExtrusionLevels[item.color]) {
         threeExtrusionLevels[item.color] = { extrusion: extrusionDepth, meshes: [] };
+        if (threeVisibilityState[item.color] === undefined) {
+          threeVisibilityState[item.color] = true;
+        }
       }
-      threeExtrusionLevels[item.color].meshes.push(...meshIndices.map(idx => threeMeshes[idx]));
+      mesh.visible = threeVisibilityState[item.color];
+      threeExtrusionLevels[item.color].meshes.push(mesh);
 
       // Track color groups for UI
       if (!colorGroups[item.color]) {
@@ -4340,7 +5461,7 @@ function build3DObjects() {
   // Build extrusion controls
   buildExtrusionControls(colorGroups);
 
-  // STEP 3: Center scene
+  // STEP 3: Position objects so front face is at z=0 (not center)
   if (threeCamera && threeControls && threeMeshes.length > 0) {
     const globalBBox = new THREE.Box3();
     threeMeshes.forEach(mesh => {
@@ -4351,21 +5472,23 @@ function build3DObjects() {
     const center = new THREE.Vector3();
     globalBBox.getCenter(center);
 
+    const size = new THREE.Vector3();
+    globalBBox.getSize(size);
+
+    // Center X and Y, but keep front face at z=0
     threeMeshes.forEach(mesh => {
       mesh.position.x -= center.x;
       mesh.position.y -= center.y;
-      mesh.position.z -= center.z;
+      // Move mesh so front face (min Z) is at z=0 instead of centered
+      mesh.position.z -= globalBBox.min.z;
     });
-
-    const size = new THREE.Vector3();
-    globalBBox.getSize(size);
 
     const maxDim = Math.max(size.x, size.y, size.z);
     const fov = threeCamera.fov * (Math.PI / 180);
     let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.3;
 
     threeCamera.position.set(0, 0, cameraZ);
-    threeControls.target.set(0, 0, 0);
+    threeControls.target.set(0, 0, size.z / 2); // Look at center of extruded depth
     threeControls.update();
   }
 }
@@ -4670,158 +5793,143 @@ function getLetterPathData(letter, ctx) {
   }
 }
 
-function createShapesFromPath(pathString) {
-  const shapes = [];
-  
-  try {
-    // Parse path string into commands
-    const commands = parseSVGPath(pathString);
-    if (!commands.length) return shapes;
-    
-    // Group commands into separate paths (by M command)
-    const paths = [];
-    let currentPath = [];
-    
-    commands.forEach(cmd => {
-      if (cmd.type === 'M') {
-        if (currentPath.length) {
-          paths.push(currentPath);
-        }
-        currentPath = [cmd];
-      } else {
-        currentPath.push(cmd);
-      }
-    });
-    
-    if (currentPath.length) {
-      paths.push(currentPath);
-    }
-    
-    // Convert each path to a THREE.Shape
-    paths.forEach(pathCommands => {
-      const shape = new THREE.Shape();
-      let started = false;
-      
-      pathCommands.forEach(cmd => {
-        if (cmd.type === 'M') {
-          shape.moveTo(cmd.x, -cmd.y); // Flip Y for Three.js
-          started = true;
-        } else if (cmd.type === 'L' && started) {
-          shape.lineTo(cmd.x, -cmd.y);
-        } else if (cmd.type === 'C' && started) {
-          shape.bezierCurveTo(cmd.x1, -cmd.y1, cmd.x2, -cmd.y2, cmd.x, -cmd.y);
-        } else if (cmd.type === 'Q' && started) {
-          shape.quadraticCurveTo(cmd.x1, -cmd.y1, cmd.x, -cmd.y);
-        } else if (cmd.type === 'Z' && started) {
-          shape.closePath();
-        }
-      });
-      
-      if (started) {
-        shapes.push(shape);
-      }
-    });
-    
-  } catch (e) {
-    console.error('Error creating shapes from path:', e);
-  }
-  
-  return shapes;
-}
-
 function parseSVGPath(pathString) {
+  if (!pathString) return [];
   const commands = [];
-  const regex = /([MLHVCSQTAZmlhvcsqtaz])|(-?\d*\.?\d+)/g;
+  const regex = /([MLHVCSQTAZmlhvcsqtaz])|(-?\d*\.?\d+(?:e[-+]?\d+)?)/g;
   let match;
   let currentCmd = null;
   let args = [];
   
   while ((match = regex.exec(pathString)) !== null) {
     if (match[1]) {
-      // Push previous command if exists
       if (currentCmd) {
-        commands.push({ type: currentCmd.toUpperCase(), args });
+        commands.push({ type: currentCmd, args });
       }
       currentCmd = match[1];
       args = [];
-    } else if (match[2] && currentCmd) {
+    } else if (match[2]) {
       args.push(parseFloat(match[2]));
     }
   }
-  
-  // Push last command
-  if (currentCmd) {
-    commands.push({ type: currentCmd.toUpperCase(), args });
-  }
-  
-  // Convert to structured commands
+  if (currentCmd) commands.push({ type: currentCmd, args });
+
   const result = [];
-  let i = 0;
+  let cx = 0, cy = 0;
+  let subpathX = 0, subpathY = 0;
   
-  while (i < commands.length) {
-    const cmd = commands[i];
+  commands.forEach(cmd => {
     const type = cmd.type;
-    
-    if (type === 'M') {
-      result.push({ type: 'M', x: cmd.args[0], y: cmd.args[1] });
-    } else if (type === 'L') {
-      result.push({ type: 'L', x: cmd.args[0], y: cmd.args[1] });
-    } else if (type === 'H') {
-      result.push({ type: 'H', x: cmd.args[0] });
-    } else if (type === 'V') {
-      result.push({ type: 'V', y: cmd.args[0] });
-    } else if (type === 'C') {
-      result.push({
-        type: 'C',
-        x1: cmd.args[0], y1: cmd.args[1],
-        x2: cmd.args[2], y2: cmd.args[3],
-        x: cmd.args[4], y: cmd.args[5]
-      });
-    } else if (type === 'Q') {
-      result.push({
-        type: 'Q',
-        x1: cmd.args[0], y1: cmd.args[1],
-        x: cmd.args[2], y: cmd.args[3]
-      });
-    } else if (type === 'Z') {
+    const UC = type.toUpperCase();
+    const rel = type !== UC;
+    const a = cmd.args;
+    let k = 0;
+
+    if (UC === 'M') {
+      if (a.length >= 2) {
+        cx = a[0] + (rel ? cx : 0);
+        cy = a[1] + (rel ? cy : 0);
+        result.push({ type: 'M', x: cx, y: cy });
+        subpathX = cx; subpathY = cy;
+        k = 2;
+        while (k + 1 < a.length) {
+          cx = a[k] + (rel ? cx : 0);
+          cy = a[k+1] + (rel ? cy : 0);
+          result.push({ type: 'L', x: cx, y: cy });
+          k += 2;
+        }
+      }
+    } else if (UC === 'L') {
+      while (k + 1 < a.length) {
+        cx = a[k] + (rel ? cx : 0);
+        cy = a[k+1] + (rel ? cy : 0);
+        result.push({ type: 'L', x: cx, y: cy });
+        k += 2;
+      }
+    } else if (UC === 'H') {
+      while (k < a.length) {
+        cx = a[k] + (rel ? cx : 0);
+        result.push({ type: 'L', x: cx, y: cy });
+        k++;
+      }
+    } else if (UC === 'V') {
+      while (k < a.length) {
+        cy = a[k] + (rel ? cy : 0);
+        result.push({ type: 'L', x: cx, y: cy });
+        k++;
+      }
+    } else if (UC === 'C') {
+      while (k + 5 < a.length) {
+        const x1 = a[k] + (rel ? cx : 0);
+        const y1 = a[k+1] + (rel ? cy : 0);
+        const x2 = a[k+2] + (rel ? cx : 0);
+        const y2 = a[k+3] + (rel ? cy : 0);
+        const x = a[k+4] + (rel ? cx : 0);
+        const y = a[k+5] + (rel ? cy : 0);
+        result.push({ type: 'C', x1, y1, x2, y2, x, y });
+        cx = x; cy = y;
+        k += 6;
+      }
+    } else if (UC === 'Q') {
+      while (k + 3 < a.length) {
+        const x1 = a[k] + (rel ? cx : 0);
+        const y1 = a[k+1] + (rel ? cy : 0);
+        const x = a[k+2] + (rel ? cx : 0);
+        const y = a[k+3] + (rel ? cy : 0);
+        result.push({ type: 'Q', x1, y1, x, y });
+        cx = x; cy = y;
+        k += 4;
+      }
+    } else if (UC === 'Z') {
       result.push({ type: 'Z' });
+      cx = subpathX; cy = subpathY;
     }
-    // Add more command types as needed
-    
-    i++;
-  }
-  
+  });
   return result;
 }
 
 function buildExtrusionControls(colorGroups) {
   const container = document.getElementById('extrusion-controls');
   container.innerHTML = '';
-  
+
   const colors = Object.keys(colorGroups);
-  
+
   if (colors.length === 0) {
     container.innerHTML = '<div style="color:var(--muted);font-size:10px;text-align:center;padding:12px">Nessun colore</div>';
     return;
   }
-  
+
   colors.forEach((color, idx) => {
     const controlDiv = document.createElement('div');
     controlDiv.style.cssText = 'margin-bottom:6px;padding:6px 8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);';
-    
-    // Header: Colore N
+    controlDiv.dataset.color = color;
+
+    // Header: Colore N + visibility toggle
     const label = document.createElement('div');
     label.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;';
-    
+
     const colorBox = document.createElement('div');
     colorBox.style.cssText = `width:14px;height:14px;border-radius:3px;background:${color};border:1px solid var(--border);flex-shrink:0;`;
-    
+
     const colorText = document.createElement('span');
     colorText.style.cssText = 'flex:1;font-size:10px;font-weight:600;color:var(--text);';
     colorText.textContent = `Colore ${idx + 1}`;
-    
+
+    // Eye button for visibility toggle
+    const eyeBtn = document.createElement('button');
+    eyeBtn.style.cssText = 'width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);font-size:14px;padding:0;flex-shrink:0;';
+    const isVisible = threeVisibilityState[color] !== false; // default to true
+    eyeBtn.innerHTML = isVisible ? '👁' : '👁‍🗨';
+    eyeBtn.style.opacity = isVisible ? '1' : '0.5';
+    eyeBtn.title = 'Mostra/Nascondi oggetto';
+    eyeBtn.dataset.color = color;
+    eyeBtn.addEventListener('click', () => {
+      toggleColorVisibility(color);
+    });
+
     label.appendChild(colorBox);
     label.appendChild(colorText);
+    label.appendChild(eyeBtn);
     controlDiv.appendChild(label);
     
     // Slider + input sulla stessa riga
@@ -4873,27 +5981,479 @@ function updateExtrusion(color, newDepth) {
 
   threeExtrusionLevels[color].extrusion = newDepth;
 
-  // Update meshes for this color
+  // Update meshes for this color using OpenJSCAD ONLY
   threeExtrusionLevels[color].meshes.forEach(mesh => {
-    if (!mesh.geometry || !mesh.geometry.parameters) return;
+    // Skip boolean operation results - their geometry is fixed
+    if (mesh.userData && mesh.userData.isBooleanResult) {
+      return;
+    }
 
-    // Get the original shapes from the geometry
-    const shapes = mesh.geometry.parameters.shapes;
-    const shapeArray = Array.isArray(shapes) ? shapes : [shapes];
+    // OpenJSCAD-based extrusion rebuild
+    if (mesh.geometry && mesh.geometry.userData && mesh.geometry.userData.originalGeom2) {
+      // Re-extrude the stored geom2 with new depth
+      try {
+        const geom2 = mesh.geometry.userData.originalGeom2;
+        const newGeom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(geom2, newDepth);
+        if (newGeom3) {
+          const newGeometry = window.OpenJSCADBridge.geom3ToThreeGeometry(newGeom3);
+          // Preserve userData for rebuild operations
+          newGeometry.userData.isJSCAD = true;
+          newGeometry.userData.csgDepth = newDepth;
+          newGeometry.userData.originalPathD = mesh.geometry.userData.originalPathD;
+          newGeometry.userData.originalGeom2 = geom2;
 
-    // Create new geometry with updated depth
-    const newGeometry = new THREE.ExtrudeGeometry(shapeArray, {
-      depth: newDepth,
-      bevelEnabled: threeGraphicsSettings.smoothShading,
-      bevelThickness: 1,
-      bevelSize: 0.5,
-      bevelSegments: 2,
-      curveSegments: 12
-    });
+          mesh.geometry.dispose();
+          mesh.geometry = newGeometry;
+        }
+      } catch (err) {
+        console.error('⚠ Failed to re-extrude with OpenJSCAD:', err.message);
+      }
+    } else if (mesh.geometry && mesh.geometry.parameters && mesh.geometry.parameters.shapes) {
+      // Legacy Three.js ExtrudeGeometry fallback (for backwards compatibility)
+      const shapes = mesh.geometry.parameters.shapes;
+      const shapeArray = Array.isArray(shapes) ? shapes : [shapes];
 
-    mesh.geometry.dispose();
-    mesh.geometry = newGeometry;
+      const newGeometry = new THREE.ExtrudeGeometry(shapeArray, {
+        depth: newDepth,
+        bevelEnabled: false,
+        curveSegments: threeGraphicsSettings.smoothShading ? 16 : 6
+      });
+
+      mesh.geometry.dispose();
+      mesh.geometry = newGeometry;
+    }
   });
+}
+
+function toggleColorVisibility(color) {
+  if (!threeExtrusionLevels[color]) return;
+  
+  // Toggle visibility state
+  if (threeVisibilityState[color] === undefined) {
+    threeVisibilityState[color] = true; // visible by default
+  }
+  threeVisibilityState[color] = !threeVisibilityState[color];
+  
+  const isVisible = threeVisibilityState[color];
+  
+  // Update all meshes for this color
+  threeExtrusionLevels[color].meshes.forEach(mesh => {
+    mesh.visible = isVisible;
+    
+    // If hiding, remove from selection
+    if (!isVisible) {
+      const idx = threeSelectionOrder.indexOf(mesh);
+      if (idx !== -1) {
+        threeSelectionOrder.splice(idx, 1);
+      }
+    }
+  });
+  
+  // Update selection indicators
+  if (!isVisible) {
+    clear3DSelection();
+    updateSelectionIndicators();
+  }
+  
+  // Update eye button icon
+  const eyeBtn = document.querySelector(`#extrusion-controls button[data-color="${color}"]`);
+  if (eyeBtn) {
+    eyeBtn.innerHTML = isVisible ? '👁' : '👁‍🗨';
+    eyeBtn.style.opacity = isVisible ? '1' : '0.5';
+  }
+  
+  toast(`Colore ${isVisible ? 'visibile' : 'nascosto'}`);
+}
+
+// ── 3D OBJECT SELECTION ───────────────────────────────────────────────────
+
+function on3DObjectClick(event) {
+  if (!threeScene || !threeCamera || !threeRenderer) return;
+
+  const rect = threeRenderer.domElement.getBoundingClientRect();
+  threeMouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  threeMouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  threeRaycaster.setFromCamera(threeMouse, threeCamera);
+  // Filter only visible meshes for raycasting
+  const visibleMeshes = threeMeshes.filter(m => m.visible);
+  const intersects = threeRaycaster.intersectObjects(visibleMeshes, false);
+
+  if (intersects.length > 0) {
+    const clickedMesh = intersects[0].object;
+
+    // Se la mesh ha un groupId, seleziona tutte le mesh dello stesso gruppo
+    if (clickedMesh.userData.groupId) {
+      clear3DSelection();
+      
+      // Trova e seleziona tutte le mesh con lo stesso groupId
+      const groupId = clickedMesh.userData.groupId;
+      const groupMeshes = threeMeshes.filter(m => m.userData.groupId === groupId && m.visible);
+      
+      groupMeshes.forEach(mesh => {
+        threeSelectionOrder.push(mesh);
+      });
+      
+      // Mostra un unico bounding box per tutto il gruppo
+      addSelectionIndicatorForGroup(groupMeshes);
+      
+      if (groupMeshes.length > 1) {
+        toast(`Gruppo ${groupId} selezionato: ${groupMeshes.length} oggetti`);
+      } else {
+        toast('Oggetto selezionato');
+      }
+      update3DSelectionHUD();
+    } else {
+      // Mesh senza groupId: selezione singola normale
+      const existingIndex = threeSelectionOrder.indexOf(clickedMesh);
+
+      if (event.shiftKey) {
+        // Shift+click: Add to selection
+        if (existingIndex === -1) {
+          if (threeSelectionOrder.length >= 2) {
+            toast('Seleziona massimo 2 oggetti per le operazioni booleane');
+            return;
+          }
+          threeSelectionOrder.push(clickedMesh);
+          addSelectionIndicator(clickedMesh);
+          if (threeSelectionOrder.length === 2) {
+            toast('✓ DESTINATARIO selezionato (arancio) — ora puoi Unire o Sottrarre');
+          }
+          update3DSelectionHUD();
+        } else {
+          // Click su già selezionato: deseleziona
+          threeSelectionOrder.splice(existingIndex, 1);
+          clear3DSelection();
+          threeSelectionOrder.forEach(m => addSelectionIndicator(m));
+          update3DSelectionHUD();
+        }
+      } else {
+        // Regular click: Select only this object
+        clear3DSelection();
+        threeSelectionOrder.push(clickedMesh);
+        addSelectionIndicator(clickedMesh);
+        toast('🔧 UTENSILE selezionato (verde) — Shift+click per scegliere il DESTINATARIO');
+        update3DSelectionHUD();
+      }
+    }
+  } else {
+    // Clicked on empty space - clear selection
+    clear3DSelection();
+  }
+}
+
+function on3DObjectDblClick(event) {
+  // Double click: clear selection
+  clear3DSelection();
+  toast('Selezione annullata');
+}
+
+function addSelectionIndicator(mesh) {
+  // Create a wireframe box around the selected mesh
+  const bbox = new THREE.Box3().setFromObject(mesh);
+  const size = bbox.getSize(new THREE.Vector3());
+  const center = bbox.getCenter(new THREE.Vector3());
+
+  const isFirst = threeSelectionOrder.indexOf(mesh) === 0;
+  const color = isFirst ? 0x00ff88 : 0xff6b35;
+
+  const geometry = new THREE.BoxGeometry(size.x * 1.02, size.y * 1.02, size.z * 1.02);
+  const edges = new THREE.EdgesGeometry(geometry);
+  const material = new THREE.LineBasicMaterial({
+    color: color,
+    linewidth: 2
+  });
+  const wireframe = new THREE.LineSegments(edges, material);
+  wireframe.position.copy(center);
+  wireframe.userData.targetMesh = mesh;
+  wireframe.userData.selectionRole = isFirst ? 'cutter' : 'target';
+
+  threeScene.add(wireframe);
+  threeSelectionIndicator.push(wireframe);
+}
+
+function addSelectionIndicatorForGroup(meshes) {
+  // Calcola il bounding box combinato di tutte le mesh del gruppo
+  const combinedBBox = new THREE.Box3();
+  meshes.forEach(mesh => {
+    const bbox = new THREE.Box3().setFromObject(mesh);
+    combinedBBox.union(bbox);
+  });
+
+  const size = combinedBBox.getSize(new THREE.Vector3());
+  const center = combinedBBox.getCenter(new THREE.Vector3());
+
+  const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+  const edges = new THREE.EdgesGeometry(geometry);
+  const material = new THREE.LineBasicMaterial({
+    color: 0x00ff88, // Verde per il gruppo
+    linewidth: 2
+  });
+  const wireframe = new THREE.LineSegments(edges, material);
+  wireframe.position.copy(center);
+  wireframe.userData.targetMeshes = meshes; // Riferimento a tutte le mesh del gruppo
+
+  threeScene.add(wireframe);
+  threeSelectionIndicator.push(wireframe);
+}
+
+function clear3DSelection() {
+  // Remove all indicators
+  threeSelectionIndicator.forEach(ind => {
+    if (threeScene) threeScene.remove(ind);
+    if (ind.geometry) ind.geometry.dispose();
+    if (ind.material) ind.material.dispose();
+  });
+  threeSelectionIndicator = [];
+  threeSelectionOrder = [];
+  update3DSelectionHUD();
+}
+
+// ── 3D SELECTION HUD ─────────────────────────────────────────────────────
+function update3DSelectionHUD() {
+  let hud = document.getElementById('sel3d-hud');
+  if (!hud) {
+    hud = document.createElement('div');
+    hud.id = 'sel3d-hud';
+    hud.style.cssText = 'position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:200;pointer-events:none;';
+    const canvas3d = document.getElementById('preview-3d-canvas');
+    if (canvas3d) canvas3d.appendChild(hud);
+  }
+
+  if (threeSelectionOrder.length === 0) {
+    hud.innerHTML = '<div style="background:rgba(0,0,0,.6);color:#5a5a7a;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #2a2a3a;">Click oggetto per selezionare · Shift+click per secondo</div>';
+    return;
+  }
+
+  let html = '';
+  if (threeSelectionOrder.length >= 1) {
+    html += '<div style="background:rgba(0,255,136,.12);color:#00ff88;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #00ff88;">① UTENSILE <span style="opacity:.6">(taglia/unisce)</span></div>';
+  }
+  if (threeSelectionOrder.length === 1) {
+    html += '<div style="background:rgba(0,0,0,.6);color:#5a5a7a;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px dashed #3a3a4a;">② Shift+click → DESTINATARIO</div>';
+  }
+  if (threeSelectionOrder.length >= 2) {
+    html += '<div style="background:rgba(255,107,53,.12);color:#ff6b35;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ff6b35;">② DESTINATARIO <span style="opacity:.6">(viene modificato)</span></div>';
+    html += '<div style="background:rgba(200,255,0,.1);color:#c8ff00;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #c8ff00;">↑ Premi Unisci o Sottrai</div>';
+  }
+  hud.innerHTML = html;
+}
+
+function updateSelectionIndicators() {
+  // Remove old indicators
+  threeSelectionIndicator.forEach(ind => {
+    if (threeScene) threeScene.remove(ind);
+    if (ind.geometry) ind.geometry.dispose();
+    if (ind.material) ind.material.dispose();
+  });
+  threeSelectionIndicator = [];
+  
+  // Add new indicators with role-based colors
+  threeSelectionOrder.forEach((mesh, idx) => {
+    const bbox = new THREE.Box3().setFromObject(mesh);
+    const size = bbox.getSize(new THREE.Vector3());
+    const center = bbox.getCenter(new THREE.Vector3());
+    
+    const color = idx === 0 ? 0x00ff88 : 0xff6b35;
+    const geometry = new THREE.BoxGeometry(size.x * 1.02, size.y * 1.02, size.z * 1.02);
+    const edges = new THREE.EdgesGeometry(geometry);
+    const material = new THREE.LineBasicMaterial({ 
+      color: color,
+      linewidth: 2
+    });
+    const wireframe = new THREE.LineSegments(edges, material);
+    wireframe.position.copy(center);
+    wireframe.userData.targetMesh = mesh;
+    wireframe.userData.selectionRole = idx === 0 ? 'cutter' : 'target';
+    
+    threeScene.add(wireframe);
+    threeSelectionIndicator.push(wireframe);
+  });
+
+  update3DSelectionHUD();
+}
+
+// ── 3D BOOLEAN OPERATIONS ─────────────────────────────────────────────────
+
+function union3DObjects() {
+  if (threeSelectionOrder.length !== 2) {
+    toast('Seleziona esattamente 2 oggetti per l\'unione (Shift+click)');
+    return;
+  }
+
+  const meshA = threeSelectionOrder[0];
+  const meshB = threeSelectionOrder[1];
+
+  try {
+    toast('Esecuzione unione in corso...');
+
+    const colorA = meshA.material.color.getHex();
+
+    // Try OpenJSCAD first, fallback to legacy CSG
+    if (window.OpenJSCADBridge && window.OpenJSCADBridge.initialized) {
+      console.log('✓ Using OpenJSCAD for union operation');
+      
+      const resultMesh = window.OpenJSCADBridge.booleanOperation('union', meshA, meshB, colorA);
+      
+      if (!resultMesh) {
+        toast('Errore: unione non ha prodotto geometria');
+        return;
+      }
+
+      // Remove originals
+      threeScene.remove(meshA);
+      threeScene.remove(meshB);
+      meshA.geometry.dispose(); meshA.material.dispose();
+      meshB.geometry.dispose(); meshB.material.dispose();
+      const idxA = threeMeshes.indexOf(meshA), idxB = threeMeshes.indexOf(meshB);
+      if (idxA !== -1) threeMeshes.splice(idxA, 1);
+      if (idxB !== -1) threeMeshes.splice(idxB, 1);
+
+      threeScene.add(resultMesh);
+      threeMeshes.push(resultMesh);
+      clear3DSelection();
+      
+      const triCount = resultMesh.geometry.attributes.position.count / 3;
+      toast(`✓ Unione completata! (${triCount} triangoli, OpenJSCAD)`);
+      console.log(`✓ Union done: ${triCount} triangles, watertight: true`);
+      return;
+    }
+
+    // Fallback to legacy CSG (BSP-based boolean union)
+    console.warn('⚠ OpenJSCAD not available, using legacy CSG');
+    toast('⚠ OpenJSCAD non disponibile, uso CSG legacy');
+
+    const csgA = CSG.fromMesh(meshA, colorA);
+    const csgB = CSG.fromMesh(meshB, colorA);
+
+    if (csgA.polygons.length === 0 || csgB.polygons.length === 0) {
+      toast('Errore: geometria non valida per CSG');
+      return;
+    }
+
+    console.log(`MeshA: ${csgA.polygons.length} poly, MeshB: ${csgB.polygons.length} poly`);
+
+    const csgResult = csgA.union(csgB);
+    console.log(`Union result: ${csgResult.polygons.length} poly`);
+
+    if (csgResult.polygons.length === 0) {
+      toast('Errore: unione non ha prodotto geometria');
+      return;
+    }
+
+    const resultMesh = csgResult.toMesh(colorA);
+    if (!resultMesh) {
+      toast('Errore: mesh risultante vuota');
+      return;
+    }
+
+    // Remove originals
+    threeScene.remove(meshA);
+    threeScene.remove(meshB);
+    meshA.geometry.dispose(); meshA.material.dispose();
+    meshB.geometry.dispose(); meshB.material.dispose();
+    const idxA = threeMeshes.indexOf(meshA), idxB = threeMeshes.indexOf(meshB);
+    if (idxA !== -1) threeMeshes.splice(idxA, 1);
+    if (idxB !== -1) threeMeshes.splice(idxB, 1);
+
+    resultMesh.userData.isBooleanResult = true;
+    resultMesh.userData.originalColor = colorA;
+    threeScene.add(resultMesh);
+    threeMeshes.push(resultMesh);
+    clear3DSelection();
+    const triCountLeg = resultMesh.geometry.attributes.position ? resultMesh.geometry.attributes.position.count / 3 : '?';
+    toast(`✓ Unione completata! (${triCountLeg} triangoli, CSG legacy)`);
+  } catch (e) {
+    console.error('Errore unione 3D:', e);
+    toast('Errore durante l\'unione: ' + e.message);
+  }
+}
+
+function subtract3DObjects() {
+  console.log('=== SUBTRACT FUNCTION CALLED ===');
+
+  if (threeSelectionOrder.length !== 2) {
+    toast('Seleziona esattamente 2 oggetti per la sottrazione (Shift+click)');
+    return;
+  }
+
+  // Selection order: first clicked = cutter (utensile), second clicked = target (destinazione)
+  const cutter = threeSelectionOrder[0];
+  const target = threeSelectionOrder[1];
+
+  try {
+    toast('Sottrazione in corso...');
+    const colorTarget = target.material.color.getHex();
+
+    // UNIFIED: Use OpenJSCAD exclusively for boolean operations
+    if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) {
+      toast('Errore: OpenJSCAD non disponibile per le operazioni booleane');
+      return;
+    }
+
+    console.log('✓ Using OpenJSCAD for subtract operation');
+
+    // Perform boolean subtraction using OpenJSCAD: target - cutter
+    const resultMesh = window.OpenJSCADBridge.booleanOperation('subtract', target, cutter, colorTarget);
+
+    if (!resultMesh) {
+      toast('Errore: sottrazione ha rimosso tutto');
+      return;
+    }
+
+    console.log(`Result mesh: ${resultMesh.geometry.attributes.position.count} vertices`);
+
+    // CRITICAL: Cutter must remain completely unchanged in the scene
+    // Do NOT modify cutter in any way - no material clone, no dispose
+
+    // Replace target with result mesh
+    // Clone target material properties to result
+    const targetMaterialClone = new THREE.MeshPhongMaterial({
+      color: target.material.color.clone(),
+      specular: target.material.specular ? target.material.specular.clone() : new THREE.Color(0x444444),
+      shininess: target.material.shininess || 30,
+      side: THREE.DoubleSide,
+      transparent: target.material.transparent,
+      opacity: target.material.opacity
+    });
+    resultMesh.material.dispose();
+    resultMesh.material = targetMaterialClone;
+
+    // Remove target from scene
+    threeScene.remove(target);
+    target.geometry.dispose();
+    target.material.dispose();
+    const idxTarget = threeMeshes.indexOf(target);
+    if (idxTarget !== -1) threeMeshes.splice(idxTarget, 1);
+
+    // Add result mesh (vertices are already in world space)
+    resultMesh.position.set(0, 0, 0);
+    resultMesh.userData.isBooleanResult = true;
+    resultMesh.userData.isSubtractResult = true;
+
+    threeScene.add(resultMesh);
+    threeMeshes.push(resultMesh);
+
+    // Verify result position
+    resultMesh.updateMatrixWorld(true);
+    const resultBox = new THREE.Box3().setFromObject(resultMesh);
+    console.log(`Result mesh bounds: ${resultBox.min.x.toFixed(2)} to ${resultBox.max.x}, ${resultBox.min.y.toFixed(2)} to ${resultBox.max.y}`);
+
+    if (threeControls) threeControls.update();
+    if (threeRenderer && threeScene && threeCamera) {
+      threeRenderer.render(threeScene, threeCamera);
+    }
+
+    clear3DSelection();
+
+    const triCount = resultMesh.geometry.attributes.position.count / 3;
+    toast(`✓ Sottrazione completata! ${triCount} triangoli (OpenJSCAD)`);
+    console.log(`✓ Subtract done: ${triCount} triangles, cutter unchanged`);
+
+  } catch (e) {
+    console.error('❌ Errore sottrazione:', e);
+    toast('Errore: ' + e.message);
+  }
 }
 
 function start3DAnimation() {
@@ -4959,71 +6519,6 @@ function change3DShininess(value) {
   });
 }
 
-function toggle3DSmoothing(enabled) {
-  threeGraphicsSettings.smoothShading = enabled;
-  const label = document.getElementById('smoothing-label');
-  if (label) label.textContent = enabled ? 'Attiva' : 'Disattiva';
-  
-  // Salva valori di estrusione correnti
-  const savedExtrusions = {};
-  for (const color in threeExtrusionLevels) {
-    savedExtrusions[color] = threeExtrusionLevels[color].extrusion;
-  }
-  
-  // Salva posizione camera e target
-  const savedCameraPos = threeCamera ? threeCamera.position.clone() : null;
-  const savedTarget = threeControls ? threeControls.target.clone() : null;
-  
-  // Distruggi tutte le mesh correnti
-  threeMeshes.forEach(mesh => {
-    if (mesh.geometry) mesh.geometry.dispose();
-    if (mesh.material) mesh.material.dispose();
-    threeScene.remove(mesh);
-  });
-  threeMeshes = [];
-  threeExtrusionLevels = {};
-  
-  // Ricostruisci le mesh con il nuovo bevel setting
-  build3DObjects();
-  
-  // Ripristina valori di estrusione nelle mesh
-  for (const color in savedExtrusions) {
-    if (threeExtrusionLevels[color]) {
-      threeExtrusionLevels[color].extrusion = savedExtrusions[color];
-      updateExtrusion(color, savedExtrusions[color]);
-    }
-  }
-  
-  // Aggiorna UI slider con valori salvati
-  const extrusionContainer = document.getElementById('extrusion-controls');
-  if (extrusionContainer) {
-    const sliders = extrusionContainer.querySelectorAll('input[type="range"]');
-    const numberInputs = extrusionContainer.querySelectorAll('input[type="number"]');
-    const colors = Object.keys(savedExtrusions);
-    
-    colors.forEach((color, index) => {
-      if (index < sliders.length) {
-        sliders[index].value = savedExtrusions[color];
-      }
-      if (index < numberInputs.length) {
-        numberInputs[index].value = savedExtrusions[color];
-      }
-    });
-  }
-  
-  // Ripristina posizione camera
-  if (savedCameraPos && threeCamera) {
-    threeCamera.position.copy(savedCameraPos);
-  }
-  if (savedTarget && threeControls) {
-    threeControls.target.copy(savedTarget);
-    threeControls.update();
-  }
-  
-  // Toast per feedback utente
-  toast(enabled ? 'Smussatura attivata ✓' : 'Smussatura disattivata ✓');
-}
-
 // ── ELECTRON AUTO-UPDATE INTEGRATION ─────────────────────────────────────
 if (window.electronAPI && window.electronAPI.onUpdateStatus) {
   window.electronAPI.onUpdateStatus(handleUpdateStatus);
@@ -5052,17 +6547,6 @@ let threeJSState = {
   isInitialized: false,
   animationId: null
 };
-
-function toggle3DPreview() {
-  const panel = document.getElementById('preview-3d-panel');
-  if (panel.style.display === 'none' || panel.style.display === '') {
-    panel.style.display = 'flex';
-    init3DPreview();
-    update3DPreview();
-  } else {
-    panel.style.display = 'none';
-  }
-}
 
 function init3DPreview() {
   if (threeJSState.isInitialized) return;
@@ -5402,10 +6886,14 @@ function update3DPreview() {
         bevelEnabled: false,
         curveSegments: 12
       });
-      
-      // Center geometry
-      geometry.center();
-      
+
+      // Center X and Y, but keep front face at z=0
+      geometry.computeBoundingBox();
+      const bbox = geometry.boundingBox;
+      const centerX = (bbox.max.x + bbox.min.x) / 2;
+      const centerY = (bbox.max.y + bbox.min.y) / 2;
+      geometry.translate(-centerX, -centerY, -bbox.min.z);
+
       // Rotate to align with SVG coordinate system (Y is flipped in SVG)
       geometry.rotateX(Math.PI / 2);
       
@@ -5453,160 +6941,415 @@ function fitCameraToObject() {
   threeJSState.controls.update();
 }
 
-// Export 3D scene to STL file
-function exportToSTL() {
-  if (!threeScene || threeMeshes.length === 0) {
-    toast('Nessun elemento 3D da esportare!');
-    return;
-  }
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT FUNCTIONS  (STL + 3MF)
+// ═══════════════════════════════════════════════════════════════════
+// Regola di raggruppamento:
+//   • Stesso colore + oggetti che si toccano → UNICO oggetto esportato
+//   • Stesso colore + oggetti NON a contatto → oggetti separati
+//   • Colori diversi → sempre oggetti separati
+//
+// Il rilevamento di contatto usa bounding box world-space con tolleranza
+// adattiva (0.5% della diagonale media) per gestire correttamente il kerning
 
-  try {
-    // Merge all geometries into one
-    const mergedGeometry = new THREE.BufferGeometry();
-    const geometries = [];
-    
-    threeMeshes.forEach(mesh => {
-      const geom = mesh.geometry.clone();
-      geom.applyMatrix4(mesh.matrixWorld);
-      geometries.push(geom);
-    });
-
-    // Manual STL binary export
-    const stlBuffer = createSTLBinaryBuffer(geometries);
-    
-    // Download file
-    const blob = new Blob([stlBuffer], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'letterforge-design.stl';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    toast('STL esportato con successo! ✓');
-  } catch (error) {
-    console.error('STL export error:', error);
-    toast('Errore nell\'esportazione STL: ' + error.message);
+// ── Utility comune: raccoglie triangoli world-space da una mesh ──────────────
+function _collectTrisFromMesh(mesh) {
+  mesh.updateMatrixWorld(true);
+  const geo = mesh.geometry.index
+    ? mesh.geometry.toNonIndexed()
+    : mesh.geometry.clone();
+  geo.applyMatrix4(mesh.matrixWorld);
+  const pos = geo.attributes.position.array;
+  const tris = [];
+  for (let i = 0; i < pos.length; i += 9) {
+    const a = [pos[i],   pos[i+1], pos[i+2]];
+    const b = [pos[i+3], pos[i+4], pos[i+5]];
+    const c = [pos[i+6], pos[i+7], pos[i+8]];
+    // salta triangoli degeneri
+    if (a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2]) continue;
+    if (b[0]===c[0]&&b[1]===c[1]&&b[2]===c[2]) continue;
+    if (a[0]===c[0]&&a[1]===c[1]&&a[2]===c[2]) continue;
+    tris.push([a, b, c]);
   }
+  geo.dispose();
+  return tris;
 }
 
-function createSTLBinaryBuffer(geometries) {
-  // Calculate total triangle count
-  let totalTriangles = 0;
-  geometries.forEach(geom => {
-    if (geom.index) {
-      totalTriangles += geom.index.count / 3;
-    } else {
-      totalTriangles += geom.attributes.position.count / 3;
-    }
+// ── Raggruppa mesh per colore + connettività (Union-Find su bbox world-space) ──
+// Regola:
+//   • stesso colore + bboxes che si toccano/sovrappongono → stesso gruppo
+//   • stesso colore ma separati nello spazio → gruppi distinti
+//   • colori diversi → sempre gruppi distinti
+//
+// La tolleranza di contatto è calcolata come percentuale della dimensione media
+// dei glifi per adattarsi sia a testi grandi che piccoli, ma rimane piccola
+// (≤ 1% della dimensione) così parole separate non si fondono.
+function _groupMeshesConnected() {
+  if (!threeScene || threeMeshes.length === 0) return null;
+  // Exclude hidden objects AND subtracted cutters from export
+  const active = threeMeshes.filter(m => 
+    threeScene.children.includes(m) && 
+    m.visible && 
+    !m.userData.isSubtracted
+  );
+  if (!active.length) return null;
+  const n = active.length;
+
+  // Calcola bounding box world-space reale per ogni mesh
+  const bboxes = active.map(mesh => {
+    mesh.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(mesh);
+    return { minX: bb.min.x, minY: bb.min.y, maxX: bb.max.x, maxY: bb.max.y };
   });
 
-  // Binary STL format:
-  // 80 bytes header
-  // 4 bytes triangle count
-  // Per triangle: 12 bytes normal + 36 bytes vertices (3×12) + 2 bytes attribute = 50 bytes
-  const bufferSize = 80 + 4 + (totalTriangles * 50);
-  const buffer = new ArrayBuffer(bufferSize);
-  const view = new DataView(buffer);
-  
-  // Header (80 bytes) - fill with zeros
-  for (let i = 0; i < 80; i++) {
-    view.setUint8(i, 0);
+  // Tolleranza adattiva: 0.5% della diagonale media delle mesh
+  // — abbastanza grande da catturare lettere a kerning zero,
+  //   abbastanza piccola da non unire parole separate da spazio bianco
+  const avgDiag = bboxes.reduce((s, b) => {
+    const w = b.maxX - b.minX, h = b.maxY - b.minY;
+    return s + Math.sqrt(w * w + h * h);
+  }, 0) / n;
+  const TOL = avgDiag * 0.005; // 0.5%
+
+  // Union-Find
+  const parent = Array.from({ length: n }, (_, i) => i);
+  function find(x) {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
   }
-  
-  // Triangle count
-  view.setUint32(80, totalTriangles, true);
-  
-  let offset = 84;
-  
-  // Write triangles
-  geometries.forEach(geom => {
-    const positions = geom.attributes.position.array;
-    const normals = geom.attributes.normal ? geom.attributes.normal.array : null;
-    const index = geom.index;
-    
-    if (index) {
-      // Indexed geometry
-      for (let i = 0; i < index.count; i += 3) {
-        const i0 = index.getX(i);
-        const i1 = index.getX(i + 1);
-        const i2 = index.getX(i + 2);
-        
-        // Normal (12 bytes: 3 floats)
-        if (normals) {
-          view.setFloat32(offset, normals[i0 * 3], true);
-          view.setFloat32(offset + 4, normals[i0 * 3 + 1], true);
-          view.setFloat32(offset + 8, normals[i0 * 3 + 2], true);
-        } else {
-          // Calculate normal from vertices
-          const ax = positions[i0 * 3], ay = positions[i0 * 3 + 1], az = positions[i0 * 3 + 2];
-          const bx = positions[i1 * 3], by = positions[i1 * 3 + 1], bz = positions[i1 * 3 + 2];
-          const cx = positions[i2 * 3], cy = positions[i2 * 3 + 1], cz = positions[i2 * 3 + 2];
-          
-          const nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
-          const ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
-          const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-          const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-          
-          view.setFloat32(offset, len > 0 ? nx / len : 0, true);
-          view.setFloat32(offset + 4, len > 0 ? ny / len : 0, true);
-          view.setFloat32(offset + 8, len > 0 ? nz / len : 0, true);
-        }
-        offset += 12;
-        
-        // Vertex 1 (12 bytes)
-        view.setFloat32(offset, positions[i0 * 3], true);
-        view.setFloat32(offset + 4, positions[i0 * 3 + 1], true);
-        view.setFloat32(offset + 8, positions[i0 * 3 + 2], true);
-        offset += 12;
-        
-        // Vertex 2 (12 bytes)
-        view.setFloat32(offset, positions[i1 * 3], true);
-        view.setFloat32(offset + 4, positions[i1 * 3 + 1], true);
-        view.setFloat32(offset + 8, positions[i1 * 3 + 2], true);
-        offset += 12;
-        
-        // Vertex 3 (12 bytes)
-        view.setFloat32(offset, positions[i2 * 3], true);
-        view.setFloat32(offset + 4, positions[i2 * 3 + 1], true);
-        view.setFloat32(offset + 8, positions[i2 * 3 + 2], true);
-        offset += 12;
-        
-        // Attribute byte count (2 bytes)
-        view.setUint16(offset, 0, true);
-        offset += 2;
-      }
-    } else {
-      // Non-indexed geometry
-      for (let i = 0; i < positions.length; i += 9) {
-        // Normal (use zero if not available)
-        if (normals) {
-          view.setFloat32(offset, normals[i], true);
-          view.setFloat32(offset + 4, normals[i + 1], true);
-          view.setFloat32(offset + 8, normals[i + 2], true);
-        } else {
-          view.setFloat32(offset, 0, true);
-          view.setFloat32(offset + 4, 0, true);
-          view.setFloat32(offset + 8, 0, true);
-        }
-        offset += 12;
-        
-        // 3 vertices (36 bytes)
-        for (let j = 0; j < 9; j++) {
-          view.setFloat32(offset, positions[i + j], true);
-          offset += 4;
-        }
-        
-        // Attribute byte count
-        view.setUint16(offset, 0, true);
-        offset += 2;
+  function unite(a, b) { parent[find(a)] = find(b); }
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      // Colori diversi → mai unire
+      if (active[i].material.color.getHex() !== active[j].material.color.getHex()) continue;
+      const a = bboxes[i], b = bboxes[j];
+      // Le bboxes si toccano o sovrappongono (con tolleranza TOL)?
+      if (a.maxX + TOL >= b.minX && b.maxX + TOL >= a.minX &&
+          a.maxY + TOL >= b.minY && b.maxY + TOL >= a.minY) {
+        unite(i, j);
       }
     }
+  }
+
+  // Costruisce array di gruppi: ogni gruppo è lista di mesh
+  const rootMap = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    if (!rootMap.has(r)) rootMap.set(r, []);
+    rootMap.get(r).push(active[i]);
+  }
+  return Array.from(rootMap.values()); // Array<mesh[]>
+}
+
+// ── Calcola normale di un triangolo ──────────────────────────────────────────
+function _triNormal(a, b, c) {
+  const ex=b[0]-a[0], ey=b[1]-a[1], ez=b[2]-a[2];
+  const fx=c[0]-a[0], fy=c[1]-a[1], fz=c[2]-a[2];
+  let nx=ey*fz-ez*fy, ny=ez*fx-ex*fz, nz=ex*fy-ey*fx;
+  const ln=Math.sqrt(nx*nx+ny*ny+nz*nz);
+  if(ln>1e-10){nx/=ln;ny/=ln;nz/=ln;}else{nx=0;ny=0;nz=1;}
+  return [nx, ny, nz];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// EXPORT STL  — un file STL per ogni gruppo (colore + connettività)
+// Il formato binario non supporta multi-solido, quindi ogni gruppo viene
+// scaricato come file separato con il colore nell'header
+// ────────────────────────────────────────────────────────────────────────────
+function exportToSTL() {
+  const groupsList = _groupMeshesConnected();
+  if (!groupsList) { toast('Nessun elemento 3D visibile!'); return; }
+
+  let totalFiles = 0;
+  let totalTris  = 0;
+
+  groupsList.forEach((meshes, gi) => {
+    const colorHex = meshes[0].material.color.getHexString();
+    // Raccoglie tutti i triangoli del gruppo
+    const tris = [];
+    meshes.forEach(m => tris.push(..._collectTrisFromMesh(m)));
+    if (!tris.length) return;
+
+    // Scrive STL binario (più compatto e compatibile di ASCII)
+    // Header: 80 byte  |  uint32: numero triangoli  |  triangoli 50 byte ciascuno
+    const n = tris.length;
+    const buf = new ArrayBuffer(84 + n * 50);
+    const view = new DataView(buf);
+
+    // Header ASCII (80 byte) — contiene il colore come info
+    const header = `LetterForge color #${colorHex}`.padEnd(80, ' ');
+    for (let i = 0; i < 80; i++) view.setUint8(i, header.charCodeAt(i) & 0xff);
+
+    // Numero triangoli
+    view.setUint32(80, n, true);
+
+    // Triangoli
+    let offset = 84;
+    tris.forEach(([a, b, c]) => {
+      const [nx, ny, nz] = _triNormal(a, b, c);
+      view.setFloat32(offset,    nx, true); offset += 4;
+      view.setFloat32(offset,    ny, true); offset += 4;
+      view.setFloat32(offset,    nz, true); offset += 4;
+      [a, b, c].forEach(v => {
+        view.setFloat32(offset, v[0], true); offset += 4;
+        view.setFloat32(offset, v[1], true); offset += 4;
+        view.setFloat32(offset, v[2], true); offset += 4;
+      });
+      view.setUint16(offset, 0, true); offset += 2; // attribute byte count
+    });
+
+    // Download
+    const blob = new Blob([buf], { type: 'application/octet-stream' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `letterforge_obj${gi+1}_${colorHex}.stl`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    totalFiles++;
+    totalTris += n;
   });
-  
-  return buffer;
+
+  toast(`STL esportato! ✓  ${totalFiles} file (gruppi connessi per colore), ${totalTris} triangoli totali`);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// EXPORT 3MF  — un unico file .3mf con oggetti separati per ogni gruppo
+// Ogni <object> nel file 3MF rappresenta un insieme di elementi dello stesso
+// colore che si toccano. PrusaSlicer e Bambu Studio importano ogni <object>
+// come oggetto indipendente nella scena
+// ────────────────────────────────────────────────────────────────────────────
+function exportTo3MF() {
+  const groupsList = _groupMeshesConnected();
+  if (!groupsList) { toast('Nessun elemento 3D visibile!'); return; }
+
+  // ── Costruisce XML 3MF ────────────────────────────────────────────────────
+  // Spec: https://3mf.io/specification/
+  // Struttura minima riconosciuta da PrusaSlicer e Bambu Studio:
+  //   3D/3dmodel.model  (XML)
+  //   [Content_Types].xml
+  //   _rels/.rels
+
+  let objectsXml = '';
+  let buildItemsXml = '';
+  let objId = 1;
+
+  groupsList.forEach((meshes) => {
+    const colorHex = meshes[0].material.color.getHexString();
+    const tris = [];
+    meshes.forEach(m => tris.push(..._collectTrisFromMesh(m)));
+    if (!tris.length) return;
+
+    // Costruisce lista vertici unica (welding)
+    const WELD = 1e-4, INV = 1.0 / 1e-4;
+    const vertMap = new Map();
+    const verts = [];
+    let vi = 0;
+    function weld(v) {
+      const ix=Math.round(v[0]*INV), iy=Math.round(v[1]*INV), iz=Math.round(v[2]*INV);
+      const k=ix+','+iy+','+iz;
+      if (vertMap.has(k)) return vertMap.get(k);
+      verts.push([ix*WELD, iy*WELD, iz*WELD]);
+      vertMap.set(k, vi); return vi++;
+    }
+
+    const faces = [];
+    tris.forEach(([a,b,c]) => {
+      const ia=weld(a), ib=weld(b), ic=weld(c);
+      if (ia===ib||ib===ic||ia===ic) return;
+      faces.push([ia, ib, ic]);
+    });
+
+    if (!faces.length) return;
+
+    // XML vertici
+    const vertsXml = verts.map(([x,y,z]) =>
+      `          <vertex x="${x.toFixed(6)}" y="${y.toFixed(6)}" z="${z.toFixed(6)}"/>`
+    ).join('\n');
+
+    // XML triangoli
+    const facesXml = faces.map(([v1,v2,v3]) =>
+      `          <triangle v1="${v1}" v2="${v2}" v3="${v3}"/>`
+    ).join('\n');
+
+    // Colore come sRGB per metadati
+    const r = parseInt(colorHex.substring(0,2),16);
+    const g = parseInt(colorHex.substring(2,4),16);
+    const b = parseInt(colorHex.substring(4,6),16);
+
+    objectsXml += `
+    <object id="${objId}" type="model" name="color_${colorHex}">
+      <mesh>
+        <vertices>
+${vertsXml}
+        </vertices>
+        <triangles>
+${facesXml}
+        </triangles>
+      </mesh>
+    </object>`;
+
+    buildItemsXml += `\n      <item objectid="${objId}"/>`;
+    objId++;
+  });
+
+  if (!objectsXml) { toast('Nessuna geometria da esportare!'); return; }
+
+  // ── Compone i tre file del pacchetto 3MF ─────────────────────────────────
+  const modelXml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US"
+  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+  xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06">
+  <metadata name="Application">LetterForge</metadata>
+  <resources>${objectsXml}
+  </resources>
+  <build>${buildItemsXml}
+  </build>
+</model>`;
+
+  const contentTypesXml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+</Types>`;
+
+  const relsXml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Target="/3D/3dmodel.model" Id="rel0"
+    Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>`;
+
+  // ── Costruisce ZIP manualmente (formato ZIP senza compressione) ───────────
+  // 3MF è uno ZIP rinominato. Usiamo stored (no compression) per semplicità.
+  function strToBytes(str) {
+    return new TextEncoder().encode(str);
+  }
+
+  function makeLocalFileHeader(name, data) {
+    const nameBytes = strToBytes(name);
+    const crc = crc32(data);
+    const buf = new ArrayBuffer(30 + nameBytes.length + data.length);
+    const dv  = new DataView(buf);
+    let o = 0;
+    dv.setUint32(o, 0x04034b50, true); o+=4; // signature
+    dv.setUint16(o, 20, true); o+=2;          // version needed
+    dv.setUint16(o, 0, true);  o+=2;          // flags
+    dv.setUint16(o, 0, true);  o+=2;          // compression: stored
+    dv.setUint16(o, 0, true);  o+=2;          // mod time
+    dv.setUint16(o, 0, true);  o+=2;          // mod date
+    dv.setUint32(o, crc, true); o+=4;         // crc32
+    dv.setUint32(o, data.length, true); o+=4; // compressed size
+    dv.setUint32(o, data.length, true); o+=4; // uncompressed size
+    dv.setUint16(o, nameBytes.length, true); o+=2;
+    dv.setUint16(o, 0, true); o+=2;           // extra field length
+    nameBytes.forEach(b => { dv.setUint8(o++, b); });
+    data.forEach(b => { dv.setUint8(o++, b); });
+    return { buf: new Uint8Array(buf), crc, size: data.length, nameBytes };
+  }
+
+  function makeCentralDir(name, nameBytes, crc, size, offset) {
+    const buf = new ArrayBuffer(46 + nameBytes.length);
+    const dv  = new DataView(buf);
+    let o = 0;
+    dv.setUint32(o, 0x02014b50, true); o+=4;
+    dv.setUint16(o, 20, true); o+=2;
+    dv.setUint16(o, 20, true); o+=2;
+    dv.setUint16(o, 0, true);  o+=2;
+    dv.setUint16(o, 0, true);  o+=2;
+    dv.setUint16(o, 0, true);  o+=2;
+    dv.setUint16(o, 0, true);  o+=2;
+    dv.setUint32(o, crc, true); o+=4;
+    dv.setUint32(o, size, true); o+=4;
+    dv.setUint32(o, size, true); o+=4;
+    dv.setUint16(o, nameBytes.length, true); o+=2;
+    dv.setUint16(o, 0, true); o+=2;
+    dv.setUint16(o, 0, true); o+=2;
+    dv.setUint16(o, 0, true); o+=2;
+    dv.setUint16(o, 0, true); o+=2;
+    dv.setUint32(o, 0, true); o+=4;
+    dv.setUint32(o, offset, true); o+=4;
+    nameBytes.forEach(b => { dv.setUint8(o++, b); });
+    return new Uint8Array(buf);
+  }
+
+  function makeEndOfCentralDir(numEntries, centralDirSize, centralDirOffset) {
+    const buf = new ArrayBuffer(22);
+    const dv  = new DataView(buf);
+    dv.setUint32(0, 0x06054b50, true);
+    dv.setUint16(4, 0, true);
+    dv.setUint16(6, 0, true);
+    dv.setUint16(8, numEntries, true);
+    dv.setUint16(10, numEntries, true);
+    dv.setUint32(12, centralDirSize, true);
+    dv.setUint32(16, centralDirOffset, true);
+    dv.setUint16(20, 0, true);
+    return new Uint8Array(buf);
+  }
+
+  // CRC-32 lookup table
+  function crc32(data) {
+    let crc = 0xFFFFFFFF;
+    const table = crc32.table || (crc32.table = (() => {
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[i] = c;
+      }
+      return t;
+    })());
+    for (let i = 0; i < data.length; i++)
+      crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // Entries: [Content_Types].xml, _rels/.rels, 3D/3dmodel.model
+  const files = [
+    { name: '[Content_Types].xml', data: strToBytes(contentTypesXml) },
+    { name: '_rels/.rels',         data: strToBytes(relsXml) },
+    { name: '3D/3dmodel.model',    data: strToBytes(modelXml) },
+  ];
+
+  const localHeaders = [];
+  const centralDirs  = [];
+  let offset = 0;
+
+  files.forEach(({ name, data }) => {
+    const entry = makeLocalFileHeader(name, data);
+    const cd    = makeCentralDir(name, entry.nameBytes, entry.crc, entry.size, offset);
+    localHeaders.push(entry.buf);
+    centralDirs.push(cd);
+    offset += entry.buf.length;
+  });
+
+  const centralDirOffset = offset;
+  const centralDirBytes  = centralDirs.reduce((a,b) => { const r=new Uint8Array(a.length+b.length); r.set(a); r.set(b,a.length); return r; }, new Uint8Array(0));
+  const eocd = makeEndOfCentralDir(files.length, centralDirBytes.length, centralDirOffset);
+
+  // Concatena tutto
+  const allParts = [...localHeaders, centralDirBytes, eocd];
+  const total = allParts.reduce((s,p) => s + p.length, 0);
+  const zipBytes = new Uint8Array(total);
+  let pos = 0;
+  allParts.forEach(p => { zipBytes.set(p, pos); pos += p.length; });
+
+  // Download
+  const blob = new Blob([zipBytes], { type: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'letterforge-design.3mf';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  const nObj = objId - 1;
+  toast(`3MF esportato! ✓  ${nObj} oggett${nObj===1?'o':'i'} (gruppi connessi per colore)`);
 }
 
 // Hook into render to update 3D preview when canvas changes
@@ -6726,9 +8469,21 @@ function aiExecuteRecolor(op) {
   <div style="position:absolute;top:0;left:0;right:0;height:56px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;z-index:10;">
     <div class="logo" style="margin-right:16px">Letter<span>Forge</span> 3D</div>
     <div style="flex:1"></div>
-    <button class="btn btn-accent" onclick="exportToSTL()" onmousedown="event.stopPropagation()" style="margin-right:8px;">
+    <button class="btn" onclick="union3DObjects()" onmousedown="event.stopPropagation()" style="margin-right:8px;border-color:#00ff88;color:#00ff88;" title="Unisci due oggetti 3D: seleziona due oggetti con Shift+click, poi premi Unisci">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="16" cy="12" r="10"/></svg>
+      Unisci
+    </button>
+    <button class="btn" onclick="subtract3DObjects()" onmousedown="event.stopPropagation()" style="margin-right:8px;border-color:#ff6b35;color:#ff6b35;" title="Sottrai: 1° click = UTENSILE (verde, taglia), Shift+click = DESTINATARIO (arancio, viene bucato)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 12h6"/></svg>
+      Sottrai
+    </button>
+    <button class="btn btn-accent" onclick="exportTo3MF()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta 3MF — ogni colore = un oggetto separato in PrusaSlicer/Bambu">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Download STL
+      3MF
+    </button>
+    <button class="btn" onclick="exportToSTL()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta STL — un file per colore">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      STL
     </button>
     <button class="btn" onclick="close3DPreview()" onmousedown="event.stopPropagation()" style="background:#ff4444;color:#fff;border-color:#ff4444;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
@@ -6773,18 +8528,8 @@ function aiExecuteRecolor(op) {
         <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DShininess(this.value)">
         <span id="shininess-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
       </div>
-      
-      <!-- Smoothing Toggle -->
-      <div style="display:flex;align-items:center;gap:8px;">
-        <label style="color:var(--muted);font-size:10px;min-width:70px;">Smussatura</label>
-        <label class="switch" style="flex-shrink:0;">
-          <input type="checkbox" id="smoothing-toggle" checked onchange="toggle3DSmoothing(this.checked)">
-          <span class="slider"></span>
-        </label>
-        <span id="smoothing-label" style="color:var(--text);font-size:10px;">Attiva</span>
-      </div>
     </div>
-    
+
     <!-- Estrusione compatta -->
     <div class="sec-title" style="margin:12px 0 8px 0">Estrusione</div>
     <div id="extrusion-controls"></div>
@@ -6797,6 +8542,13 @@ function aiExecuteRecolor(op) {
         <b style="color:var(--text)">Zoom:</b> Rotella del mouse<br>
         <b style="color:var(--text)">Pan:</b> Click destro + trascina<br>
         <b style="color:var(--text)">Reset Vista:</b> Premi <kbd style="background:var(--panel2);padding:1px 4px;border-radius:3px;font-size:9px;">Home</kbd>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--muted);font-size:10px;line-height:1.7">
+        <b style="color:#00ff88">Operazioni Booleane:</b><br>
+        <b style="color:#00ff88">①</b> Click → <b style="color:#00ff88">UTENSILE</b> (verde)<br>
+        <b style="color:#ff6b35">②</b> Shift+click → <b style="color:#ff6b35">DESTINATARIO</b> (arancio)<br>
+        <span style="color:var(--text)">• <b>Unisci</b>: fonde i due oggetti</span><br>
+        <span style="color:var(--text)">• <b>Sottrai</b>: ① buca ②, ① rimane</span>
       </div>
     </div>
   </div>

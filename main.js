@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path  = require('path');
 const fs    = require('fs');
+const pkg   = require('./package.json');
 
 // MCP Server
 const mcpServer = require('./mcp-server');
@@ -109,7 +110,7 @@ function migrateUserFiles() {
       });
       
       if (migrated > 0) {
-        console.log(`Migrati ${migrated} font da ${oldFontDir} a ${newFontDir}`);
+        // Fonts migrated successfully
       }
     } catch (e) {
       console.warn('Errore nel migrare font:', e.message);
@@ -142,7 +143,7 @@ function migrateUserFiles() {
       });
       
       if (migrated > 0) {
-        console.log(`Migrati ${migrated} SVG da ${oldSvgDir} a ${newSvgDir}`);
+        // SVGs migrated successfully
       }
     } catch (e) {
       console.warn('Errore nel migrare SVG:', e.message);
@@ -255,15 +256,12 @@ function createWindow() {
     });
 
     autoUpdater.on('checking-for-update', () => {
-      console.log('[AUTO-UPDATE] Checking for updates...');
       if (win && !win.isDestroyed()) {
         win.webContents.send('update-status', { status: 'checking' });
       }
     });
 
     autoUpdater.on('update-available', (info) => {
-      console.log('[AUTO-UPDATE] Update available:', info.version);
-      console.log('[AUTO-UPDATE] Release notes:', info.releaseNotes);
       if (win && !win.isDestroyed()) {
         win.webContents.send('update-status', {
           status: 'available',
@@ -274,7 +272,6 @@ function createWindow() {
     });
 
     autoUpdater.on('update-not-available', (info) => {
-      console.log('[AUTO-UPDATE] Update not available, version:', info.version);
       if (win && !win.isDestroyed()) {
         win.webContents.send('update-status', {
           status: 'not-available',
@@ -284,8 +281,6 @@ function createWindow() {
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
-      console.log(`[AUTO-UPDATE] Download progress: ${progressObj.percent}%`);
-      console.log(`[AUTO-UPDATE] Speed: ${progressObj.bytesPerSecond} bytes/sec`);
       if (win && !win.isDestroyed()) {
         win.webContents.send('update-status', {
           status: 'downloading',
@@ -298,8 +293,6 @@ function createWindow() {
     });
 
     autoUpdater.on('update-downloaded', (info) => {
-      console.log('[AUTO-UPDATE] Update downloaded:', info.version);
-      console.log('[AUTO-UPDATE] Downloaded file:', info.downloadedFile);
       if (win && !win.isDestroyed()) {
         win.webContents.send('update-status', {
           status: 'downloaded',
@@ -322,7 +315,6 @@ function createWindow() {
 
     // Check for updates after app is loaded (2 seconds delay)
     setTimeout(() => {
-      console.log('Auto-checking for updates...');
       autoUpdater.checkForUpdates().catch(err => {
         console.error('Auto-check failed:', err.message);
       });
@@ -335,9 +327,7 @@ function createWindow() {
       return { available: false, reason: 'dev-mode' };
     }
     try {
-      console.log('Manual check for updates triggered...');
       const result = await autoUpdater.checkForUpdates();
-      console.log('Check result:', result?.updateInfo?.version);
       return { available: result?.updateInfo != null };
     } catch (error) {
       console.error('Error checking for updates:', error);
@@ -369,9 +359,8 @@ function createWindow() {
   // Quando la pagina è pronta, invia i font E GLI SVG
   win.webContents.once('did-finish-load', () => {
     // Invia la versione dell'app dal package.json
-    const pkg = require('./package.json');
     win.webContents.send('app-version', pkg.version);
-    
+
     updateSplashProgress(20, 'Caricamento font...');
 
     // 1. CARICAMENTO FONT
@@ -379,11 +368,8 @@ function createWindow() {
     const fonts    = loadFontsFromDir(fontDir);
     if (fonts.length > 0) {
       win.webContents.send('fonts-loaded', fonts);
-      console.log(`Caricati ${fonts.length} font da: ${fontDir}`);
-    } else {
-      console.log(`Nessun font trovato in: ${fontDir}`);
     }
-    
+
     updateSplashProgress(50, 'Caricamento SVG...');
 
     // 2. CARICAMENTO SVG
@@ -391,9 +377,6 @@ function createWindow() {
     const svgs   = loadSvgsFromDir(svgDir);
     if (svgs.length > 0) {
       win.webContents.send('svgs-loaded', svgs);
-      console.log(`Caricati ${svgs.length} SVG da: ${svgDir}`);
-    } else {
-      console.log(`Nessun SVG trovato in: ${svgDir}`);
     }
     
     updateSplashProgress(100, 'Pronto!');
@@ -484,7 +467,6 @@ app.whenReady().then(() => {
   // ── Apri cartella font utente ───────────────────────────────────────
   ipcMain.handle('open-font-folder', async () => {
     const fontDir = getFontDir();
-    const { shell } = require('electron');
     try {
       // Crea la cartella se non esiste
       if (!fs.existsSync(fontDir)) {
@@ -501,7 +483,6 @@ app.whenReady().then(() => {
   // ── Apri cartella SVG utente ───────────────────────────────────────
   ipcMain.handle('open-svg-folder', async () => {
     const svgDir = getSvgDir();
-    const { shell } = require('electron');
     try {
       // Crea la cartella se non esiste
       if (!fs.existsSync(svgDir)) {
@@ -540,12 +521,7 @@ app.whenReady().then(() => {
           resolve({ success: false, error: 'No window available' });
         }
       });
-      
-      // Set up canvas state sync
-      mcpServer.on('state-updated', (state) => {
-        console.log('[MCP Server] Canvas state updated');
-      });
-      
+
       return result;
     } catch (error) {
       console.error('MCP server start error:', error);

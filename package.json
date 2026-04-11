@@ -1,6 +1,6 @@
 {
   "name": "letterforge-pro",
-  "version": "4.1.9",
+  "version": "4.2.0",
   "description": "LetterForge Pro – editor tipografico SVG desktop",
   "main": "main.js",
   "scripts": {
@@ -28,7 +28,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico",
@@ -80,7 +82,10 @@
     }
   },
   "dependencies": {
-    "electron-updater": "^6.1.7"
+    "@jscad/modeling": "^2.13.0",
+    "electron-updater": "^6.1.7",
+    "manifold-3d": "^3.4.1",
+    "three-bvh-csg": "^0.0.18"
   },
   "devDependencies": {
     "electron": "^29.0.0",

@@ -1,0 +1,8 @@
+// Save this file, then I'll use it to patch the HTML
+// PATCHES NEEDED:
+// 1. Delete lines 480-900 (legacy CSG code)
+// 2. Replace build3DObjects STEP 2 (OpenJSCAD only, no fallback)  
+// 3. Replace updateExtrusion (use OpenJSCAD rebuild)
+// 4. Replace subtract3DObjects (clean implementation)
+// 5. Replace union3DObjects (OpenJSCAD only)
+// 6. Replace toggle3DSmoothing (no rebuild, just material update)
