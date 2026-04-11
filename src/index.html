@@ -1883,7 +1883,7 @@ window.CSG = (function () {
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.1</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.2</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -2244,7 +2244,7 @@ window.CSG = (function () {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.2.1</div>
+  <div class="un-ver" id="un-version">Versione 4.2.2</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -4913,8 +4913,24 @@ function toggleSelFromPanel(i){if(S.sel.has(i))S.sel.delete(i);render();renderHa
 document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
   if(e.key==='Delete'||e.key==='Backspace')deleteSelected();
-  if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
-  if((e.ctrlKey||e.metaKey)&&e.key==='y'){e.preventDefault();redo();}
+  
+  // Undo/Redo handling with 2D/3D separation
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'){
+    e.preventDefault();
+    if(document.getElementById('preview-3d-overlay').style.display==='block'){
+      undo3D();
+    } else {
+      undo();
+    }
+  }
+  if((e.ctrlKey||e.metaKey)&&e.key==='y'){
+    e.preventDefault();
+    if(document.getElementById('preview-3d-overlay').style.display==='block'){
+      redo3D();
+    } else {
+      redo();
+    }
+  }
   if((e.ctrlKey||e.metaKey)&&e.key==='a'){e.preventDefault();selectAll();}
   if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();duplicateSel();}
   if((e.ctrlKey||e.metaKey)&&(e.key==='='||e.key==='+')){ e.preventDefault();zoomIn();}
@@ -5181,6 +5197,117 @@ let threeGraphicsSettings = {
   smoothShading: true
 };
 
+// 3D History
+S.history3D = [];
+S.historyIndex3D = -1;
+
+function saveState3D() {
+  if (S.historyIndex3D < S.history3D.length - 1) {
+    S.history3D = S.history3D.slice(0, S.historyIndex3D + 1);
+  }
+
+  // Capisci quali colori esistono al momento
+  const extrusionLevelsData = {};
+  for (const col in threeExtrusionLevels) {
+    extrusionLevelsData[col] = threeExtrusionLevels[col].extrusion;
+  }
+
+  const state = {
+    meshes: [...threeMeshes], // Salva i riferimenti alle mesh correnti
+    extrusionLevels: extrusionLevelsData,
+    visibilityState: JSON.parse(JSON.stringify(threeVisibilityState || {})),
+    graphics: JSON.parse(JSON.stringify(threeGraphicsSettings))
+  };
+
+  S.history3D.push(state);
+  if (S.history3D.length > 50) S.history3D.shift();
+  else S.historyIndex3D++;
+}
+
+function undo3D() {
+  if (S.historyIndex3D > 0) {
+    S.historyIndex3D--;
+    restoreState3D(S.history3D[S.historyIndex3D]);
+    toast('Annullato (3D)');
+  }
+}
+
+function redo3D() {
+  if (S.historyIndex3D < S.history3D.length - 1) {
+    S.historyIndex3D++;
+    restoreState3D(S.history3D[S.historyIndex3D]);
+    toast('Ripristinato (3D)');
+  }
+}
+
+function restoreState3D(state) {
+  // Rimuovi tutte le mesh attuali dalla scena (senza disporle!)
+  threeMeshes.forEach(mesh => {
+    if (threeScene) threeScene.remove(mesh);
+  });
+
+  // Ripristina la lista delle mesh
+  threeMeshes = [...state.meshes];
+  threeMeshes.forEach(mesh => {
+    if (threeScene) threeScene.add(mesh);
+  });
+
+  // Ripristina grafica
+  threeGraphicsSettings = JSON.parse(JSON.stringify(state.graphics));
+  const gridToggle = document.getElementById('grid-toggle');
+  if (gridToggle) gridToggle.checked = threeGraphicsSettings.gridVisible;
+  const bgColorPicker = document.getElementById('bg-color-picker');
+  if (bgColorPicker) bgColorPicker.value = threeGraphicsSettings.bgColor;
+  
+  if (threeGridHelper) threeGridHelper.visible = threeGraphicsSettings.gridVisible;
+  if (threeScene) threeScene.background = new THREE.Color(threeGraphicsSettings.bgColor);
+  if (threeAmbientLight) threeAmbientLight.intensity = threeGraphicsSettings.ambientIntensity;
+
+  // Ripristina visibilità
+  threeVisibilityState = JSON.parse(JSON.stringify(state.visibilityState));
+  
+  // Ripristina estrusione (per le mesh base)
+  for (const color in state.extrusionLevels) {
+    const val = state.extrusionLevels[color];
+    updateExtrusion(color, val, true);
+  }
+
+  // Assicura che la visibilità sia applicata correttamente
+  threeMeshes.forEach(mesh => {
+    const color = mesh.userData.colorHex || (mesh.material && mesh.material.color ? '#' + mesh.material.color.getHexString() : null);
+    if (color && threeVisibilityState[color] !== undefined) {
+      mesh.visible = threeVisibilityState[color];
+    }
+  });
+
+  refresh3DControlsUI();
+  if (threeControls) threeControls.update();
+}
+
+function refresh3DControlsUI() {
+  const container = document.getElementById('extrusion-controls');
+  if (!container) return;
+
+  const rows = container.querySelectorAll('[data-color]');
+  rows.forEach(row => {
+    const color = row.dataset.color;
+    if (threeExtrusionLevels[color]) {
+      const slider = row.querySelector('input[type="range"]');
+      const numberInput = row.querySelector('input[type="number"]');
+      const eyeBtn = row.querySelector('button');
+      
+      if (slider) slider.value = threeExtrusionLevels[color].extrusion;
+      if (numberInput) numberInput.value = threeExtrusionLevels[color].extrusion;
+      
+      const isVisible = threeVisibilityState[color] !== false;
+      if (eyeBtn) {
+        eyeBtn.innerHTML = isVisible ? '👁' : '👁‍🗨';
+        eyeBtn.style.opacity = isVisible ? '1' : '0.5';
+      }
+    }
+  });
+}
+
 // 3D Object Selection
 let threeSelectedMesh = null;
 let threeSelectionOrder = []; // Track selection order for boolean ops
@@ -5209,6 +5336,11 @@ function open3DPreview() {
 
   // Initialize selection HUD
   setTimeout(() => update3DSelectionHUD(), 150);
+
+  // Initialize 3D history
+  S.history3D = [];
+  S.historyIndex3D = -1;
+  saveState3D();
 }
 
 function close3DPreview() {
@@ -6069,20 +6201,30 @@ function buildExtrusionControls(colorGroups) {
     slider.addEventListener('input', () => {
       const val = parseFloat(slider.value) || 0;
       numberInput.value = val;
-      updateExtrusion(color, val);
+      updateExtrusion(color, val, true); // Don't save state while sliding
+    });
+    
+    slider.addEventListener('change', () => {
+      const val = parseFloat(slider.value) || 0;
+      updateExtrusion(color, val); // Save state when slider is released
     });
     
     numberInput.addEventListener('input', () => {
       const val = parseFloat(numberInput.value) || 0;
       slider.value = Math.min(100, Math.max(0, val));
-      updateExtrusion(color, val);
+      updateExtrusion(color, val, true); // Don't save state while typing
+    });
+
+    numberInput.addEventListener('change', () => {
+      const val = parseFloat(numberInput.value) || 0;
+      updateExtrusion(color, val); // Save state when input loses focus
     });
     
     container.appendChild(controlDiv);
   });
 }
 
-function updateExtrusion(color, newDepth) {
+function updateExtrusion(color, newDepth, noSave = false) {
   if (!threeExtrusionLevels[color]) return;
 
   threeExtrusionLevels[color].extrusion = newDepth;
@@ -6129,6 +6271,8 @@ function updateExtrusion(color, newDepth) {
       mesh.geometry = newGeometry;
     }
   });
+
+  if (!noSave) saveState3D();
 }
 
 function toggleColorVisibility(color) {
@@ -6169,6 +6313,72 @@ function toggleColorVisibility(color) {
   }
   
   toast(`Colore ${isVisible ? 'visibile' : 'nascosto'}`);
+  saveState3D();
+}
+
+function toggle3DGrid(visible) {
+  threeGraphicsSettings.gridVisible = visible;
+  if (threeGridHelper) threeGridHelper.visible = visible;
+  saveState3D();
+}
+
+function change3DBgColor(color) {
+  threeGraphicsSettings.bgColor = color;
+  if (threeScene) threeScene.background = new THREE.Color(color);
+}
+
+function finalize3DBgColor() {
+  saveState3D();
+}
+
+function change3DAmbientLight(value) {
+  const intensity = parseFloat(value) / 100;
+  threeGraphicsSettings.ambientIntensity = intensity;
+  const label = document.getElementById('ambient-light-value');
+  if (label) label.textContent = value + '%';
+  if (threeAmbientLight) {
+    threeAmbientLight.intensity = intensity;
+  }
+}
+
+function finalize3DAmbientLight() {
+  saveState3D();
+}
+
+function change3DSpecular(value) {
+  const specular = new THREE.Color(`hsl(0, 0%, ${value}%)`);
+  threeGraphicsSettings.specular = specular.getHex();
+  const label = document.getElementById('specular-value');
+  if (label) label.textContent = value + '%';
+
+  // Update all mesh materials
+  threeMeshes.forEach(mesh => {
+    if (mesh.material) {
+      mesh.material.specular = specular;
+    }
+  });
+}
+
+function finalize3DSpecular() {
+  saveState3D();
+}
+
+function change3DShininess(value) {
+  const shininess = parseFloat(value);
+  threeGraphicsSettings.shininess = shininess;
+  const label = document.getElementById('shininess-value');
+  if (label) label.textContent = value + '%';
+
+  // Update all mesh materials
+  threeMeshes.forEach(mesh => {
+    if (mesh.material) {
+      mesh.material.shininess = shininess;
+    }
+  });
+}
+
+function finalize3DShininess() {
+  saveState3D();
 }
 
 // ── 3D OBJECT SELECTION ───────────────────────────────────────────────────
@@ -6406,11 +6616,9 @@ function union3DObjects() {
         return;
       }
 
-      // Remove originals
+      // Remove originals (but don't dispose!)
       threeScene.remove(meshA);
       threeScene.remove(meshB);
-      meshA.geometry.dispose(); meshA.material.dispose();
-      meshB.geometry.dispose(); meshB.material.dispose();
       const idxA = threeMeshes.indexOf(meshA), idxB = threeMeshes.indexOf(meshB);
       if (idxA !== -1) threeMeshes.splice(idxA, 1);
       if (idxB !== -1) threeMeshes.splice(idxB, 1);
@@ -6422,6 +6630,7 @@ function union3DObjects() {
       const triCount = resultMesh.geometry.attributes.position.count / 3;
       toast(`✓ Unione completata! (${triCount} triangoli, OpenJSCAD)`);
       console.log(`✓ Union done: ${triCount} triangles, watertight: true`);
+      saveState3D();
       return;
     }
 
@@ -6453,11 +6662,9 @@ function union3DObjects() {
       return;
     }
 
-    // Remove originals
+    // Remove originals (but don't dispose!)
     threeScene.remove(meshA);
     threeScene.remove(meshB);
-    meshA.geometry.dispose(); meshA.material.dispose();
-    meshB.geometry.dispose(); meshB.material.dispose();
     const idxA = threeMeshes.indexOf(meshA), idxB = threeMeshes.indexOf(meshB);
     if (idxA !== -1) threeMeshes.splice(idxA, 1);
     if (idxB !== -1) threeMeshes.splice(idxB, 1);
@@ -6469,6 +6676,7 @@ function union3DObjects() {
     clear3DSelection();
     const triCountLeg = resultMesh.geometry.attributes.position ? resultMesh.geometry.attributes.position.count / 3 : '?';
     toast(`✓ Unione completata! (${triCountLeg} triangoli, CSG legacy)`);
+    saveState3D();
   } catch (e) {
     console.error('Errore unione 3D:', e);
     toast('Errore durante l\'unione: ' + e.message);
@@ -6525,10 +6733,8 @@ function subtract3DObjects() {
     resultMesh.material.dispose();
     resultMesh.material = targetMaterialClone;
 
-    // Remove target from scene
+    // Remove target from scene (but don't dispose!)
     threeScene.remove(target);
-    target.geometry.dispose();
-    target.material.dispose();
     const idxTarget = threeMeshes.indexOf(target);
     if (idxTarget !== -1) threeMeshes.splice(idxTarget, 1);
 
@@ -6551,6 +6757,7 @@ function subtract3DObjects() {
     }
 
     clear3DSelection();
+    saveState3D();
 
     const triCount = resultMesh.geometry.attributes.position.count / 3;
     toast(`✓ Sottrazione completata! ${triCount} triangoli (OpenJSCAD)`);
@@ -8574,6 +8781,14 @@ function aiExecuteRecolor(op) {
 <div id="preview-3d-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#0d0d0f;">
   <div style="position:absolute;top:0;left:0;right:0;height:56px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;z-index:10;">
     <div class="logo" style="margin-right:16px">Letter<span>Forge</span> 3D</div>
+    <div style="display:flex;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
+      <button class="btn btn-icon" onclick="undo3D()" title="Annulla (Ctrl+Z)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
+      </button>
+      <button class="btn btn-icon" onclick="redo3D()" title="Ripristina (Ctrl+Y)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path></svg>
+      </button>
+    </div>
     <div style="flex:1"></div>
     <button class="btn" onclick="union3DObjects()" onmousedown="event.stopPropagation()" style="margin-right:8px;border-color:#00ff88;color:#00ff88;" title="Unisci due oggetti 3D: seleziona due oggetti con Shift+click, poi premi Unisci">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="16" cy="12" r="10"/></svg>
@@ -8611,27 +8826,27 @@ function aiExecuteRecolor(op) {
         </label>
         <div style="flex:1"></div>
         <label style="color:var(--text);font-size:11px;font-weight:500;">Sfondo</label>
-        <input type="color" id="bg-color-picker" value="#1a1a22" oninput="change3DBgColor(this.value)" style="width:28px;height:22px;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;">
+        <input type="color" id="bg-color-picker" value="#1a1a22" oninput="change3DBgColor(this.value)" onchange="finalize3DBgColor()" style="width:28px;height:22px;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;">
       </div>
       
       <!-- Ambient Light -->
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="color:var(--muted);font-size:10px;min-width:70px;">Luce</label>
-        <input type="range" id="ambient-light-slider" min="0" max="100" value="60" style="flex:1;accent-color:var(--accent);" oninput="change3DAmbientLight(this.value)">
+        <input type="range" id="ambient-light-slider" min="0" max="100" value="60" style="flex:1;accent-color:var(--accent);" oninput="change3DAmbientLight(this.value)" onchange="finalize3DAmbientLight()">
         <span id="ambient-light-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">60%</span>
       </div>
       
       <!-- Specular -->
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="color:var(--muted);font-size:10px;min-width:70px;">Riflessi</label>
-        <input type="range" id="specular-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DSpecular(this.value)">
+        <input type="range" id="specular-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DSpecular(this.value)" onchange="finalize3DSpecular()">
         <span id="specular-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
       </div>
       
       <!-- Shininess -->
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="color:var(--muted);font-size:10px;min-width:70px;">Lucentezza</label>
-        <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DShininess(this.value)">
+        <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DShininess(this.value)" onchange="finalize3DShininess()">
         <span id="shininess-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
       </div>
     </div>
