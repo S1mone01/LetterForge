@@ -5406,6 +5406,11 @@ function close3DPreview() {
 
     // Dispose transform controls
     if (threeTransformControls) {
+      threeTransformControls.detach();
+      if (threeTransformControls._pivot) {
+        threeScene.remove(threeTransformControls._pivot);
+        threeTransformControls._pivot = null;
+      }
       threeScene.remove(threeTransformControls);
       threeTransformControls.dispose();
       threeTransformControls = null;
@@ -5502,7 +5507,7 @@ function init3DScene() {
 
   // Initialize TransformControls (3D gizmo for moving objects)
   threeTransformControls = new THREE.TransformControls(threeCamera, threeRenderer.domElement);
-  threeTransformControls.setSize(0.75);
+  threeTransformControls.setSize(0.8);
   threeTransformControls.setSpace('world');
   threeTransformControls.setMode('translate');
   threeTransformControls.visible = false;
@@ -5513,12 +5518,9 @@ function init3DScene() {
     threeControls.enabled = !event.value;
   });
 
-  // Snap-to-align during transform
-  threeTransformControls.addEventListener('objectChange', function () {
-    if (threeTransformControls.object) {
-      applySnapToAlign(threeTransformControls.object);
-    }
-  });
+  // Fix: gizmo appears at center of selected object, not at mesh origin
+  // We use a pivot object that we manually position at the bbox center
+  threeTransformControls._pivot = null;
 
   // Handle resize
   const resizeObserver = new ResizeObserver(() => {
@@ -5697,12 +5699,6 @@ function build3DObjects() {
       });
 
       const mesh = new THREE.Mesh(geometry, material);
-
-      // Center geometry on the mesh so transform gizmo appears at visual center
-      geometry.computeBoundingBox();
-      const geoCenter = new THREE.Vector3();
-      geometry.boundingBox.getCenter(geoCenter);
-      geometry.translate(-geoCenter.x, -geoCenter.y, -geoCenter.z);
 
       // Position mesh to match 2D canvas coordinates
       const bbox = item.bbox; // {x, y, x2, y2}
@@ -6531,9 +6527,20 @@ function addSelectionIndicator(mesh) {
   threeScene.add(wireframe);
   threeSelectionIndicator.push(wireframe);
 
-  // Show transform gizmo on the first selected object
+  // Show transform gizmo centered on the first selected object's bounding box
   if (isFirst && threeTransformControls) {
-    threeTransformControls.attach(mesh);
+    // Create a pivot object at the bbox center
+    if (threeTransformControls._pivot) {
+      threeScene.remove(threeTransformControls._pivot);
+    }
+    const pivot = new THREE.Object3D();
+    pivot.position.copy(center);
+    pivot.userData.targetMesh = mesh;
+    threeScene.add(pivot);
+    threeTransformControls._pivot = pivot;
+
+    // Attach gizmo to pivot
+    threeTransformControls.attach(pivot);
     threeTransformControls.visible = true;
   }
 }
@@ -6573,10 +6580,14 @@ function clear3DSelection() {
   threeSelectionIndicator = [];
   threeSelectionOrder = [];
 
-  // Detach and hide transform gizmo
+  // Detach and hide transform gizmo, remove pivot
   if (threeTransformControls) {
     threeTransformControls.detach();
     threeTransformControls.visible = false;
+    if (threeTransformControls._pivot) {
+      threeScene.remove(threeTransformControls._pivot);
+      threeTransformControls._pivot = null;
+    }
   }
 
   // Clear snap lines
@@ -6656,16 +6667,19 @@ function updateSelectionIndicators() {
 
 // ── SNAP-TO-ALIGN ─────────────────────────────────────────────────────────
 
-function applySnapToAlign(movingMesh) {
+function applySnapToAlign(pivot) {
   if (!threeTransformControls || !threeTransformControls.visible) return;
 
+  const targetMesh = pivot.userData.targetMesh;
+  if (!targetMesh) return;
+
   // Get the moving mesh bounding box
-  const movingBBox = new THREE.Box3().setFromObject(movingMesh);
+  const movingBBox = new THREE.Box3().setFromObject(targetMesh);
   const movingCenter = new THREE.Vector3();
   movingBBox.getCenter(movingCenter);
 
-  // Get all other meshes (excluding the moving one)
-  const otherMeshes = threeMeshes.filter(m => m !== movingMesh && m.visible);
+  // Get all other meshes (excluding the target one)
+  const otherMeshes = threeMeshes.filter(m => m !== targetMesh && m.visible);
 
   let snapped = false;
   const snapOffset = 2; // Visual offset for snap lines
@@ -6686,7 +6700,8 @@ function applySnapToAlign(movingMesh) {
     // Check alignment on X axis
     const diffX = Math.abs(movingCenter.x - otherCenter.x);
     if (diffX < SNAP_THRESHOLD) {
-      movingMesh.position.x += (otherCenter.x - movingCenter.x);
+      pivot.position.x += (otherCenter.x - movingCenter.x);
+      targetMesh.position.x = pivot.position.x;
       drawSnapLine(otherBBox, 'x', snapOffset);
       snapped = true;
     }
@@ -6694,7 +6709,8 @@ function applySnapToAlign(movingMesh) {
     // Check alignment on Y axis
     const diffY = Math.abs(movingCenter.y - otherCenter.y);
     if (diffY < SNAP_THRESHOLD) {
-      movingMesh.position.y += (otherCenter.y - movingCenter.y);
+      pivot.position.y += (otherCenter.y - movingCenter.y);
+      targetMesh.position.y = pivot.position.y;
       drawSnapLine(otherBBox, 'y', snapOffset);
       snapped = true;
     }
@@ -6702,52 +6718,61 @@ function applySnapToAlign(movingMesh) {
     // Check alignment on Z axis
     const diffZ = Math.abs(movingCenter.z - otherCenter.z);
     if (diffZ < SNAP_THRESHOLD) {
-      movingMesh.position.z += (otherCenter.z - movingCenter.z);
+      pivot.position.z += (otherCenter.z - movingCenter.z);
+      targetMesh.position.z = pivot.position.z;
       drawSnapLine(otherBBox, 'z', snapOffset);
       snapped = true;
     }
 
     // Check edge alignment (min/max bounds)
-    const movingMinX = movingBBox.min.x + movingMesh.position.x - movingCenter.x;
-    const movingMaxX = movingBBox.max.x + movingMesh.position.x - movingCenter.x;
+    const movingMinX = movingBBox.min.x;
+    const movingMaxX = movingBBox.max.x;
+    const movingMinY = movingBBox.min.y;
+    const movingMaxY = movingBBox.max.y;
+
     const otherMinX = otherBBox.min.x;
     const otherMaxX = otherBBox.max.x;
+    const otherMinY = otherBBox.min.y;
+    const otherMaxY = otherBBox.max.y;
 
     // Snap left edges
     if (Math.abs(movingMinX - otherMinX) < SNAP_THRESHOLD) {
-      movingMesh.position.x += (otherMinX - movingMinX);
+      const offset = otherMinX - movingMinX;
+      pivot.position.x += offset;
+      targetMesh.position.x = pivot.position.x;
       drawSnapLine(otherBBox, 'x', snapOffset);
       snapped = true;
     }
 
     // Snap right edges
     if (Math.abs(movingMaxX - otherMaxX) < SNAP_THRESHOLD) {
-      movingMesh.position.x += (otherMaxX - movingMaxX);
+      const offset = otherMaxX - movingMaxX;
+      pivot.position.x += offset;
+      targetMesh.position.x = pivot.position.x;
       drawSnapLine(otherBBox, 'x', snapOffset);
       snapped = true;
     }
 
     // Snap bottom edges (Y min)
-    const movingMinY = movingBBox.min.y + movingMesh.position.y - movingCenter.y;
-    const movingMaxY = movingBBox.max.y + movingMesh.position.y - movingCenter.y;
-    const otherMinY = otherBBox.min.y;
-    const otherMaxY = otherBBox.max.y;
-
     if (Math.abs(movingMinY - otherMinY) < SNAP_THRESHOLD) {
-      movingMesh.position.y += (otherMinY - movingMinY);
+      const offset = otherMinY - movingMinY;
+      pivot.position.y += offset;
+      targetMesh.position.y = pivot.position.y;
       drawSnapLine(otherBBox, 'y', snapOffset);
       snapped = true;
     }
 
     if (Math.abs(movingMaxY - otherMaxY) < SNAP_THRESHOLD) {
-      movingMesh.position.y += (otherMaxY - movingMaxY);
+      const offset = otherMaxY - movingMaxY;
+      pivot.position.y += offset;
+      targetMesh.position.y = pivot.position.y;
       drawSnapLine(otherBBox, 'y', snapOffset);
       snapped = true;
     }
   }
 
   if (snapped) {
-    // Update gizmo position to follow the snapped mesh
+    // Update gizmo position to follow the snapped pivot
     threeTransformControls.update();
   }
 }
@@ -6977,6 +7002,33 @@ function start3DAnimation() {
         ind.position.copy(center);
       }
     });
+
+    // Sync mesh position with pivot when gizmo moves it
+    if (threeTransformControls && threeTransformControls._pivot && threeTransformControls.dragging) {
+      const pivot = threeTransformControls._pivot;
+      const targetMesh = pivot.userData.targetMesh;
+      if (targetMesh) {
+        // Move mesh to follow pivot
+        targetMesh.position.copy(pivot.position);
+
+        // Apply snap-to-align during dragging
+        applySnapToAlign(pivot);
+      }
+    }
+
+    // Update pivot position to follow bbox center when not dragging
+    if (threeTransformControls && threeTransformControls._pivot && !threeTransformControls.dragging) {
+      const pivot = threeTransformControls._pivot;
+      const targetMesh = pivot.userData.targetMesh;
+      if (targetMesh && targetMesh.visible) {
+        const bbox = new THREE.Box3().setFromObject(targetMesh);
+        const center = bbox.getCenter(new THREE.Vector3());
+        // Only update if mesh hasn't been moved by gizmo (first frame check)
+        if (Math.abs(pivot.position.x - center.x) > 0.01 || Math.abs(pivot.position.y - center.y) > 0.01) {
+          pivot.position.copy(center);
+        }
+      }
+    }
 
     // Update snap lines visibility (hide them when not dragging)
     // Snap lines are cleared and redrawn during objectChange events
