@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**LetterForge Pro** is a desktop SVG typography editor built with **Electron**. It allows users to create, manipulate, and export custom letter designs and logos using custom fonts and SVG assets.
+**LetterForge Pro** is a desktop SVG typography and 3D editor built with **Electron**. It allows users to create, manipulate, and export custom letter designs, logos, and 3D models using custom fonts, SVG assets, and OpenJSCAD-powered boolean operations.
 
 ### Core Features
 - **Font Management**: Load `.ttf`, `.otf`, `.woff`, `.woff2` fonts from folder or drag-and-drop
@@ -10,7 +10,9 @@
 - **Canvas Editor**: Visual editor with transform controls (position, rotation, scale, skew)
 - **Multi-select**: Select and manipulate multiple elements simultaneously
 - **Snap-to-Guides**: Visual alignment assistance when positioning elements
-- **Export**: Save designs as SVG files
+- **3D Preview & Operations**: Real-time 3D preview with boolean operations (union, subtract)
+- **OpenJSCAD Integration**: Watertight mesh generation for 3D printing using OpenJSCAD CSG engine
+- **Export**: Save designs as SVG, STL, or 3MF files (3D printing ready)
 - **Undo/Redo**: Full history support for all operations
 - **Save/Load Project**: Save and restore complete workspace state (elements, canvas settings, SVG library)
 - **Splash Screen**: Loading screen with progress indicator on app startup
@@ -36,6 +38,8 @@ LetterForge-Desktop/
 ### Technologies
 - **Runtime**: Electron 29.x
 - **Font Parsing**: opentype.js (loaded via CDN)
+- **3D/CSG Engine**: OpenJSCAD (@jscad/modeling v2.13.0)
+- **3D Rendering**: Three.js (for 3D preview)
 - **Build Tool**: electron-builder 24.x
 - **Styling**: Custom CSS with CSS variables (no framework)
 - **State Management**: Custom vanilla JS state object (`S`)
@@ -138,11 +142,27 @@ Projects are saved as JSON with this structure:
 ### File Operations
 - **Font files**: Read as binary, converted to base64, embedded as `@font-face`
 - **SVG files**: Read as UTF-8 text, stored in library for insertion
-- **Export**: Uses `dialog.showSaveDialog` for user-selected save location
+- **Export (2D)**: Uses `dialog.showSaveDialog` for SVG export
+- **Export (3D)**: STL/3MF export using Three.js exporters for 3D printing
 - **Project Save**: Saves workspace state as JSON (`.json`) with canvas settings, elements, and SVG library
 - **Project Load**: Restores complete workspace from saved JSON file
 - **User Data Storage**: Fonts and SVGs are stored in Electron's user data directory (`%APPDATA%/LetterForge Pro/` on Windows), which persists across app updates
 - **Migration**: On first launch after an update, files from the old location (next to executable) are automatically migrated to the user data directory
+
+## References
+
+- **OpenJSCAD Docs:** https://openjscad.xyz/docs/
+- **@jscad/modeling NPM:** https://www.npmjs.com/package/@jscad/modeling
+- **OpenJSCAD GitHub:** https://github.com/jscad/OpenJSCAD.org
+- **Electron Docs:** https://www.electronjs.org/docs
+- **electron-builder:** https://www.electron.build/
+- **Three.js:** https://threejs.org/docs/
+
+## Version History
+
+- **v4.1.9+**: OpenJSCAD integration for watertight mesh generation
+- **v4.x**: 3D preview and boolean operations added
+- **Earlier versions**: 2D SVG typography editor
 
 ### UI Conventions
 - **Dark theme** with accent colors (`#c8ff00` lime, `#ff6b35` orange)
@@ -166,13 +186,149 @@ Projects are saved as JSON with this structure:
 | `Ctrl+0` | Reset zoom |
 | `Arrow keys` | Move selected (1px, 10px with Shift) |
 
+## OpenJSCAD Integration
+
+### Overview
+
+The project uses **OpenJSCAD (@jscad/modeling)** as the primary CSG engine for 3D boolean operations, replacing the custom BufferGeometry-based CSG implementation. OpenJSCAD produces **watertight, manifold meshes** suitable for 3D printing slicers.
+
+### Architecture
+
+**Before (Legacy CSG)**
+```
+SVG Path → THREE.ExtrudeGeometry → BufferGeometry
+                                 ↓
+                    Custom CSG on triangles (non-manifold)
+                                 ↓
+                    Holes, errors in slicers ❌
+```
+
+**After (OpenJSCAD)**
+```
+SVG Path → OpenJSCAD geom2 → extrudeLinear → geom3
+                                 ↓
+                    Boolean ops in OpenJSCAD ONLY
+                                 ↓
+                    Convert geom3 → Three.js BufferGeometry
+                                 ↓
+                    Watertight, manifold, slicer-ready ✓
+```
+
+### Key Components
+
+#### OpenJSCADBridge (src/index.html)
+
+Located at lines ~18-426, provides:
+- `parseSVGPathToGeom2(pathD)` - Converts SVG paths to OpenJSCAD 2D geometry
+- `extrudeGeom2ToGeom3(geom2, depth)` - Extrudes 2D to 3D solid
+- `unionGeom3()`, `subtractGeom3()` - Boolean operations
+- `geom3ToThreeGeometry()` - Converts OpenJSCAD to Three.js geometry
+- `booleanOperation()` - High-level API for union/subtract
+
+#### preload.js
+
+- Loads OpenJSCAD from node_modules via Electron's `require()`
+- Exposes `loadOpenJSCAD()` API to renderer process
+
+### SVG Path Conversion
+
+```javascript
+window.OpenJSCADBridge.parseSVGPathToGeom2(pathD)
+```
+
+**Supported SVG Commands:**
+- `M` - Move to
+- `L` - Line to
+- `H` - Horizontal line
+- `V` - Vertical line
+- `C` - Cubic bezier (approximated with 12 segments)
+- `Q` - Quadratic bezier (approximated with 8 segments)
+- `Z` - Close path
+
+**Hole Detection:**
+- Outer contours detected by **counter-clockwise (CCW)** winding (positive signed area)
+- Hole contours detected by **clockwise (CW)** winding (negative signed area)
+- Holes are subtracted from outer contours using OpenJSCAD's `subtract()`
+
+### Boolean Operations
+
+```javascript
+// Union
+const result = window.OpenJSCADBridge.unionGeom3(geomA, geomB)
+
+// Subtract
+const result = window.OpenJSCADBridge.subtractGeom3(geomA, geomB)
+```
+
+Operations ensure:
+- ✓ Watertight output
+- ✓ Manifold geometry
+- ✓ No duplicate triangles
+- ✓ Proper vertex welding
+
+### Fallback System
+
+The custom CSG library is **still available** as a fallback when OpenJSCAD is not loaded:
+- Backward compatibility maintained
+- Graceful degradation
+- No breaking changes
+- Toast notification indicates which engine is used
+
+### Usage Example
+
+```javascript
+// Manual boolean operation
+const meshA = threeSelectionOrder[0]
+const meshB = threeSelectionOrder[1]
+
+if (window.OpenJSCADBridge.initialized) {
+  const resultMesh = window.OpenJSCADBridge.booleanOperation('union', meshA, meshB, 0xff0000)
+  threeScene.add(resultMesh)
+  threeMeshes.push(resultMesh)
+}
+```
+
+### Verification
+
+**Check Console Logs:**
+```
+✓ OpenJSCAD modeling loaded in preload
+✓ OpenJSCAD Bridge initialized
+✓ OpenJSCAD Bridge ready for CSG operations
+```
+
+**Test Watertight Mesh:**
+1. Launch app: `npm start`
+2. Add text or SVG elements
+3. Open 3D preview
+4. Select 2 objects (Shift+click)
+5. Click **Union** or **Subtract** button
+
+**Expected:**
+```
+✓ Using OpenJSCAD for union operation
+✓ Union done: 1234 triangles, watertight: true
+```
+
+### Performance Comparison
+
+| Metric | OpenJSCAD | Legacy CSG |
+|--------|-----------|------------|
+| Watertight | ✓ Yes | ✗ Sometimes |
+| Manifold | ✓ Yes | ✗ No |
+| Speed | Medium | Fast |
+| Memory | Higher | Lower |
+| Slicer-compatible | ✓ Yes | ✗ No |
+
 ## Testing
 
 No formal test suite exists. Manual testing is performed by:
 1. Running `npm start`
 2. Testing font/SVG import
 3. Testing canvas manipulation
-4. Testing export functionality
+4. Testing 3D preview and boolean operations
+5. Testing SVG/STL/3MF export functionality
+6. Verifying watertight meshes in slicers (PrusaSlicer, Cura, Bambu Studio)
 
 ## Asset Guidelines
 
