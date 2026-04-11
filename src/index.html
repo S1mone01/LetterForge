@@ -6620,9 +6620,8 @@ function union3DObjects() {
       // Remove originals (but don't dispose!)
       threeScene.remove(meshA);
       threeScene.remove(meshB);
-      const idxA = threeMeshes.indexOf(meshA), idxB = threeMeshes.indexOf(meshB);
-      if (idxA !== -1) threeMeshes.splice(idxA, 1);
-      if (idxB !== -1) threeMeshes.splice(idxB, 1);
+      // Fix: filter instead of splice to avoid index-shift bug when removing two elements
+      threeMeshes = threeMeshes.filter(m => m !== meshA && m !== meshB);
 
       threeScene.add(resultMesh);
       threeMeshes.push(resultMesh);
@@ -6666,9 +6665,8 @@ function union3DObjects() {
     // Remove originals (but don't dispose!)
     threeScene.remove(meshA);
     threeScene.remove(meshB);
-    const idxA = threeMeshes.indexOf(meshA), idxB = threeMeshes.indexOf(meshB);
-    if (idxA !== -1) threeMeshes.splice(idxA, 1);
-    if (idxB !== -1) threeMeshes.splice(idxB, 1);
+    // Fix: filter instead of splice to avoid index-shift bug when removing two elements
+    threeMeshes = threeMeshes.filter(m => m !== meshA && m !== meshB);
 
     resultMesh.userData.isBooleanResult = true;
     resultMesh.userData.originalColor = colorA;
