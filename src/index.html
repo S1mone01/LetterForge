@@ -5518,6 +5518,14 @@ function init3DScene() {
     threeControls.enabled = !event.value;
   });
 
+  // Apply snap-to-align when user releases the gizmo
+  threeTransformControls.addEventListener('mouseUp', function () {
+    if (threeTransformControls._pivot) {
+      applySnapToAlign(threeTransformControls._pivot);
+      saveState3D(); // Save state after move
+    }
+  });
+
   // Fix: gizmo appears at center of selected object, not at mesh origin
   // We use a pivot object that we manually position at the bbox center
   threeTransformControls._pivot = null;
@@ -6774,6 +6782,15 @@ function applySnapToAlign(pivot) {
   if (snapped) {
     // Update gizmo position to follow the snapped pivot
     threeTransformControls.update();
+
+    // Update selection indicator wireframe position
+    threeSelectionIndicator.forEach(ind => {
+      if (ind.userData.targetMesh === targetMesh) {
+        const bbox = new THREE.Box3().setFromObject(targetMesh);
+        const center = bbox.getCenter(new THREE.Vector3());
+        ind.position.copy(center);
+      }
+    });
   }
 }
 
@@ -7008,30 +7025,12 @@ function start3DAnimation() {
       const pivot = threeTransformControls._pivot;
       const targetMesh = pivot.userData.targetMesh;
       if (targetMesh) {
-        // Move mesh to follow pivot
         targetMesh.position.copy(pivot.position);
-
-        // Apply snap-to-align during dragging
-        applySnapToAlign(pivot);
-      }
-    }
-
-    // Update pivot position to follow bbox center when not dragging
-    if (threeTransformControls && threeTransformControls._pivot && !threeTransformControls.dragging) {
-      const pivot = threeTransformControls._pivot;
-      const targetMesh = pivot.userData.targetMesh;
-      if (targetMesh && targetMesh.visible) {
-        const bbox = new THREE.Box3().setFromObject(targetMesh);
-        const center = bbox.getCenter(new THREE.Vector3());
-        // Only update if mesh hasn't been moved by gizmo (first frame check)
-        if (Math.abs(pivot.position.x - center.x) > 0.01 || Math.abs(pivot.position.y - center.y) > 0.01) {
-          pivot.position.copy(center);
-        }
       }
     }
 
     // Update snap lines visibility (hide them when not dragging)
-    // Snap lines are cleared and redrawn during objectChange events
+    // Snap lines are cleared and redrawn during mouseUp event
 
     threeRenderer.render(threeScene, threeCamera);
     threeAnimationId = requestAnimationFrame(animate);
