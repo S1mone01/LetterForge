@@ -5698,6 +5698,12 @@ function build3DObjects() {
 
       const mesh = new THREE.Mesh(geometry, material);
 
+      // Center geometry on the mesh so transform gizmo appears at visual center
+      geometry.computeBoundingBox();
+      const geoCenter = new THREE.Vector3();
+      geometry.boundingBox.getCenter(geoCenter);
+      geometry.translate(-geoCenter.x, -geoCenter.y, -geoCenter.z);
+
       // Position mesh to match 2D canvas coordinates
       const bbox = item.bbox; // {x, y, x2, y2}
 
@@ -6960,8 +6966,21 @@ function subtract3DObjects() {
 function start3DAnimation() {
   function animate() {
     if (!threeControls || !threeRenderer || !threeScene || !threeCamera) return;
-    
+
     threeControls.update();
+
+    // Update selection indicators to follow their target meshes
+    threeSelectionIndicator.forEach(ind => {
+      if (ind.userData.targetMesh && ind.userData.targetMesh.visible) {
+        const bbox = new THREE.Box3().setFromObject(ind.userData.targetMesh);
+        const center = bbox.getCenter(new THREE.Vector3());
+        ind.position.copy(center);
+      }
+    });
+
+    // Update snap lines visibility (hide them when not dragging)
+    // Snap lines are cleared and redrawn during objectChange events
+
     threeRenderer.render(threeScene, threeCamera);
     threeAnimationId = requestAnimationFrame(animate);
   }
