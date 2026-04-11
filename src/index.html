@@ -1883,7 +1883,7 @@ window.CSG = (function () {
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.0</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.1</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -2244,7 +2244,7 @@ window.CSG = (function () {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.2.0</div>
+  <div class="un-ver" id="un-version">Versione 4.2.1</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -2268,6 +2268,7 @@ window.CSG = (function () {
 // ── STATE ──────────────────────────────────────────────────────────────
 const S = {
   letters:[],
+  bottomOffsets:[],
   snapEnabled: true,
   sel:new Set(),
   dragging:false, dragType:null,
@@ -3544,6 +3545,13 @@ function renderHandles(){
   mk(bx - OFFSET*0.8, by - OFFSET*0.8, `M0,5 A5,5 0 1 1 5,-1 M5,-1 L3.3,-2.0 M5,-1 L5.5,-3.2`, 'rot', -1, 'crosshair');
 }
 
+function updateBottomOffsets() {
+  S.bottomOffsets = S.letters.map((l, i) => {
+    const bbox = getLetterBBoxTransformed(i);
+    return bbox ? (bbox.y2 - l.y) : 0;
+  });
+}
+
 function handleMd(e,i,axis,dir){
   e.stopPropagation();
   // NON modificare la selezione - preservare quella corrente
@@ -3551,6 +3559,7 @@ function handleMd(e,i,axis,dir){
 
   const p=pt(e);
   S.dragging=true;
+  updateBottomOffsets();
 
   // Calcola il centro di rotazione corretto
   // Per singolo elemento: usa la posizione dell'elemento (x, y)
@@ -3623,7 +3632,7 @@ function handleMd(e,i,axis,dir){
 function gmd(e,i){
   if(e.target.closest('.lg-handle'))return;
   e.stopPropagation();
-  
+
   // Se l'elemento fa parte di un gruppo, seleziona tutto il gruppo
   const elem = S.letters[i];
   if (elem && elem.groupId) {
@@ -3649,16 +3658,16 @@ function gmd(e,i){
       if(!S.sel.has(i)){S.sel.clear();S.sel.add(i);}
     }
   }
-  
+
   const p=pt(e);
   S.dragging=true;S.dragType='letter';S.ds={x:p.x,y:p.y};
-  
+  updateBottomOffsets();
+
   S.dl=S.letters.map(l=>({x:l.x,y:l.y}));
   render();renderHandles();upd();
   document.getElementById('svg').classList.add('dragging-letter');
   saveState();
 }
-
 function smd(e){
   // Non interrompere se l'utente sta digitando in un input
   const active = document.activeElement;
@@ -3737,24 +3746,39 @@ document.addEventListener('mousemove', e=>{
 
     if(expandedArr.length === 1){
       // Singola selezione: logica esistente con snap
-      let nx=S.dl[expandedArr[0]].x+dx, ny=S.dl[expandedArr[0]].y+dy;
-      if(S.snapEnabled){
-        for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
-          if(Math.abs(o.y-ny)<S.snapThreshold){ ny=o.y; break; }
-        }
-      }
-      S.letters[expandedArr[0]].x=nx; S.letters[expandedArr[0]].y=ny;
+      const lIdx = expandedArr[0];
+      let nx=S.dl[lIdx].x+dx, ny=S.dl[lIdx].y+dy;
+      const lBottomOffset = S.bottomOffsets[lIdx] || 0;
 
       if(S.snapEnabled){
-        const sel0=S.letters[expandedArr[0]];
+        for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+          if(expandedSel.has(oIdx)) continue;
+          const o = S.letters[oIdx];
+          const oBottomOffset = S.bottomOffsets[oIdx] || 0;
+          const oBottom = o.y + oBottomOffset;
+          
+          if(Math.abs(oBottom - (ny + lBottomOffset)) < S.snapThreshold){
+            ny = oBottom - lBottomOffset;
+            break;
+          }
+        }
+      }
+      S.letters[lIdx].x=nx; S.letters[lIdx].y=ny;
+
+      if(S.snapEnabled){
+        const sel0=S.letters[lIdx];
         const cw=document.getElementById('cw');
         const ctm=svg.getScreenCTM();
-        const screenY=ctm.f + sel0.y * ctm.d;
+        const selBottom = sel0.y + lBottomOffset;
+        const screenY=ctm.f + selBottom * ctm.d;
         const cwRect=cw.getBoundingClientRect();
         const relY=screenY - cwRect.top + cw.scrollTop;
         let snapped=false;
-        for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
-          if(Math.abs(o.y-sel0.y)<S.snapThreshold){snapped=true;break;}
+        for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+          if(expandedSel.has(oIdx)) continue;
+          const o = S.letters[oIdx];
+          const oBottom = o.y + (S.bottomOffsets[oIdx] || 0);
+          if(Math.abs(oBottom - selBottom) < S.snapThreshold){ snapped=true; break; }
         }
         if(snapped){ snapLine.style.top=relY+'px'; snapLine.style.display='block'; }
       }
@@ -3771,6 +3795,14 @@ document.addEventListener('mousemove', e=>{
       groupCx /= selArr.length;
       groupCy /= selArr.length;
 
+      // Calcola l'offset del fondo del gruppo rispetto al centro
+      let groupBottomOffset = -Infinity;
+      selArr.forEach(i => {
+        const origOffsetY = S.dl[i].y - groupCy;
+        const b = origOffsetY + (S.bottomOffsets[i] || 0);
+        if(b > groupBottomOffset) groupBottomOffset = b;
+      });
+
       // Calcola il nuovo centro dopo il drag
       let newGroupCx = groupCx + dx;
       let newGroupCy = groupCy + dy;
@@ -3780,29 +3812,38 @@ document.addEventListener('mousemove', e=>{
       let snappedX = null;
       
       if(S.snapEnabled){
-        // Calcola il bounding box del gruppo nella nuova posizione
-        const groupBBox = getGroupBBox();
-        if(groupBBox){
-          // Snap verticale: controlla se il centro o i bordi del gruppo sono vicini ad altri elementi
-          for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
-            // Snap del centro del gruppo con il centro di altri elementi
+        // Snap verticale: controlla se il fondo del gruppo è vicino al fondo di altri elementi
+        for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+          if(expandedSel.has(oIdx)) continue;
+          const o = S.letters[oIdx];
+          const oBottom = o.y + (S.bottomOffsets[oIdx] || 0);
+          
+          if(Math.abs(oBottom - (newGroupCy + groupBottomOffset)) < S.snapThreshold){
+            snappedY = oBottom - groupBottomOffset;
+            break;
+          }
+        }
+
+        if(snappedY === null){
+          // Fallback allo snap del centro se richiesto, o restare solo sul fondo
+          // La richiesta dice "principale", potremmo mantenere il centro come secondario
+          for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+            if(expandedSel.has(oIdx)) continue;
+            const o = S.letters[oIdx];
             if(Math.abs(o.y - newGroupCy) < S.snapThreshold){
               snappedY = o.y;
               break;
             }
-            // Snap del bordo superiore del gruppo
-            if(groupBBox && Math.abs((o.y - o.fontSize/2) - (groupBBox.y + dy)) < S.snapThreshold){
-              snappedY = (o.y - o.fontSize/2) - groupBBox.y + newGroupCy;
-              break;
-            }
           }
+        }
 
-          // Snap orizzontale (opzionale, per ora solo verticale)
-          for(const o of S.letters.filter((_,idx)=>!expandedSel.has(idx))){
-            if(Math.abs(o.x - newGroupCx) < S.snapThreshold){
-              snappedX = o.x;
-              break;
-            }
+        // Snap orizzontale
+        for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+          if(expandedSel.has(oIdx)) continue;
+          const o = S.letters[oIdx];
+          if(Math.abs(o.x - newGroupCx) < S.snapThreshold){
+            snappedX = o.x;
+            break;
           }
         }
       }
@@ -3822,7 +3863,21 @@ document.addEventListener('mousemove', e=>{
       if(S.snapEnabled && snappedY !== null){
         const cw=document.getElementById('cw');
         const ctm=svg.getScreenCTM();
-        const screenY=ctm.f + newGroupCy * ctm.d;
+        // Se abbiamo snappato sul fondo, mostra la linea sul fondo
+        let lineY = newGroupCy;
+        if (Math.abs(snappedY - (groupCy + dy)) > 0.1) { // Abbiamo snappato
+           // Verifica se abbiamo snappato sul fondo
+           for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+              if(expandedSel.has(oIdx)) continue;
+              const oBottom = S.letters[oIdx].y + (S.bottomOffsets[oIdx] || 0);
+              if(Math.abs(oBottom - (newGroupCy + groupBottomOffset)) < 0.1){
+                lineY = newGroupCy + groupBottomOffset;
+                break;
+              }
+           }
+        }
+
+        const screenY=ctm.f + lineY * ctm.d;
         const cwRect=cw.getBoundingClientRect();
         const relY=screenY - cwRect.top + cw.scrollTop;
         snapLine.style.top=relY+'px';
@@ -3861,18 +3916,59 @@ document.addEventListener('mousemove', e=>{
   if(S.dragType==='handle-y'){
     const dy=p.y-S.ds.y;
     if(S.sel.size === 1){
-      Array.from(S.sel).forEach(i=>S.letters[i].y=S.dl[i].y+dy);
+      const lIdx = Array.from(S.sel)[0];
+      let ny = S.dl[lIdx].y + dy;
+      const lBottomOffset = S.bottomOffsets[lIdx] || 0;
+      let snapped = false;
+      if(S.snapEnabled){
+        for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+          if(S.sel.has(oIdx)) continue;
+          const oBottom = S.letters[oIdx].y + (S.bottomOffsets[oIdx] || 0);
+          if(Math.abs(oBottom - (ny + lBottomOffset)) < S.snapThreshold){
+            ny = oBottom - lBottomOffset;
+            snapped = true;
+            break;
+          }
+        }
+      }
+      S.letters[lIdx].y = ny;
+
+      if(S.snapEnabled && snapped){
+        const cw=document.getElementById('cw');
+        const ctm=svg.getScreenCTM();
+        const screenY=ctm.f + (ny + lBottomOffset) * ctm.d;
+        const cwRect=cw.getBoundingClientRect();
+        const relY=screenY - cwRect.top + cw.scrollTop;
+        snapLine.style.top=relY+'px';
+        snapLine.style.display='block';
+      }
     } else if(S.ds.origPositions){
       // Multi-select: muovi come gruppo verticalmente con snap
       let snapOffset = 0;
+      let groupBottomOffset = -Infinity;
+      let groupCy = 0;
+      const selArr = S.ds.origPositions.map(p=>p.idx);
+      selArr.forEach(idx => groupCy += S.dl[idx].y);
+      groupCy /= selArr.length;
+
+      selArr.forEach(idx => {
+        const offY = S.dl[idx].y - groupCy;
+        const b = offY + (S.bottomOffsets[idx] || 0);
+        if(b > groupBottomOffset) groupBottomOffset = b;
+      });
+
+      let snapped = false;
+      let snappedY = null;
+
       if(S.snapEnabled && S.ds.origPositions.length > 0){
-        // Calcola la nuova posizione del primo elemento per controllare lo snap
-        const firstPos = S.ds.origPositions[0];
-        const newY = firstPos.y + dy;
-        // Controlla snap con altri elementi
-        for(const o of S.letters.filter((_,idx)=>!S.sel.has(idx))){
-          if(Math.abs(o.y - newY) < S.snapThreshold){
-            snapOffset = o.y - firstPos.y;
+        const currentGroupBottom = groupCy + dy + groupBottomOffset;
+        for(let oIdx=0; oIdx<S.letters.length; oIdx++){
+          if(S.sel.has(oIdx)) continue;
+          const oBottom = S.letters[oIdx].y + (S.bottomOffsets[oIdx] || 0);
+          if(Math.abs(oBottom - currentGroupBottom) < S.snapThreshold){
+            snapOffset = oBottom - currentGroupBottom;
+            snapped = true;
+            snappedY = oBottom;
             break;
           }
         }
@@ -3882,6 +3978,16 @@ document.addEventListener('mousemove', e=>{
         S.letters[origPos.idx].y = origPos.y + dy + snapOffset;
         S.letters[origPos.idx].x = origPos.x;
       });
+
+      if(S.snapEnabled && snapped){
+        const cw=document.getElementById('cw');
+        const ctm=svg.getScreenCTM();
+        const screenY=ctm.f + snappedY * ctm.d;
+        const cwRect=cw.getBoundingClientRect();
+        const relY=screenY - cwRect.top + cw.scrollTop;
+        snapLine.style.top=relY+'px';
+        snapLine.style.display='block';
+      }
     }
     render(); renderHandles(); upd();
   }

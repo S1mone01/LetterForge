@@ -1,6 +1,6 @@
 {
   "name": "letterforge-pro",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "description": "LetterForge Pro – editor tipografico SVG desktop",
   "main": "main.js",
   "scripts": {
