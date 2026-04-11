@@ -7,6 +7,8 @@
 
 > 🎨 **Editor visivo intuitivo** · 🔤 **Gestione font avanzata** · ⬡ **Libreria SVG** · 🧊 **Operazioni booleane 3D** · 💾 **Esportazione SVG/STL/3MF**
 
+![Logo](images/Logo.png)
+
 ---
 
 ## ✨ Caratteristiche
@@ -22,6 +24,18 @@
 - **Undo/Redo**: cronologia completa delle operazioni
 - **Salva/Carica Progetto**: ripristina lo stato completo del workspace
 - **Auto-Update**: aggiornamento automatico all'avvio
+
+---
+
+## 📸 Screenshot
+
+### Editor 2D
+
+![Editor 2D](images/2d.png)
+
+### Anteprima 3D
+
+![Anteprima 3D](images/3d.png)
 
 ---
 
