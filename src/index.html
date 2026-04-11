@@ -6,6 +6,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
 <!-- OpenJSCAD CSG Engine (browser bundle from CDN) -->
 <script src="https://cdn.jsdelivr.net/npm/@jscad/modeling@2.13.0/dist/jscad-modeling.min.js"></script>
 <script>
@@ -5315,6 +5316,9 @@ let threeSelectionOrder = []; // Track selection order for boolean ops
 let threeRaycaster = new THREE.Raycaster();
 let threeMouse = new THREE.Vector2();
 let threeSelectionIndicator = []; // Visual indicators for selected objects
+let threeTransformControls = null; // Transform gizmo for moving objects
+let threeSnapLines = []; // Snap alignment visual guides
+const SNAP_THRESHOLD = 15; // Snap threshold in pixels
 
 function open3DPreview() {
   if (S.letters.length === 0) {
@@ -5393,6 +5397,19 @@ function close3DPreview() {
       if (threeScene) threeScene.remove(ind);
     });
     threeSelectionIndicator = [];
+
+    // Clear snap lines
+    threeSnapLines.forEach(line => {
+      if (threeScene) threeScene.remove(line);
+    });
+    threeSnapLines = [];
+
+    // Dispose transform controls
+    if (threeTransformControls) {
+      threeScene.remove(threeTransformControls);
+      threeTransformControls.dispose();
+      threeTransformControls = null;
+    }
 
     // Remove selection HUD
     const hudEl = document.getElementById('sel3d-hud');
@@ -5482,7 +5499,27 @@ function init3DScene() {
   threeGridHelper = new THREE.GridHelper(1000, 50, 0x333344, 0x222233);
   threeGridHelper.rotation.x = Math.PI / 2;
   threeScene.add(threeGridHelper);
-  
+
+  // Initialize TransformControls (3D gizmo for moving objects)
+  threeTransformControls = new THREE.TransformControls(threeCamera, threeRenderer.domElement);
+  threeTransformControls.setSize(0.75);
+  threeTransformControls.setSpace('world');
+  threeTransformControls.setMode('translate');
+  threeTransformControls.visible = false;
+  threeScene.add(threeTransformControls);
+
+  // When dragging with gizmo, disable orbit controls
+  threeTransformControls.addEventListener('dragging-changed', function (event) {
+    threeControls.enabled = !event.value;
+  });
+
+  // Snap-to-align during transform
+  threeTransformControls.addEventListener('objectChange', function () {
+    if (threeTransformControls.object) {
+      applySnapToAlign(threeTransformControls.object);
+    }
+  });
+
   // Handle resize
   const resizeObserver = new ResizeObserver(() => {
     if (!threeCamera || !threeRenderer) return;
@@ -6487,6 +6524,12 @@ function addSelectionIndicator(mesh) {
 
   threeScene.add(wireframe);
   threeSelectionIndicator.push(wireframe);
+
+  // Show transform gizmo on the first selected object
+  if (isFirst && threeTransformControls) {
+    threeTransformControls.attach(mesh);
+    threeTransformControls.visible = true;
+  }
 }
 
 function addSelectionIndicatorForGroup(meshes) {
@@ -6523,6 +6566,21 @@ function clear3DSelection() {
   });
   threeSelectionIndicator = [];
   threeSelectionOrder = [];
+
+  // Detach and hide transform gizmo
+  if (threeTransformControls) {
+    threeTransformControls.detach();
+    threeTransformControls.visible = false;
+  }
+
+  // Clear snap lines
+  threeSnapLines.forEach(line => {
+    if (threeScene) threeScene.remove(line);
+    if (line.geometry) line.geometry.dispose();
+    if (line.material) line.material.dispose();
+  });
+  threeSnapLines = [];
+
   update3DSelectionHUD();
 }
 
@@ -6538,7 +6596,7 @@ function update3DSelectionHUD() {
   }
 
   if (threeSelectionOrder.length === 0) {
-    hud.innerHTML = '<div style="background:rgba(0,0,0,.6);color:#5a5a7a;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #2a2a3a;">Click oggetto per selezionare · Shift+click per secondo</div>';
+    hud.innerHTML = '<div style="background:rgba(0,0,0,.6);color:#5a5a7a;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #2a2a3a;">Click oggetto per selezionare · Trascina le frecce per muovere</div>';
     return;
   }
 
@@ -6564,17 +6622,17 @@ function updateSelectionIndicators() {
     if (ind.material) ind.material.dispose();
   });
   threeSelectionIndicator = [];
-  
+
   // Add new indicators with role-based colors
   threeSelectionOrder.forEach((mesh, idx) => {
     const bbox = new THREE.Box3().setFromObject(mesh);
     const size = bbox.getSize(new THREE.Vector3());
     const center = bbox.getCenter(new THREE.Vector3());
-    
+
     const color = idx === 0 ? 0x00ff88 : 0xff6b35;
     const geometry = new THREE.BoxGeometry(size.x * 1.02, size.y * 1.02, size.z * 1.02);
     const edges = new THREE.EdgesGeometry(geometry);
-    const material = new THREE.LineBasicMaterial({ 
+    const material = new THREE.LineBasicMaterial({
       color: color,
       linewidth: 2
     });
@@ -6582,12 +6640,143 @@ function updateSelectionIndicators() {
     wireframe.position.copy(center);
     wireframe.userData.targetMesh = mesh;
     wireframe.userData.selectionRole = idx === 0 ? 'cutter' : 'target';
-    
+
     threeScene.add(wireframe);
     threeSelectionIndicator.push(wireframe);
   });
 
   update3DSelectionHUD();
+}
+
+// ── SNAP-TO-ALIGN ─────────────────────────────────────────────────────────
+
+function applySnapToAlign(movingMesh) {
+  if (!threeTransformControls || !threeTransformControls.visible) return;
+
+  // Get the moving mesh bounding box
+  const movingBBox = new THREE.Box3().setFromObject(movingMesh);
+  const movingCenter = new THREE.Vector3();
+  movingBBox.getCenter(movingCenter);
+
+  // Get all other meshes (excluding the moving one)
+  const otherMeshes = threeMeshes.filter(m => m !== movingMesh && m.visible);
+
+  let snapped = false;
+  const snapOffset = 2; // Visual offset for snap lines
+
+  // Clear previous snap lines
+  threeSnapLines.forEach(line => {
+    if (threeScene) threeScene.remove(line);
+    if (line.geometry) line.geometry.dispose();
+    if (line.material) line.material.dispose();
+  });
+  threeSnapLines = [];
+
+  for (const otherMesh of otherMeshes) {
+    const otherBBox = new THREE.Box3().setFromObject(otherMesh);
+    const otherCenter = new THREE.Vector3();
+    otherBBox.getCenter(otherCenter);
+
+    // Check alignment on X axis
+    const diffX = Math.abs(movingCenter.x - otherCenter.x);
+    if (diffX < SNAP_THRESHOLD) {
+      movingMesh.position.x += (otherCenter.x - movingCenter.x);
+      drawSnapLine(otherBBox, 'x', snapOffset);
+      snapped = true;
+    }
+
+    // Check alignment on Y axis
+    const diffY = Math.abs(movingCenter.y - otherCenter.y);
+    if (diffY < SNAP_THRESHOLD) {
+      movingMesh.position.y += (otherCenter.y - movingCenter.y);
+      drawSnapLine(otherBBox, 'y', snapOffset);
+      snapped = true;
+    }
+
+    // Check alignment on Z axis
+    const diffZ = Math.abs(movingCenter.z - otherCenter.z);
+    if (diffZ < SNAP_THRESHOLD) {
+      movingMesh.position.z += (otherCenter.z - movingCenter.z);
+      drawSnapLine(otherBBox, 'z', snapOffset);
+      snapped = true;
+    }
+
+    // Check edge alignment (min/max bounds)
+    const movingMinX = movingBBox.min.x + movingMesh.position.x - movingCenter.x;
+    const movingMaxX = movingBBox.max.x + movingMesh.position.x - movingCenter.x;
+    const otherMinX = otherBBox.min.x;
+    const otherMaxX = otherBBox.max.x;
+
+    // Snap left edges
+    if (Math.abs(movingMinX - otherMinX) < SNAP_THRESHOLD) {
+      movingMesh.position.x += (otherMinX - movingMinX);
+      drawSnapLine(otherBBox, 'x', snapOffset);
+      snapped = true;
+    }
+
+    // Snap right edges
+    if (Math.abs(movingMaxX - otherMaxX) < SNAP_THRESHOLD) {
+      movingMesh.position.x += (otherMaxX - movingMaxX);
+      drawSnapLine(otherBBox, 'x', snapOffset);
+      snapped = true;
+    }
+
+    // Snap bottom edges (Y min)
+    const movingMinY = movingBBox.min.y + movingMesh.position.y - movingCenter.y;
+    const movingMaxY = movingBBox.max.y + movingMesh.position.y - movingCenter.y;
+    const otherMinY = otherBBox.min.y;
+    const otherMaxY = otherBBox.max.y;
+
+    if (Math.abs(movingMinY - otherMinY) < SNAP_THRESHOLD) {
+      movingMesh.position.y += (otherMinY - movingMinY);
+      drawSnapLine(otherBBox, 'y', snapOffset);
+      snapped = true;
+    }
+
+    if (Math.abs(movingMaxY - otherMaxY) < SNAP_THRESHOLD) {
+      movingMesh.position.y += (otherMaxY - movingMaxY);
+      drawSnapLine(otherBBox, 'y', snapOffset);
+      snapped = true;
+    }
+  }
+
+  if (snapped) {
+    // Update gizmo position to follow the snapped mesh
+    threeTransformControls.update();
+  }
+}
+
+function drawSnapLine(bbox, axis, offset) {
+  // Create a visual guide line showing the snap alignment
+  const size = bbox.getSize(new THREE.Vector3());
+  const center = bbox.getCenter(new THREE.Vector3());
+
+  let start, end;
+  const extend = size.x + 100; // Extend line beyond object
+
+  if (axis === 'x') {
+    start = new THREE.Vector3(center.x, bbox.min.y - offset, bbox.min.z - offset);
+    end = new THREE.Vector3(center.x, bbox.max.y + offset, bbox.max.z + offset);
+  } else if (axis === 'y') {
+    start = new THREE.Vector3(bbox.min.x - offset, center.y, bbox.min.z - offset);
+    end = new THREE.Vector3(bbox.max.x + offset, center.y, bbox.max.z + offset);
+  } else { // z
+    start = new THREE.Vector3(bbox.min.x - offset, bbox.min.y - offset, center.z);
+    end = new THREE.Vector3(bbox.max.x + offset, bbox.max.y + offset, center.z);
+  }
+
+  const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+  const material = new THREE.LineBasicMaterial({
+    color: 0xc8ff00, // Lime green for snap
+    linewidth: 2,
+    transparent: true,
+    opacity: 0.8
+  });
+  const line = new THREE.Line(geometry, material);
+  line.userData.isSnapLine = true;
+
+  threeScene.add(line);
+  threeSnapLines.push(line);
 }
 
 // ── 3D BOOLEAN OPERATIONS ─────────────────────────────────────────────────
