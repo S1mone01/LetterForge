@@ -5208,17 +5208,29 @@ function saveState3D() {
     S.history3D = S.history3D.slice(0, S.historyIndex3D + 1);
   }
 
-  // Capisci quali colori esistono al momento
+  // Save snapshot of all meshes (including hidden ones)
+  const meshSnapshots = threeMeshes.map(mesh => ({
+    position: mesh.position.clone(),
+    quaternion: mesh.quaternion.clone(),
+    scale: mesh.scale.clone(),
+    visible: mesh.visible,
+    colorHex: mesh.userData.colorHex,
+    isBooleanResult: mesh.userData.isBooleanResult,
+    isSubtractResult: mesh.userData.isSubtractResult,
+    hiddenByBoolean: mesh.userData.hiddenByBoolean || false,
+  }));
+
   const extrusionLevelsData = {};
   for (const col in threeExtrusionLevels) {
     extrusionLevelsData[col] = threeExtrusionLevels[col].extrusion;
   }
 
   const state = {
-    meshes: [...threeMeshes], // Salva i riferimenti alle mesh correnti
+    meshSnapshots: meshSnapshots,
+    meshCount: threeMeshes.length,
     extrusionLevels: extrusionLevelsData,
     visibilityState: JSON.parse(JSON.stringify(threeVisibilityState || {})),
-    graphics: JSON.parse(JSON.stringify(threeGraphicsSettings))
+    graphics: JSON.parse(JSON.stringify(threeGraphicsSettings)),
   };
 
   S.history3D.push(state);
@@ -5243,15 +5255,55 @@ function redo3D() {
 }
 
 function restoreState3D(state) {
-  // Rimuovi tutte le mesh attuali dalla scena (senza disporle!)
+  // If more meshes now than saved, remove boolean result meshes and unhide targets
+  if (threeMeshes.length > state.meshCount) {
+    // Remove boolean result meshes
+    const toRemove = threeMeshes.filter(m => m.userData.isBooleanResult || m.userData.isSubtractResult);
+    toRemove.forEach(mesh => {
+      // Reveal hidden target if present
+      if (mesh.userData._hiddenTarget) {
+        mesh.userData._hiddenTarget.visible = true;
+        mesh.userData._hiddenTarget.userData.hiddenByBoolean = false;
+      }
+      threeScene.remove(mesh);
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material) mesh.material.dispose();
+    });
+    threeMeshes = threeMeshes.filter(m => !m.userData.isBooleanResult && !m.userData.isSubtractResult);
+  }
+
+  // Unhide any remaining hidden targets
   threeMeshes.forEach(mesh => {
-    if (threeScene) threeScene.remove(mesh);
+    if (mesh.userData.hiddenByBoolean) {
+      mesh.visible = true;
+      mesh.userData.hiddenByBoolean = false;
+    }
   });
 
-  // Ripristina la lista delle mesh
-  threeMeshes = [...state.meshes];
+  // Restore mesh positions
+  if (state.meshSnapshots && state.meshCount === threeMeshes.length) {
+    state.meshSnapshots.forEach((snapshot, i) => {
+      const mesh = threeMeshes[i];
+      if (!mesh) return;
+      mesh.position.copy(snapshot.position);
+      mesh.quaternion.copy(snapshot.quaternion);
+      mesh.scale.copy(snapshot.scale);
+      mesh.visible = snapshot.visible;
+      mesh.userData.colorHex = snapshot.colorHex;
+    });
+  }
+
+  // Restore visibility and extrusion
+  threeVisibilityState = JSON.parse(JSON.stringify(state.visibilityState));
+  for (const color in state.extrusionLevels) {
+    const val = state.extrusionLevels[color];
+    updateExtrusion(color, val, true);
+  }
   threeMeshes.forEach(mesh => {
-    if (threeScene) threeScene.add(mesh);
+    const color = mesh.userData.colorHex || (mesh.material && mesh.material.color ? '#' + mesh.material.color.getHexString() : null);
+    if (color && threeVisibilityState[color] !== undefined) {
+      mesh.visible = threeVisibilityState[color];
+    }
   });
 
   // Ripristina grafica
@@ -5260,7 +5312,7 @@ function restoreState3D(state) {
   if (gridToggle) gridToggle.checked = threeGraphicsSettings.gridVisible;
   const bgColorPicker = document.getElementById('bg-color-picker');
   if (bgColorPicker) bgColorPicker.value = threeGraphicsSettings.bgColor;
-  
+
   if (threeGridHelper) threeGridHelper.visible = threeGraphicsSettings.gridVisible;
   if (threeScene) threeScene.background = new THREE.Color(threeGraphicsSettings.bgColor);
   if (threeAmbientLight) threeAmbientLight.intensity = threeGraphicsSettings.ambientIntensity;
@@ -5317,8 +5369,6 @@ let threeRaycaster = new THREE.Raycaster();
 let threeMouse = new THREE.Vector2();
 let threeSelectionIndicator = []; // Visual indicators for selected objects
 let threeTransformControls = null; // Transform gizmo for moving objects
-let threeSnapLines = []; // Snap alignment visual guides
-const SNAP_THRESHOLD = 15; // Snap threshold in pixels
 
 function open3DPreview() {
   if (S.letters.length === 0) {
@@ -5397,12 +5447,6 @@ function close3DPreview() {
       if (threeScene) threeScene.remove(ind);
     });
     threeSelectionIndicator = [];
-
-    // Clear snap lines
-    threeSnapLines.forEach(line => {
-      if (threeScene) threeScene.remove(line);
-    });
-    threeSnapLines = [];
 
     // Dispose transform controls
     if (threeTransformControls) {
@@ -5513,21 +5557,41 @@ function init3DScene() {
   threeTransformControls.visible = false;
   threeScene.add(threeTransformControls);
 
-  // When dragging with gizmo, disable orbit controls
+  // When dragging with gizmo, disable orbit controls and sync mesh with pivot
   threeTransformControls.addEventListener('dragging-changed', function (event) {
     threeControls.enabled = !event.value;
   });
 
-  // Apply snap-to-align when user releases the gizmo
-  threeTransformControls.addEventListener('mouseUp', function () {
-    if (threeTransformControls._pivot) {
-      applySnapToAlign(threeTransformControls._pivot);
-      saveState3D(); // Save state after move
+  // objectChange: fires every frame while dragging — sync mesh to pivot position
+  threeTransformControls.addEventListener('objectChange', function () {
+    const pivot = threeTransformControls._pivot;
+    if (!pivot) return;
+    const mesh = pivot.userData.targetMesh;
+    if (!mesh) return;
+
+    // Save start positions on first drag frame
+    if (!threeTransformControls._dragging) {
+      threeTransformControls._pivotStartPos = pivot.position.clone();
+      threeTransformControls._meshStartPos = mesh.position.clone();
+      threeTransformControls._dragging = true;
     }
+
+    // Apply delta: mesh moves same amount as pivot moved from start
+    const delta = new THREE.Vector3().subVectors(pivot.position, threeTransformControls._pivotStartPos);
+    mesh.position.copy(threeTransformControls._meshStartPos).add(delta);
   });
 
-  // Fix: gizmo appears at center of selected object, not at mesh origin
-  // We use a pivot object that we manually position at the bbox center
+  // Drag ended — clean up
+  threeTransformControls.addEventListener('mouseUp', function () {
+    if (threeTransformControls._pivot) {
+      saveState3D();
+    }
+    threeTransformControls._dragging = false;
+    threeTransformControls._pivotStartPos = null;
+    threeTransformControls._meshStartPos = null;
+  });
+
+  // Pivot object for transform gizmo (positioned at bbox center of selected mesh)
   threeTransformControls._pivot = null;
 
   // Handle resize
@@ -6537,15 +6601,21 @@ function addSelectionIndicator(mesh) {
 
   // Show transform gizmo centered on the first selected object's bounding box
   if (isFirst && threeTransformControls) {
-    // Create a pivot object at the bbox center
+    // Remove old pivot
     if (threeTransformControls._pivot) {
       threeScene.remove(threeTransformControls._pivot);
     }
+
+    // Create pivot at bbox center
     const pivot = new THREE.Object3D();
     pivot.position.copy(center);
     pivot.userData.targetMesh = mesh;
     threeScene.add(pivot);
     threeTransformControls._pivot = pivot;
+
+    // Save start position for delta calculation
+    threeTransformControls._pivotStartPos = pivot.position.clone();
+    threeTransformControls._meshStartPos = mesh.position.clone();
 
     // Attach gizmo to pivot
     threeTransformControls.attach(pivot);
@@ -6596,15 +6666,9 @@ function clear3DSelection() {
       threeScene.remove(threeTransformControls._pivot);
       threeTransformControls._pivot = null;
     }
+    threeTransformControls._pivotStartPos = null;
+    threeTransformControls._meshStartPos = null;
   }
-
-  // Clear snap lines
-  threeSnapLines.forEach(line => {
-    if (threeScene) threeScene.remove(line);
-    if (line.geometry) line.geometry.dispose();
-    if (line.material) line.material.dispose();
-  });
-  threeSnapLines = [];
 
   update3DSelectionHUD();
 }
@@ -6671,160 +6735,6 @@ function updateSelectionIndicators() {
   });
 
   update3DSelectionHUD();
-}
-
-// ── SNAP-TO-ALIGN ─────────────────────────────────────────────────────────
-
-function applySnapToAlign(pivot) {
-  if (!threeTransformControls || !threeTransformControls.visible) return;
-
-  const targetMesh = pivot.userData.targetMesh;
-  if (!targetMesh) return;
-
-  // Get the moving mesh bounding box
-  const movingBBox = new THREE.Box3().setFromObject(targetMesh);
-  const movingCenter = new THREE.Vector3();
-  movingBBox.getCenter(movingCenter);
-
-  // Get all other meshes (excluding the target one)
-  const otherMeshes = threeMeshes.filter(m => m !== targetMesh && m.visible);
-
-  let snapped = false;
-  const snapOffset = 2; // Visual offset for snap lines
-
-  // Clear previous snap lines
-  threeSnapLines.forEach(line => {
-    if (threeScene) threeScene.remove(line);
-    if (line.geometry) line.geometry.dispose();
-    if (line.material) line.material.dispose();
-  });
-  threeSnapLines = [];
-
-  for (const otherMesh of otherMeshes) {
-    const otherBBox = new THREE.Box3().setFromObject(otherMesh);
-    const otherCenter = new THREE.Vector3();
-    otherBBox.getCenter(otherCenter);
-
-    // Check alignment on X axis
-    const diffX = Math.abs(movingCenter.x - otherCenter.x);
-    if (diffX < SNAP_THRESHOLD) {
-      pivot.position.x += (otherCenter.x - movingCenter.x);
-      targetMesh.position.x = pivot.position.x;
-      drawSnapLine(otherBBox, 'x', snapOffset);
-      snapped = true;
-    }
-
-    // Check alignment on Y axis
-    const diffY = Math.abs(movingCenter.y - otherCenter.y);
-    if (diffY < SNAP_THRESHOLD) {
-      pivot.position.y += (otherCenter.y - movingCenter.y);
-      targetMesh.position.y = pivot.position.y;
-      drawSnapLine(otherBBox, 'y', snapOffset);
-      snapped = true;
-    }
-
-    // Check alignment on Z axis
-    const diffZ = Math.abs(movingCenter.z - otherCenter.z);
-    if (diffZ < SNAP_THRESHOLD) {
-      pivot.position.z += (otherCenter.z - movingCenter.z);
-      targetMesh.position.z = pivot.position.z;
-      drawSnapLine(otherBBox, 'z', snapOffset);
-      snapped = true;
-    }
-
-    // Check edge alignment (min/max bounds)
-    const movingMinX = movingBBox.min.x;
-    const movingMaxX = movingBBox.max.x;
-    const movingMinY = movingBBox.min.y;
-    const movingMaxY = movingBBox.max.y;
-
-    const otherMinX = otherBBox.min.x;
-    const otherMaxX = otherBBox.max.x;
-    const otherMinY = otherBBox.min.y;
-    const otherMaxY = otherBBox.max.y;
-
-    // Snap left edges
-    if (Math.abs(movingMinX - otherMinX) < SNAP_THRESHOLD) {
-      const offset = otherMinX - movingMinX;
-      pivot.position.x += offset;
-      targetMesh.position.x = pivot.position.x;
-      drawSnapLine(otherBBox, 'x', snapOffset);
-      snapped = true;
-    }
-
-    // Snap right edges
-    if (Math.abs(movingMaxX - otherMaxX) < SNAP_THRESHOLD) {
-      const offset = otherMaxX - movingMaxX;
-      pivot.position.x += offset;
-      targetMesh.position.x = pivot.position.x;
-      drawSnapLine(otherBBox, 'x', snapOffset);
-      snapped = true;
-    }
-
-    // Snap bottom edges (Y min)
-    if (Math.abs(movingMinY - otherMinY) < SNAP_THRESHOLD) {
-      const offset = otherMinY - movingMinY;
-      pivot.position.y += offset;
-      targetMesh.position.y = pivot.position.y;
-      drawSnapLine(otherBBox, 'y', snapOffset);
-      snapped = true;
-    }
-
-    if (Math.abs(movingMaxY - otherMaxY) < SNAP_THRESHOLD) {
-      const offset = otherMaxY - movingMaxY;
-      pivot.position.y += offset;
-      targetMesh.position.y = pivot.position.y;
-      drawSnapLine(otherBBox, 'y', snapOffset);
-      snapped = true;
-    }
-  }
-
-  if (snapped) {
-    // Update gizmo position to follow the snapped pivot
-    threeTransformControls.update();
-
-    // Update selection indicator wireframe position
-    threeSelectionIndicator.forEach(ind => {
-      if (ind.userData.targetMesh === targetMesh) {
-        const bbox = new THREE.Box3().setFromObject(targetMesh);
-        const center = bbox.getCenter(new THREE.Vector3());
-        ind.position.copy(center);
-      }
-    });
-  }
-}
-
-function drawSnapLine(bbox, axis, offset) {
-  // Create a visual guide line showing the snap alignment
-  const size = bbox.getSize(new THREE.Vector3());
-  const center = bbox.getCenter(new THREE.Vector3());
-
-  let start, end;
-  const extend = size.x + 100; // Extend line beyond object
-
-  if (axis === 'x') {
-    start = new THREE.Vector3(center.x, bbox.min.y - offset, bbox.min.z - offset);
-    end = new THREE.Vector3(center.x, bbox.max.y + offset, bbox.max.z + offset);
-  } else if (axis === 'y') {
-    start = new THREE.Vector3(bbox.min.x - offset, center.y, bbox.min.z - offset);
-    end = new THREE.Vector3(bbox.max.x + offset, center.y, bbox.max.z + offset);
-  } else { // z
-    start = new THREE.Vector3(bbox.min.x - offset, bbox.min.y - offset, center.z);
-    end = new THREE.Vector3(bbox.max.x + offset, bbox.max.y + offset, center.z);
-  }
-
-  const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-  const material = new THREE.LineBasicMaterial({
-    color: 0xc8ff00, // Lime green for snap
-    linewidth: 2,
-    transparent: true,
-    opacity: 0.8
-  });
-  const line = new THREE.Line(geometry, material);
-  line.userData.isSnapLine = true;
-
-  threeScene.add(line);
-  threeSnapLines.push(line);
 }
 
 // ── 3D BOOLEAN OPERATIONS ─────────────────────────────────────────────────
@@ -6969,15 +6879,15 @@ function subtract3DObjects() {
     resultMesh.material.dispose();
     resultMesh.material = targetMaterialClone;
 
-    // Remove target from scene (but don't dispose!)
-    threeScene.remove(target);
-    const idxTarget = threeMeshes.indexOf(target);
-    if (idxTarget !== -1) threeMeshes.splice(idxTarget, 1);
+    // Hide target instead of removing it (so undo can restore it)
+    target.visible = false;
+    target.userData.hiddenByBoolean = true;
 
     // Add result mesh (vertices are already in world space)
     resultMesh.position.set(0, 0, 0);
     resultMesh.userData.isBooleanResult = true;
     resultMesh.userData.isSubtractResult = true;
+    resultMesh.userData._hiddenTarget = target; // Reference to hidden target for undo
 
     threeScene.add(resultMesh);
     threeMeshes.push(resultMesh);
@@ -7011,6 +6921,12 @@ function start3DAnimation() {
 
     threeControls.update();
 
+    // Must update TransformControls every frame so gizmo arrows stay correctly oriented
+    // relative to the camera (fixes inverted arrow tips when rotating the view)
+    if (threeTransformControls && threeTransformControls.visible) {
+      threeTransformControls.update();
+    }
+
     // Update selection indicators to follow their target meshes
     threeSelectionIndicator.forEach(ind => {
       if (ind.userData.targetMesh && ind.userData.targetMesh.visible) {
@@ -7019,18 +6935,6 @@ function start3DAnimation() {
         ind.position.copy(center);
       }
     });
-
-    // Sync mesh position with pivot when gizmo moves it
-    if (threeTransformControls && threeTransformControls._pivot && threeTransformControls.dragging) {
-      const pivot = threeTransformControls._pivot;
-      const targetMesh = pivot.userData.targetMesh;
-      if (targetMesh) {
-        targetMesh.position.copy(pivot.position);
-      }
-    }
-
-    // Update snap lines visibility (hide them when not dragging)
-    // Snap lines are cleared and redrawn during mouseUp event
 
     threeRenderer.render(threeScene, threeCamera);
     threeAnimationId = requestAnimationFrame(animate);
