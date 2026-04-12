@@ -269,19 +269,14 @@ window.OpenJSCADBridge = {
       }
     }
 
-    // Final validation: check if geom2 has any valid outlines
-    try {
-      const outlines = this.jscad.geometries.geom2.toOutlines(geom);
-      if (!outlines || outlines.length === 0) {
-        console.warn('⚠ geom2 has no outlines after operations');
-        return null;
-      }
-    } catch (err) {
-      console.warn('⚠ geom2 validation failed:', err.message);
+    // Final validation: if we have points, try to use them
+    if (!geom) {
+      console.warn('⚠ geom2 generation failed entirely');
       return null;
     }
 
-    console.log(`✓ Created geom2: ${outerContours.length} outer, ${holeContours.length} holes (reversed: ${isReversed})`);
+    // Attach contours for borders
+    geom.sourceContours = contourData.map(c => c.points);
     return geom;
   },
 
@@ -372,20 +367,45 @@ window.OpenJSCADBridge = {
         return;
       }
 
-      // Triangulate (fan triangulation for polygons with >3 vertices)
-      for (let i = 1; i < vertices.length - 1; i++) {
-        const a = vertices[0];
-        const b = vertices[i];
-        const c = vertices[i + 1];
-
-        positions.push(a[0], a[1], a[2]);
-        positions.push(b[0], b[1], b[2]);
-        positions.push(c[0], c[1], c[2]);
-
-        normals.push(nx, ny, nz);
-        normals.push(nx, ny, nz);
-        normals.push(nx, ny, nz);
+      // Triangulate (concave-safe triangulation for polygons with >3 vertices)
+      let indices = [];
+      if (vertices.length === 3) {
+        indices = [0, 1, 2];
+      } else if (vertices.length === 4) {
+        // Fast path for quads
+        indices = [0, 1, 2, 0, 2, 3];
+      } else {
+        // Complex polygons (like top/bottom faces of a ring)
+        try {
+          // Project 3D points to 2D for triangulation
+          // We use the normal to decide which plane to project onto
+          const absNx = Math.abs(nx);
+          const absNy = Math.abs(ny);
+          const absNz = Math.abs(nz);
+          
+          const points = vertices.map(v => {
+            if (absNx > absNy && absNx > absNz) return { x: v[1], y: v[2] };
+            if (absNy > absNx && absNy > absNz) return { x: v[0], y: v[2] };
+            return { x: v[0], y: v[1] };
+          });
+          
+          const triIndices = THREE.ShapeUtils.triangulateShape(points, []);
+          for (let i = 0; i < triIndices.length; i++) {
+            indices.push(triIndices[i][0], triIndices[i][1], triIndices[i][2]);
+          }
+        } catch (e) {
+          console.warn('⚠ Triangulation failed, falling back to fan:', e.message);
+          for (let i = 1; i < vertices.length - 1; i++) {
+            indices.push(0, i, i + 1);
+          }
+        }
       }
+
+      indices.forEach(idx => {
+        const v = vertices[idx];
+        positions.push(v[0], v[1], v[2]);
+        normals.push(nx, ny, nz);
+      });
     });
 
     if (positions.length === 0) {
@@ -1894,7 +1914,7 @@ window.CSG = (function () {
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.5</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.6</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -2255,7 +2275,7 @@ window.CSG = (function () {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.2.5</div>
+  <div class="un-ver" id="un-version">Versione 4.2.6</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -2955,6 +2975,204 @@ function svgElToPathD(el) {
 }
 
 // 6. STROKE → FILL
+/**
+ * Offset a 2D polygon contour outward by `delta` units.
+ *
+ * Coordinate system: SVG (Y points DOWN).
+ * In SVG, a CCW polygon has POSITIVE signed area.
+ * Outward normal for CCW polygon in SVG: rotate edge vector +90° (i.e. right-hand side).
+ *
+ * pts: array of [x, y], closed polygon (last point ≠ first)
+ * delta: > 0 = expand outward for a CCW contour
+ */
+function offsetContour2D(pts, delta) {
+  const n = pts.length;
+  if (n < 3) return pts.slice();
+  const result = [];
+
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i - 1 + n) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+
+    // Edge A: prev→curr, Edge B: curr→next
+    const ax = curr[0] - prev[0], ay = curr[1] - prev[1];
+    const bx = next[0] - curr[0], by = next[1] - curr[1];
+
+    const la = Math.sqrt(ax*ax + ay*ay);
+    const lb = Math.sqrt(bx*bx + by*by);
+    if (la < 1e-10 || lb < 1e-10) { result.push([curr[0], curr[1]]); continue; }
+
+    // Outward unit normals (for CCW polygon in SVG, outward = rotate edge CW = (+dy, -dx)/len)
+    const nax =  ay / la,  nay = -ax / la;   // right-hand normal of edge A
+    const nbx =  by / lb,  nby = -bx / lb;   // right-hand normal of edge B
+
+    // Bisector of the two outward normals
+    let bix = nax + nbx, biy = nay + nby;
+    const blen = Math.sqrt(bix*bix + biy*biy);
+
+    if (blen < 1e-10) {
+      // Edges are anti-parallel (180° turn): just use normal of B
+      result.push([curr[0] + nbx * delta, curr[1] + nby * delta]);
+      continue;
+    }
+    bix /= blen; biy /= blen;
+
+    // Miter scale: distance along bisector to reach offset distance `delta`
+    const dot = nax * bix + nay * biy;          // cos(half-angle)
+    const miter = Math.abs(dot) > 1e-4 ? delta / dot : delta;
+
+    // Clamp miter at 4× delta to avoid extreme spikes on very acute angles
+    const limit = Math.abs(delta) * 4;
+    const clamped = Math.max(-limit, Math.min(limit, miter));
+
+    result.push([curr[0] + bix * clamped, curr[1] + biy * clamped]);
+  }
+  return result;
+}
+
+/**
+ * Build an SVG path string for a filled border ring around a glyph path.
+ *
+ * Strategy (correct, simple):
+ *   - Parse every subpath into a point array
+ *   - Classify each subpath as outer (positive signed area in SVG coords) or hole (negative)
+ *   - Border path = [outer contours expanded by borderWidth] + [original outer contours reversed
+ *     as holes] + [original hole contours unchanged as holes]
+ *   - fill-rule="evenodd" on the resulting path produces only the outer ring.
+ *
+ * This means the border never enters the interior of letters (e.g. the hole in "O"),
+ * never overlaps the glyph fill, and never spills into adjacent characters.
+ */
+function buildBorderPathD(pathD, borderWidth) {
+  if (!borderWidth || borderWidth <= 0) return null;
+
+  const segs = pathToAbsoluteSegments(pathD);
+  if (!segs.length) return null;
+
+  // ── 1. Discretise each subpath into a flat point array ──────────────────
+  const BEZIER_STEPS = 16;
+  const subpaths = [];
+  let current = [];
+  let cx = 0, cy = 0, startX = 0, startY = 0;
+
+  for (const s of segs) {
+    if (s.cmd === 'M') {
+      if (current.length >= 3) subpaths.push(current);
+      current = [[s.x, s.y]];
+      cx = startX = s.x; cy = startY = s.y;
+    } else if (s.cmd === 'L') {
+      current.push([s.x, s.y]); cx = s.x; cy = s.y;
+    } else if (s.cmd === 'H') {
+      current.push([s.x, cy]); cx = s.x;
+    } else if (s.cmd === 'V') {
+      current.push([cx, s.y]); cy = s.y;
+    } else if (s.cmd === 'C') {
+      for (let k = 1; k <= BEZIER_STEPS; k++) {
+        const t = k / BEZIER_STEPS, mt = 1 - t;
+        current.push([
+          mt*mt*mt*cx + 3*mt*mt*t*s.x1 + 3*mt*t*t*s.x2 + t*t*t*s.x,
+          mt*mt*mt*cy + 3*mt*mt*t*s.y1 + 3*mt*t*t*s.y2 + t*t*t*s.y
+        ]);
+      }
+      cx = s.x; cy = s.y;
+    } else if (s.cmd === 'Q') {
+      for (let k = 1; k <= BEZIER_STEPS; k++) {
+        const t = k / BEZIER_STEPS, mt = 1 - t;
+        current.push([
+          mt*mt*cx + 2*mt*t*s.x1 + t*t*s.x,
+          mt*mt*cy + 2*mt*t*s.y1 + t*t*s.y
+        ]);
+      }
+      cx = s.x; cy = s.y;
+    } else if (s.cmd === 'Z') {
+      // Remove last point if it duplicates the start (common in font paths)
+      if (current.length > 1) {
+        const last = current[current.length - 1];
+        const dx = last[0] - current[0][0], dy = last[1] - current[0][1];
+        if (Math.sqrt(dx*dx + dy*dy) < 0.5) current.pop();
+      }
+      if (current.length >= 3) subpaths.push(current);
+      current = [];
+      cx = startX; cy = startY;
+    }
+  }
+  if (current.length >= 3) subpaths.push(current);
+  if (!subpaths.length) return null;
+
+  // ── 2. Signed area: positive = CCW winding (outer in SVG), negative = CW (hole) ──
+  function signedArea(pts) {
+    let a = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const j = (i + 1) % n;
+      a += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
+    }
+    return a / 2;
+  }
+
+  // ── 3. Remove duplicate / near-duplicate consecutive points ──────────────
+  function dedupe(pts) {
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      const dx = pts[i][0] - out[out.length-1][0];
+      const dy = pts[i][1] - out[out.length-1][1];
+      if (Math.sqrt(dx*dx + dy*dy) > 0.1) out.push(pts[i]);
+    }
+    return out;
+  }
+
+  // ── 4. Convert point array back to a closed SVG subpath string ───────────
+  function ptsToD(pts) {
+    if (pts.length < 3) return '';
+    let d = `M${pts[0][0].toFixed(2)},${pts[0][1].toFixed(2)}`;
+    for (let k = 1; k < pts.length; k++) d += ` L${pts[k][0].toFixed(2)},${pts[k][1].toFixed(2)}`;
+    return d + ' Z';
+  }
+
+  // ── 5. Classify subpaths ─────────────────────────────────────────────────
+  const outers = [];  // positive area = CCW = outer fill
+  const holes  = [];  // negative area = CW  = counter-clockwise holes
+
+  for (const raw of subpaths) {
+    const pts = dedupe(raw);
+    if (pts.length < 3) continue;
+    const area = signedArea(pts);
+    if (area >= 0) outers.push(pts);
+    else           holes.push(pts);
+  }
+
+  if (!outers.length) return null;
+
+  // ── 6. Build the border path ─────────────────────────────────────────────
+  //
+  // Border path consists of, concatenated with evenodd fill:
+  //   A) Each outer contour expanded outward by borderWidth  (the outer ring face)
+  //   B) Each original outer contour reversed (CW = hole punched through the ring)
+  //   C) Each original hole contour as-is (CW, already punches through if covered)
+  //
+  // With fill-rule="evenodd":
+  //   - Region between expanded-outer and original-outer → filled (border ring)
+  //   - Region inside original-outer → cancelled by (B) → transparent = letter shows through
+  //   - Holes in the letter → (C) keeps them transparent
+
+  let borderD = '';
+
+  for (const pts of outers) {
+    // Expand outward
+    const expanded = offsetContour2D(pts, borderWidth);
+    if (expanded.length < 3) continue;
+    borderD += ptsToD(expanded);          // outer ring (CCW, positive area)
+    borderD += ptsToD([...pts].reverse()); // hole = original reversed → CW
+  }
+
+  // Original holes: keep them as-is (CW), they cancel any fill that might bleed in
+  for (const pts of holes) {
+    borderD += ptsToD(pts);
+  }
+
+  return borderD || null;
+}
+
 function strokeToFillPath(segs, strokeWidth) {
   const hw = strokeWidth / 2;
   const pts = [];
@@ -3329,84 +3547,119 @@ function render(){
   // Ordina gli indici per layer (1=sotto, 3=sopra)
   const sortedIndices = S.letters.map((l, i) => i).sort((a, b) => (S.letters[a].layer || 2) - (S.letters[b].layer || 2));
 
+  // PASSATA 1: tutti i bordi (layer sotto tutte le lettere)
   sortedIndices.forEach(i => {
     const l = S.letters[i];
+    if(!l.borderWidth || l.borderWidth <= 0) return;
+
     ctx.font=`${l.fontSize}px ${l.fontFamily}`;
     const mw = l.isGroup ? l.groupW : ctx.measureText(l.ch).width;
-    const mh = l.isGroup ? l.groupH : l.fontSize;
 
-    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
     let tf=`translate(${l.x},${l.y})`;
     if(l.rot)tf+=` rotate(${l.rot})`;
     if(l.sx!==1||l.sy!==1)tf+=` scale(${l.sx},${l.sy})`;
     if(l.skew)tf+=` skewX(${l.skew})`;
     tf+=` translate(${-l.x},${-l.y})`;
+
+    const displayBorder = S.sel.has(i) ? '#88cc00' : l.borderColor;
+
+    const bg=document.createElementNS('http://www.w3.org/2000/svg','g');
+    bg.setAttribute('transform',tf);
+    bg.setAttribute('opacity',l.op);
+    bg.setAttribute('class','lg-border');
+
+    let bel;
+    if(l.isGroup && l.groupHTML){
+      bel=document.createElementNS('http://www.w3.org/2000/svg','g');
+      bel.innerHTML=l.groupHTML;
+      bel.setAttribute('transform',`translate(${l.x-(l.originalX||l.x)},${l.y-(l.originalY||l.y)})`);
+      bel.querySelectorAll('path').forEach(p=>{
+        p.setAttribute('fill',displayBorder);
+        p.setAttribute('stroke',displayBorder);
+        p.setAttribute('stroke-width',l.borderWidth*2);
+        p.setAttribute('stroke-linejoin','round');
+        p.setAttribute('stroke-linecap','round');
+        p.style.paintOrder='stroke fill';
+      });
+    } else if(l.customPath){
+      bel=document.createElementNS('http://www.w3.org/2000/svg','path');
+      bel.setAttribute('d',l.customPath);
+      bel.setAttribute('fill',displayBorder);
+      bel.setAttribute('stroke',displayBorder);
+      bel.setAttribute('stroke-width',l.borderWidth*2);
+      bel.setAttribute('stroke-linejoin','round');
+      bel.setAttribute('stroke-linecap','round');
+      bel.style.paintOrder='stroke fill';
+      const innerX=l.isSvgImport?l.x-(l.svgW||mw)/2:l.x-mw/2;
+      bel.setAttribute('transform',`translate(${innerX},${l.y})`);
+    } else if(S.openFonts[l.fontName]){
+      const d=S.openFonts[l.fontName].getPath(l.ch,0,0,l.fontSize).toPathData(4);
+      bel=document.createElementNS('http://www.w3.org/2000/svg','path');
+      bel.setAttribute('d',d);
+      bel.setAttribute('fill',displayBorder);
+      bel.setAttribute('stroke',displayBorder);
+      bel.setAttribute('stroke-width',l.borderWidth*2);
+      bel.setAttribute('stroke-linejoin','round');
+      bel.setAttribute('stroke-linecap','round');
+      bel.style.paintOrder='stroke fill';
+      bel.setAttribute('transform',`translate(${l.x-mw/2},${l.y})`);
+    } else {
+      bel=document.createElementNS('http://www.w3.org/2000/svg','text');
+      bel.setAttribute('x',l.x);bel.setAttribute('y',l.y);
+      bel.setAttribute('font-family',l.fontFamily);bel.setAttribute('font-size',l.fontSize);
+      bel.setAttribute('fill',displayBorder);bel.setAttribute('text-anchor','middle');
+      bel.setAttribute('dominant-baseline','auto');bel.textContent=l.ch;
+      bel.setAttribute('stroke',displayBorder);
+      bel.setAttribute('stroke-width',l.borderWidth*2);
+      bel.setAttribute('stroke-linejoin','round');
+      bel.setAttribute('stroke-linecap','round');
+      bel.style.paintOrder='stroke fill';
+    }
+    bg.appendChild(bel);
+    ll.appendChild(bg);
+  });
+
+  // PASSATA 2: tutte le lettere (sopra tutti i bordi)
+  sortedIndices.forEach(i => {
+    const l = S.letters[i];
+    ctx.font=`${l.fontSize}px ${l.fontFamily}`;
+    const mw = l.isGroup ? l.groupW : ctx.measureText(l.ch).width;
+
+    let tf=`translate(${l.x},${l.y})`;
+    if(l.rot)tf+=` rotate(${l.rot})`;
+    if(l.sx!==1||l.sy!==1)tf+=` scale(${l.sx},${l.sy})`;
+    if(l.skew)tf+=` skewX(${l.skew})`;
+    tf+=` translate(${-l.x},${-l.y})`;
+
+    const displayFill = S.sel.has(i) ? '#c8ff00' : l.fill;
+
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
     g.setAttribute('transform',tf);g.setAttribute('opacity',l.op);
     g.setAttribute('class','lg');g.setAttribute('data-i',i);
     g.addEventListener('mousedown',e=>gmd(e,i));
 
-    const displayFill = S.sel.has(i) ? '#c8ff00' : l.fill;
-    const displayBorder = S.sel.has(i) ? '#88cc00' : l.borderColor;
-    const hasBorder = l.borderWidth && l.borderWidth > 0;
-
     let el;
     if(l.isGroup){
-      el = document.createElementNS('http://www.w3.org/2000/svg','g');
-      el.innerHTML = l.groupHTML;
-      el.style.color = displayFill;
-      el.setAttribute('transform', `translate(${l.x - l.originalX}, ${l.y - l.originalY})`);
-      if(hasBorder && l.groupPaths){
-        // Apply stroke to each path in the group - external border using paint-order
-        const paths = el.querySelectorAll('path');
-        paths.forEach(p => {
-          p.setAttribute('fill', displayFill);
-          p.setAttribute('stroke', displayBorder);
-          p.setAttribute('stroke-width', l.borderWidth);
-          p.setAttribute('stroke-linejoin', 'round');
-          p.setAttribute('stroke-linecap', 'round');
-          p.style.paintOrder = 'stroke fill';
-        });
-      }
+      el=document.createElementNS('http://www.w3.org/2000/svg','g');
+      el.innerHTML=l.groupHTML;
+      el.style.color=displayFill;
+      el.setAttribute('transform',`translate(${l.x-(l.originalX||l.x)},${l.y-(l.originalY||l.y)})`);
     } else if(l.customPath){
       el=document.createElementNS('http://www.w3.org/2000/svg','path');
       el.setAttribute('d',l.customPath);el.setAttribute('fill',displayFill);
-      if(l.isSvgImport){
-        el.setAttribute('transform',`translate(${l.x-(l.svgW||mw)/2},${l.y})`);
-      } else {
-        el.setAttribute('transform',`translate(${l.x-mw/2},${l.y})`);
-      }
-      if(hasBorder){
-        el.setAttribute('stroke',displayBorder);
-        el.setAttribute('stroke-width',l.borderWidth);
-        el.setAttribute('stroke-linejoin','round');
-        el.setAttribute('stroke-linecap','round');
-        el.style.paintOrder = 'stroke fill';
-      }
+      const innerX=l.isSvgImport?l.x-(l.svgW||mw)/2:l.x-mw/2;
+      el.setAttribute('transform',`translate(${innerX},${l.y})`);
     } else if(S.openFonts[l.fontName]){
       const d=S.openFonts[l.fontName].getPath(l.ch,0,0,l.fontSize).toPathData(4);
       el=document.createElementNS('http://www.w3.org/2000/svg','path');
       el.setAttribute('d',d);el.setAttribute('fill',displayFill);
       el.setAttribute('transform',`translate(${l.x-mw/2},${l.y})`);
-      if(hasBorder){
-        el.setAttribute('stroke',displayBorder);
-        el.setAttribute('stroke-width',l.borderWidth);
-        el.setAttribute('stroke-linejoin','round');
-        el.setAttribute('stroke-linecap','round');
-        el.style.paintOrder = 'stroke fill';
-      }
     } else {
       el=document.createElementNS('http://www.w3.org/2000/svg','text');
       el.setAttribute('x',l.x);el.setAttribute('y',l.y);
       el.setAttribute('font-family',l.fontFamily);el.setAttribute('font-size',l.fontSize);
       el.setAttribute('fill',displayFill);el.setAttribute('text-anchor','middle');
       el.setAttribute('dominant-baseline','auto');el.textContent=l.ch;
-      if(hasBorder){
-        el.setAttribute('stroke',displayBorder);
-        el.setAttribute('stroke-width',l.borderWidth);
-        el.setAttribute('stroke-linejoin','round');
-        el.setAttribute('stroke-linecap','round');
-        el.style.paintOrder = 'stroke fill';
-      }
     }
     g.appendChild(el);
     ll.appendChild(g);
@@ -4800,10 +5053,10 @@ async function exportSVG() {
       const { color, pathD, bw, bc, opacity } = pendingPath;
       const opAttr = opacity !== 1 ? ` opacity="${opacity}"` : '';
       if (bw > 0) {
-        svgContent += `<path d="${pathD}" fill="${color}"${opAttr} stroke="${bc}" stroke-width="${bw}" stroke-linejoin="round" stroke-linecap="round" style="paint-order:stroke fill"/>\n`;
-      } else {
-        svgContent += `<path d="${pathD}" fill="${color}"${opAttr}/>\n`;
+        // Border: same path, stroke-width*2 with fill=border color, rendered before the fill path
+        svgContent += `<path d="${pathD}" fill="${bc}"${opAttr} stroke="${bc}" stroke-width="${bw*2}" stroke-linejoin="round" stroke-linecap="round" style="paint-order:stroke fill"/>\n`;
       }
+      svgContent += `<path d="${pathD}" fill="${color}"${opAttr}/>\n`;
       pendingPath = null;
     }
 
@@ -5274,14 +5527,38 @@ function restoreState3D(state) {
       if (mesh.userData._hiddenTargetA) {
         mesh.userData._hiddenTargetA.visible = true;
         mesh.userData._hiddenTargetA.userData.hiddenByBoolean = false;
+        // Re-add to threeExtrusionLevels
+        const colorA = mesh.userData._hiddenTargetA.userData.colorHex || '#' + mesh.userData._hiddenTargetA.material.color.getHexString();
+        if (!threeExtrusionLevels[colorA]) {
+          threeExtrusionLevels[colorA] = { extrusion: 10, meshes: [] };
+        }
+        if (!threeExtrusionLevels[colorA].meshes.includes(mesh.userData._hiddenTargetA)) {
+          threeExtrusionLevels[colorA].meshes.push(mesh.userData._hiddenTargetA);
+        }
       }
       if (mesh.userData._hiddenTargetB) {
         mesh.userData._hiddenTargetB.visible = true;
         mesh.userData._hiddenTargetB.userData.hiddenByBoolean = false;
+        // Re-add to threeExtrusionLevels
+        const colorB = mesh.userData._hiddenTargetB.userData.colorHex || '#' + mesh.userData._hiddenTargetB.material.color.getHexString();
+        if (!threeExtrusionLevels[colorB]) {
+          threeExtrusionLevels[colorB] = { extrusion: 10, meshes: [] };
+        }
+        if (!threeExtrusionLevels[colorB].meshes.includes(mesh.userData._hiddenTargetB)) {
+          threeExtrusionLevels[colorB].meshes.push(mesh.userData._hiddenTargetB);
+        }
       }
       if (mesh.userData._hiddenTarget) {
         mesh.userData._hiddenTarget.visible = true;
         mesh.userData._hiddenTarget.userData.hiddenByBoolean = false;
+        // Re-add to threeExtrusionLevels
+        const colorT = mesh.userData._hiddenTarget.userData.colorHex || '#' + mesh.userData._hiddenTarget.material.color.getHexString();
+        if (!threeExtrusionLevels[colorT]) {
+          threeExtrusionLevels[colorT] = { extrusion: 10, meshes: [] };
+        }
+        if (!threeExtrusionLevels[colorT].meshes.includes(mesh.userData._hiddenTarget)) {
+          threeExtrusionLevels[colorT].meshes.push(mesh.userData._hiddenTarget);
+        }
       }
       threeScene.remove(mesh);
       if (mesh.geometry) mesh.geometry.dispose();
@@ -5676,6 +5953,153 @@ function init3DScene() {
   resizeObserver.observe(container);
 }
 
+/**
+ * Build a geom2 representing ONLY the border ring of a glyph path, for 3D extrusion.
+ *
+ * Unlike buildBorderPathD (which relies on SVG even-odd fill), this function works
+ * purely with JSCAD boolean operations:
+ *   border = union( inflated_outer_i MINUS original_outer_i )  for each outer contour i
+ *
+ * Holes in the glyph are NOT subtracted — the border ring sits only around the outside
+ * of each outer contour, never inside a hole.
+ *
+ * @param {string} pathD   - The original glyph SVG path string
+ * @param {number} delta   - Border width in SVG-space units
+ * @returns {geom2|null}   - OpenJSCAD geom2, or null on failure
+ */
+function buildBorderGeom2(pathD, delta) {
+  if (!delta || delta <= 0) return null;
+  if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) return null;
+
+  const jscad = window.OpenJSCADBridge.jscad;
+
+  // ── 1. Discretise path into flat point arrays (SVG space, Y-down) ─────────
+  const segs = pathToAbsoluteSegments(pathD);
+  if (!segs || !segs.length) return null;
+
+  const BSTEPS = 16;
+  const subpaths = [];
+  let cur = [], cx = 0, cy = 0, sx = 0, sy = 0;
+
+  for (const s of segs) {
+    if (s.cmd === 'M') {
+      if (cur.length >= 3) subpaths.push(cur);
+      cur = [[s.x, s.y]]; cx = sx = s.x; cy = sy = s.y;
+    } else if (s.cmd === 'L') {
+      cur.push([s.x, s.y]); cx = s.x; cy = s.y;
+    } else if (s.cmd === 'H') {
+      cur.push([s.x, cy]); cx = s.x;
+    } else if (s.cmd === 'V') {
+      cur.push([cx, s.y]); cy = s.y;
+    } else if (s.cmd === 'C') {
+      for (let k = 1; k <= BSTEPS; k++) {
+        const t = k/BSTEPS, mt = 1-t;
+        cur.push([mt*mt*mt*cx+3*mt*mt*t*s.x1+3*mt*t*t*s.x2+t*t*t*s.x,
+                  mt*mt*mt*cy+3*mt*mt*t*s.y1+3*mt*t*t*s.y2+t*t*t*s.y]);
+      }
+      cx = s.x; cy = s.y;
+    } else if (s.cmd === 'Q') {
+      for (let k = 1; k <= BSTEPS; k++) {
+        const t = k/BSTEPS, mt = 1-t;
+        cur.push([mt*mt*cx+2*mt*t*s.x1+t*t*s.x, mt*mt*cy+2*mt*t*s.y1+t*t*s.y]);
+      }
+      cx = s.x; cy = s.y;
+    } else if (s.cmd === 'Z') {
+      if (cur.length > 1) {
+        const last = cur[cur.length-1];
+        if (Math.hypot(last[0]-cur[0][0], last[1]-cur[0][1]) < 0.5) cur.pop();
+      }
+      if (cur.length >= 3) subpaths.push(cur);
+      cur = []; cx = sx; cy = sy;
+    }
+  }
+  if (cur.length >= 3) subpaths.push(cur);
+  if (!subpaths.length) return null;
+
+  // ── 2. Remove near-duplicate consecutive points ────────────────────────────
+  function dedupe(pts) {
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      if (Math.hypot(pts[i][0]-out[out.length-1][0], pts[i][1]-out[out.length-1][1]) > 0.1)
+        out.push(pts[i]);
+    }
+    return out;
+  }
+
+  // ── 3. Signed area in SVG space (positive = CCW = outer in SVG coords) ─────
+  function signedAreaSVG(pts) {
+    let a = 0, n = pts.length;
+    for (let i = 0; i < n; i++) { const j=(i+1)%n; a += pts[i][0]*pts[j][1]-pts[j][0]*pts[i][1]; }
+    return a / 2;
+  }
+
+  // ── 4. Convert SVG-space point array → JSCAD geom2 (flip Y) ───────────────
+  // After normalization above, pts passed here are always CCW in SVG (positive area).
+  // Flipping Y reverses winding → CW in JSCAD. fromPoints needs CCW → must reverse.
+  function toGeom2(svgPts) {
+    // Flip Y and reverse to get CCW in JSCAD space
+    const jpts = svgPts.map(p => [p[0], -p[1]]).reverse();
+    return jscad.geometries.geom2.fromPoints(jpts);
+  }
+
+  // ── 5. Classify subpaths ───────────────────────────────────────────────────
+  // Many OpenType fonts produce CW outer contours (negative area in SVG coords).
+  // Detect dominant winding from the LARGEST contour, same as parseSVGPathToGeom2.
+  const allContours = [];
+  for (const raw of subpaths) {
+    const pts = dedupe(raw);
+    if (pts.length < 3) continue;
+    allContours.push({ pts, area: signedAreaSVG(pts) });
+  }
+  if (!allContours.length) return null;
+
+  allContours.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
+  const isReversed = allContours[0].area < 0;
+
+  // outers: store both the ORIGINAL pts (for offsetContour2D) and normalized pts (for toGeom2)
+  const outers = [];
+  for (const { pts, area } of allContours) {
+    const normArea = isReversed ? -area : area;
+    if (normArea > 0) {
+      // normPts: CCW in SVG space (for toGeom2 / JSCAD)
+      const normPts = isReversed ? [...pts].reverse() : pts;
+      // origPts: the original pts as they came from the font
+      // offsetContour2D uses right-hand normal of edge direction.
+      // For a true CCW contour in SVG, right-hand normal = outward → correct with +delta.
+      // For a CW contour (isReversed font), right-hand normal = inward → need -delta.
+      // So we always pass the normPts (CCW) and +delta to offsetContour2D.
+      outers.push(normPts);
+    }
+    // Holes ignored
+  }
+  if (!outers.length) return null;
+
+  // ── 6. For each outer: build inflated MINUS original, then union all rings ──
+  let borderGeom2 = null;
+
+  for (const pts of outers) {
+    // pts are CCW in SVG space (normalized). offsetContour2D expands CCW contours outward.
+    const expandedSVG = offsetContour2D(pts, delta);
+    if (!expandedSVG || expandedSVG.length < 3) continue;
+
+    try {
+      const inflatedG2 = toGeom2(expandedSVG);
+      const originalG2 = toGeom2(pts);
+
+      // Ring = inflated shell MINUS the original glyph area
+      const ring = jscad.booleans.subtract(inflatedG2, originalG2);
+
+      borderGeom2 = borderGeom2
+        ? jscad.booleans.union(borderGeom2, ring)
+        : ring;
+    } catch(e) {
+      console.warn('buildBorderGeom2: ring failed for one outer contour:', e.message);
+    }
+  }
+
+  return borderGeom2 || null;
+}
+
 function build3DObjects() {
   // Clear previous meshes
   threeMeshes = [];
@@ -5689,7 +6113,7 @@ function build3DObjects() {
   const sortedIndices = S.letters.map((_, i) => i)
     .sort((a, b) => (S.letters[a].layer || 2) - (S.letters[b].layer || 2));
 
-  const items = [];
+  let items = [];
 
   sortedIndices.forEach((i, renderOrder) => {
     const l = S.letters[i];
@@ -5697,12 +6121,14 @@ function build3DObjects() {
     const opacity = (l.op != null) ? l.op : 1;
     const bw = l.borderWidth || 0;
     const bc = l.borderColor || '#000000';
-    const groupId = l.groupId || null; // Aggiungi groupId se presente
+    const groupId = l.groupId || null;
 
     ctx.font = `${l.fontSize}px ${l.fontFamily}`;
     const mw = l.isGroup ? l.groupW : (l.isSvgImport ? (l.svgW || 100) : ctx.measureText(l.ch).width);
 
     const outerM = _buildLetterMatrix(l, mw);
+    let pathD = '';
+    let bbox = null;
 
     if (l.isGroup && l.groupHTML) {
       const dx = l.x - (l.originalX || l.x);
@@ -5721,68 +6147,66 @@ function build3DObjects() {
         const segs = pathToAbsoluteSegments(d);
         allSegs.push(...applyMatrixToSegs(segs, combined));
       });
-      if (!allSegs.length) return;
-      const pathD = segsToPathD(allSegs);
-      const bbox = _realBBox(pathD);
-      if (!bbox) return;
-      items.push({ pathD, bbox, color, opacity, bw: 0, bc, renderOrder, groupId });
-
+      if (allSegs.length) {
+        pathD = segsToPathD(allSegs);
+        bbox = _realBBox(pathD);
+      }
     } else if (l.customPath) {
       const innerX = l.isSvgImport ? l.x - (l.svgW || mw) / 2 : l.x - mw / 2;
       const innerY = l.y;
       const combined = outerM.translate(innerX, innerY);
       const segs = pathToAbsoluteSegments(l.customPath);
       const transformed = applyMatrixToSegs(segs, combined);
-      const pathD = segsToPathD(transformed);
-      const bbox = _realBBox(pathD);
-      if (!bbox) return;
-      items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder, groupId });
-
+      pathD = segsToPathD(transformed);
+      bbox = _realBBox(pathD);
     } else if (S.openFonts[l.fontName]) {
       const innerX = l.x - mw / 2;
       const innerY = l.y;
       const combined = outerM.translate(innerX, innerY);
       try {
-        // Use higher precision (4 instead of 2) for better path quality
         const d = S.openFonts[l.fontName].getPath(l.ch, 0, 0, l.fontSize).toPathData(4);
-        if (!d || d.length === 0) {
-          throw new Error('Empty path data');
-        }
         const segs = pathToAbsoluteSegments(d);
-        if (!segs || segs.length === 0) {
-          throw new Error('No path segments generated');
-        }
         const transformed = applyMatrixToSegs(segs, combined);
-        const pathD = segsToPathD(transformed);
-        if (!pathD || pathD.length === 0) {
-          throw new Error('Empty path string after transformation');
-        }
-        const bbox = _realBBox(pathD);
-        if (!bbox) {
-          throw new Error('Could not calculate bounding box');
-        }
-        items.push({ pathD, bbox, color, opacity, bw, bc, renderOrder, groupId });
+        pathD = segsToPathD(transformed);
+        bbox = _realBBox(pathD);
       } catch(e) {
-        console.warn('3D: Font path generation failed for:', `"${l.ch}" in font "${l.fontName}"`, '- using fallback box', e);
-        // Fallback: create a simple box
+        console.warn('3D Path creation failed for font, using fallback:', e);
         const fs = l.fontSize || 80;
         const estW = fs * 0.65;
         const estH = fs;
         const x = l.x - estW / 2;
         const y = l.y - estH;
-        const pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
-        items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder, groupId });
+        pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
+        bbox = { x, y, x2: x+estW, y2: y+estH };
       }
-
     } else {
-      // System font fallback: create a simple box
+      // System font fallback
       const fs = l.fontSize || 80;
       const estW = fs * 0.65;
       const estH = fs;
       const x = l.x - estW / 2;
       const y = l.y - estH;
-      const pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
-      items.push({ pathD, bbox: { x, y, x2: x+estW, y2: y+estH }, color, opacity, bw, bc, renderOrder, groupId });
+      pathD = `M${x},${y} L${x+estW},${y} L${x+estW},${y+estH} L${x},${y+estH} Z`;
+      bbox = { x, y, x2: x+estW, y2: y+estH };
+    }
+
+    if (pathD && bbox) {
+      // Add the main shape
+      items.push({ pathD, bbox, color, opacity, renderOrder, groupId, isBorder: false });
+      
+      // Add border as a SEPARATE item if enabled
+      if (bw > 0) {
+        items.push({ 
+          pathD, 
+          bbox, 
+          color: bc, 
+          opacity, 
+          renderOrder: renderOrder + 0.1, 
+          groupId, 
+          isBorder: true, 
+          bw 
+        });
+      }
     }
   });
 
@@ -5794,45 +6218,43 @@ function build3DObjects() {
 
   // STEP 2: Convert paths to 3D meshes using OpenJSCAD ONLY
   const extrusionDepth = 20;
-
-  // Group items by color for extrusion controls
   const colorGroups = {};
 
   items.forEach((item) => {
     try {
-      // UNIFIED SYSTEM: Use OpenJSCAD exclusively for all 3D generation
-      if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) {
-        console.error('❌ OpenJSCAD not available - 3D generation requires OpenJSCAD');
-        toast('Errore: OpenJSCAD non disponibile');
-        return;
-      }
+      if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) return;
 
-      // Convert SVG path → OpenJSCAD geom2 → extrude to geom3
+      const jscad = window.OpenJSCADBridge.jscad;
+      // parseSVGPathToGeom2 now returns geom2 directly (with .sourceContours attached)
       const geom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(item.pathD);
-      if (!geom2) {
-        console.warn('⚠ Failed to create geom2 from path (color:', item.color, '):', item.pathD.substring(0, 100));
-        return;
+      if (!geom2) return;
+
+      let finalGeom2 = null;
+      let isBorder = item.isBorder;
+      
+      if (isBorder) {
+        // Build the border ring using JSCAD boolean operations:
+        // for each outer contour: inflated MINUS original = clean ring, no hollow inside.
+        finalGeom2 = buildBorderGeom2(item.pathD, item.bw);
+        if (!finalGeom2) return;
+      } else {
+        finalGeom2 = geom2;
       }
 
-      const geom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(geom2, extrusionDepth);
-      if (!geom3) {
-        console.warn('⚠ Failed to extrude geom2 (color:', item.color, ') - skipping this element');
-        return;
-      }
+      if (!finalGeom2) return;
 
-      console.log(`✓ OpenJSCAD: Created watertight solid for color ${item.color}`);
+      const geom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(finalGeom2, extrusionDepth);
+      if (!geom3) return;
 
-      // Convert OpenJSCAD geom3 to Three.js mesh
       const geometry = window.OpenJSCADBridge.geom3ToThreeGeometry(geom3);
       geometry.userData.isJSCAD = true;
       geometry.userData.csgDepth = extrusionDepth;
-      // Store original pathD and geom2 for rebuild operations
+      geometry.userData.originalGeom2 = finalGeom2;
       geometry.userData.originalPathD = item.pathD;
-      geometry.userData.originalGeom2 = geom2;
 
-      const threeColor = new THREE.Color(item.color);
+
       const material = new THREE.MeshPhongMaterial({
-        color: threeColor,
+        color: new THREE.Color(item.color),
         specular: 0x444444,
         shininess: 30,
         side: THREE.DoubleSide,
@@ -5841,37 +6263,32 @@ function build3DObjects() {
       });
 
       const mesh = new THREE.Mesh(geometry, material);
-
-      // Position mesh to match 2D canvas coordinates
-      const bbox = item.bbox; // {x, y, x2, y2}
-
-      mesh.position.x = 0;
-      mesh.position.y = 0;
-      mesh.position.z = 0;
-
-      // Tag with 2D bounding box for smart STL export grouping
+      
+      // Position: keep everything at 0,0,0 initially, 
+      // but offset borders slightly in front to avoid Z-fighting with their parent letters
+      mesh.position.set(0, 0, isBorder ? 0.05 : 0);
+      
+      // Tag mesh
       mesh.userData.bbox2D = item.bbox;
       mesh.userData.colorHex = item.color;
       mesh.userData.groupId = item.groupId;
       mesh.userData.isJSCAD = true;
+      mesh.userData.isBorder = isBorder;
 
       threeScene.add(mesh);
       threeMeshes.push(mesh);
 
+      // Visibility and extrusion levels
       if (!threeExtrusionLevels[item.color]) {
         threeExtrusionLevels[item.color] = { extrusion: extrusionDepth, meshes: [] };
-        if (threeVisibilityState[item.color] === undefined) {
-          threeVisibilityState[item.color] = true;
-        }
+        if (threeVisibilityState[item.color] === undefined) threeVisibilityState[item.color] = true;
       }
       mesh.visible = threeVisibilityState[item.color];
       threeExtrusionLevels[item.color].meshes.push(mesh);
 
-      // Track color groups for UI
-      if (!colorGroups[item.color]) {
-        colorGroups[item.color] = [];
-      }
+      if (!colorGroups[item.color]) colorGroups[item.color] = [];
       colorGroups[item.color].push(item);
+
 
     } catch (e) {
       console.error('Errore nel creare mesh 3D:', e);
@@ -6967,8 +7384,27 @@ function union3DObjects() {
       resultMesh.userData._hiddenTargetB = meshB;
       resultMesh.userData.originalColor = colorA;
 
+      // Remove originals from threeExtrusionLevels so they're excluded from visibility toggles
+      const colorAHex = '#' + colorA.toString(16).padStart(6, '0');
+      if (threeExtrusionLevels[colorAHex]) {
+        const idxA = threeExtrusionLevels[colorAHex].meshes.indexOf(meshA);
+        if (idxA !== -1) threeExtrusionLevels[colorAHex].meshes.splice(idxA, 1);
+        const idxB = threeExtrusionLevels[colorAHex].meshes.indexOf(meshB);
+        if (idxB !== -1) threeExtrusionLevels[colorAHex].meshes.splice(idxB, 1);
+      }
+
       threeScene.add(resultMesh);
       threeMeshes.push(resultMesh);
+
+      // Add result mesh to threeExtrusionLevels so it responds to visibility toggles
+      if (!threeExtrusionLevels[colorAHex]) {
+        threeExtrusionLevels[colorAHex] = { extrusion: 10, meshes: [] };
+        if (threeVisibilityState[colorAHex] === undefined) threeVisibilityState[colorAHex] = true;
+      }
+      resultMesh.visible = threeVisibilityState[colorAHex];
+      resultMesh.userData.colorHex = colorAHex; // For visibility tracking
+      threeExtrusionLevels[colorAHex].meshes.push(resultMesh);
+
       clear3DSelection();
 
       const triCount = resultMesh.geometry.attributes.position.count / 3;
@@ -7019,8 +7455,27 @@ function union3DObjects() {
     resultMesh.userData._hiddenTargetB = meshB;
     resultMesh.userData.originalColor = colorA;
 
+    // Remove originals from threeExtrusionLevels so they're excluded from visibility toggles
+    const colorAHexLegacy = '#' + colorA.toString(16).padStart(6, '0');
+    if (threeExtrusionLevels[colorAHexLegacy]) {
+      const idxA = threeExtrusionLevels[colorAHexLegacy].meshes.indexOf(meshA);
+      if (idxA !== -1) threeExtrusionLevels[colorAHexLegacy].meshes.splice(idxA, 1);
+      const idxB = threeExtrusionLevels[colorAHexLegacy].meshes.indexOf(meshB);
+      if (idxB !== -1) threeExtrusionLevels[colorAHexLegacy].meshes.splice(idxB, 1);
+    }
+
     threeScene.add(resultMesh);
     threeMeshes.push(resultMesh);
+
+    // Add result mesh to threeExtrusionLevels so it responds to visibility toggles
+    if (!threeExtrusionLevels[colorAHexLegacy]) {
+      threeExtrusionLevels[colorAHexLegacy] = { extrusion: 10, meshes: [] };
+      if (threeVisibilityState[colorAHexLegacy] === undefined) threeVisibilityState[colorAHexLegacy] = true;
+    }
+    resultMesh.visible = threeVisibilityState[colorAHexLegacy];
+    resultMesh.userData.colorHex = colorAHexLegacy; // For visibility tracking
+    threeExtrusionLevels[colorAHexLegacy].meshes.push(resultMesh);
+
     clear3DSelection();
     const triCountLeg = resultMesh.geometry.attributes.position ? resultMesh.geometry.attributes.position.count / 3 : '?';
     toast(`✓ Unione completata! (${triCountLeg} triangoli, CSG legacy)`);
@@ -7085,14 +7540,32 @@ function subtract3DObjects() {
     target.visible = false;
     target.userData.hiddenByBoolean = true;
 
+    // Remove target from threeExtrusionLevels so it's excluded from visibility toggles
+    const colorTargetHex = '#' + colorTarget.toString(16).padStart(6, '0');
+    if (threeExtrusionLevels[colorTargetHex]) {
+      const targetIdx = threeExtrusionLevels[colorTargetHex].meshes.indexOf(target);
+      if (targetIdx !== -1) {
+        threeExtrusionLevels[colorTargetHex].meshes.splice(targetIdx, 1);
+      }
+    }
+
     // Add result mesh (vertices are already in world space)
     resultMesh.position.set(0, 0, 0);
     resultMesh.userData.isBooleanResult = true;
     resultMesh.userData.isSubtractResult = true;
     resultMesh.userData._hiddenTarget = target; // Reference to hidden target for undo
+    resultMesh.userData.colorHex = colorTargetHex; // For visibility tracking
 
     threeScene.add(resultMesh);
     threeMeshes.push(resultMesh);
+
+    // Add result mesh to threeExtrusionLevels so it responds to visibility toggles
+    if (!threeExtrusionLevels[colorTargetHex]) {
+      threeExtrusionLevels[colorTargetHex] = { extrusion: 10, meshes: [] };
+      if (threeVisibilityState[colorTargetHex] === undefined) threeVisibilityState[colorTargetHex] = true;
+    }
+    resultMesh.visible = threeVisibilityState[colorTargetHex];
+    threeExtrusionLevels[colorTargetHex].meshes.push(resultMesh);
 
     // Verify result position
     resultMesh.updateMatrixWorld(true);
