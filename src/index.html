@@ -1914,7 +1914,7 @@ window.CSG = (function () {
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.6</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.7</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -2275,7 +2275,7 @@ window.CSG = (function () {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.2.6</div>
+  <div class="un-ver" id="un-version">Versione 4.2.7</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -6192,20 +6192,25 @@ function build3DObjects() {
 
     if (pathD && bbox) {
       // Add the main shape
-      items.push({ pathD, bbox, color, opacity, renderOrder, groupId, isBorder: false });
-      
-      // Add border as a SEPARATE item if enabled
+      items.push({ pathD, bbox, color, opacity, renderOrder, groupId, isBorder: false, borderWidth: 0 });
+
+      // Add border as a SEPARATE 3D object
+      // Convert the stroke to a fill path so it can be extruded as a 3D object
       if (bw > 0) {
-        items.push({ 
-          pathD, 
-          bbox, 
-          color: bc, 
-          opacity, 
-          renderOrder: renderOrder + 0.1, 
-          groupId, 
-          isBorder: true, 
-          bw 
-        });
+        // Convert stroke to fill path
+        const borderFillPathD = strokeToFillPath(pathToAbsoluteSegments(pathD), bw * 2);
+        if (borderFillPathD) {
+          items.push({
+            pathD: borderFillPathD,
+            bbox,
+            color: bc,
+            opacity,
+            renderOrder: renderOrder + 0.1,
+            groupId,
+            isBorder: true,
+            borderWidth: bw
+          });
+        }
       }
     }
   });
@@ -6229,27 +6234,16 @@ function build3DObjects() {
       const geom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(item.pathD);
       if (!geom2) return;
 
-      let finalGeom2 = null;
-      let isBorder = item.isBorder;
-      
-      if (isBorder) {
-        // Build the border ring using JSCAD boolean operations:
-        // for each outer contour: inflated MINUS original = clean ring, no hollow inside.
-        finalGeom2 = buildBorderGeom2(item.pathD, item.bw);
-        if (!finalGeom2) return;
-      } else {
-        finalGeom2 = geom2;
-      }
+      // Both border and normal shapes are now handled the same way
+      // Border paths come from buildBorderPathD (same as 2D), so they're already complete rings
 
-      if (!finalGeom2) return;
-
-      const geom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(finalGeom2, extrusionDepth);
+      const geom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(geom2, extrusionDepth);
       if (!geom3) return;
 
       const geometry = window.OpenJSCADBridge.geom3ToThreeGeometry(geom3);
       geometry.userData.isJSCAD = true;
       geometry.userData.csgDepth = extrusionDepth;
-      geometry.userData.originalGeom2 = finalGeom2;
+      geometry.userData.originalGeom2 = geom2;
       geometry.userData.originalPathD = item.pathD;
 
 
@@ -6263,17 +6257,17 @@ function build3DObjects() {
       });
 
       const mesh = new THREE.Mesh(geometry, material);
-      
-      // Position: keep everything at 0,0,0 initially, 
+
+      // Position: keep everything at 0,0,0 initially,
       // but offset borders slightly in front to avoid Z-fighting with their parent letters
-      mesh.position.set(0, 0, isBorder ? 0.05 : 0);
-      
+      mesh.position.set(0, 0, item.isBorder ? 0.05 : 0);
+
       // Tag mesh
       mesh.userData.bbox2D = item.bbox;
       mesh.userData.colorHex = item.color;
       mesh.userData.groupId = item.groupId;
       mesh.userData.isJSCAD = true;
-      mesh.userData.isBorder = isBorder;
+      mesh.userData.isBorder = item.isBorder;
 
       threeScene.add(mesh);
       threeMeshes.push(mesh);
@@ -7025,6 +7019,321 @@ function update3DPositionInputs() {
   }
 }
 
+// Update color input fields to reflect selected object's color
+function update3DColorInputs() {
+  const picker = document.getElementById('color3d-picker');
+  const textInput = document.getElementById('color3d-text');
+
+  if (threeSelectionOrder.length > 0) {
+    const mesh = threeSelectionOrder[0];
+    if (mesh && mesh.material && mesh.material.color) {
+      const color = '#' + mesh.material.color.getHexString();
+      if (picker) picker.value = color;
+      if (textInput) textInput.value = color;
+    }
+  } else {
+    if (picker) picker.value = '#ffffff';
+    if (textInput) textInput.value = '#ffffff';
+  }
+}
+
+// ── 3D OBJECT COLOR ─────────────────────────────────────────────────────
+
+// Update selected object's color
+function update3DObjectColor(color) {
+  if (threeSelectionOrder.length === 0) return;
+
+  const mesh = threeSelectionOrder[0];
+  if (!mesh || !mesh.material) return;
+
+  // Store old color if not already stored
+  if (!mesh.userData.oldColorHex) {
+    mesh.userData.oldColorHex = mesh.userData.colorHex || '#' + mesh.material.color.getHexString();
+  }
+
+  // Update mesh material color
+  mesh.material.color.set(color);
+
+  // Update color picker text input
+  const textInput = document.getElementById('color3d-text');
+  if (textInput) {
+    textInput.value = color;
+  }
+}
+
+// Update color from text input
+function update3DObjectColorFromText(value) {
+  // Validate hex color
+  if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+    const picker = document.getElementById('color3d-picker');
+    if (picker) {
+      picker.value = value;
+    }
+    update3DObjectColor(value);
+  }
+}
+
+// Finalize color change (called on change event completion)
+function finalize3DObjectColor() {
+  if (threeSelectionOrder.length === 0) return;
+
+  const mesh = threeSelectionOrder[0];
+  if (!mesh) return;
+
+  const newColor = '#' + mesh.material.color.getHexString();
+  const oldColor = mesh.userData.oldColorHex || mesh.userData.colorHex;
+
+  // Update all meshes with the same old color to new color
+  if (oldColor && oldColor !== newColor) {
+    // Update extrusion controls to show new color (this will also update mesh colors)
+    updateExtrusionColor(oldColor, newColor);
+    
+    // Update canvas letter color
+    updateCanvasLetterColorFrom3D(newColor, oldColor);
+  } else {
+    // Just update the selected mesh's userData
+    mesh.userData.colorHex = newColor;
+    mesh.userData.oldColorHex = null;
+  }
+
+  // Update selection indicators
+  updateSelectionIndicators();
+
+  toast('Colore aggiornato');
+}
+
+// Update canvas letter color when 3D color changes
+function updateCanvasLetterColorFrom3D(newColor, oldColor) {
+  if (threeSelectionOrder.length === 0) return;
+
+  const mesh = threeSelectionOrder[0];
+  if (!mesh) return;
+
+  // Find the corresponding canvas element by groupId or bbox
+  const groupId = mesh.userData.groupId;
+  
+  if (groupId) {
+    // Find all canvas elements with matching groupId
+    S.letters.forEach(letter => {
+      if (letter.groupId === groupId && letter.fill === oldColor) {
+        letter.fill = newColor;
+        // Update the DOM element
+        const el = document.getElementById('l' + letter.id);
+        if (el) {
+          el.style.color = newColor;
+          el.style.fill = newColor;
+        }
+      }
+    });
+  } else {
+    // Fallback: try to match by bbox (for elements without groupId)
+    const meshBbox = mesh.userData.bbox2D;
+    if (meshBbox) {
+      S.letters.forEach(letter => {
+        if (letter.fill === oldColor && letter.bbox) {
+          // Compare bbox centers
+          const letterCenterX = letter.x + (letter.bbox.w || 0) / 2;
+          const letterCenterY = letter.y + (letter.bbox.h || 0) / 2;
+          const meshCenterX = meshBbox.x + (meshBbox.w || 0) / 2;
+          const meshCenterY = meshBbox.y + (meshBbox.h || 0) / 2;
+          
+          // If centers are close enough (within 5 pixels), it's a match
+          if (Math.abs(letterCenterX - meshCenterX) < 5 && Math.abs(letterCenterY - meshCenterY) < 5) {
+            letter.fill = newColor;
+            const el = document.getElementById('l' + letter.id);
+            if (el) {
+              el.style.color = newColor;
+              el.style.fill = newColor;
+            }
+          }
+        }
+      });
+    }
+  }
+}
+
+// Update extrusion controls when color changes
+function updateExtrusionColor(oldColor, newColor) {
+  if (!threeExtrusionLevels[oldColor]) return;
+
+  // Find the selected mesh(es) that changed color
+  const changedMeshes = threeSelectionOrder.filter(m => 
+    m.userData.oldColorHex === oldColor || m.userData.colorHex === oldColor
+  );
+
+  if (changedMeshes.length === 0) {
+    // Fallback: update all meshes with old color (legacy behavior)
+    if (!threeExtrusionLevels[newColor]) {
+      threeExtrusionLevels[newColor] = { 
+        extrusion: threeExtrusionLevels[oldColor].extrusion, 
+        meshes: [] 
+      };
+      threeVisibilityState[newColor] = threeVisibilityState[oldColor] !== undefined ? 
+        threeVisibilityState[oldColor] : true;
+    }
+
+    // Update all mesh references
+    const meshesToMove = [...threeExtrusionLevels[oldColor].meshes];
+    meshesToMove.forEach(mesh => {
+      if (mesh.material) {
+        mesh.material.color.set(newColor);
+      }
+      mesh.userData.colorHex = newColor;
+      mesh.visible = threeVisibilityState[newColor];
+      
+      // Remove from old color meshes
+      const idx = threeExtrusionLevels[oldColor].meshes.indexOf(mesh);
+      if (idx !== -1) threeExtrusionLevels[oldColor].meshes.splice(idx, 1);
+      
+      // Add to new color meshes
+      threeExtrusionLevels[newColor].meshes.push(mesh);
+    });
+
+    // Remove old color entry if no meshes left
+    if (threeExtrusionLevels[oldColor].meshes.length === 0) {
+      delete threeExtrusionLevels[oldColor];
+      delete threeVisibilityState[oldColor];
+    }
+  } else {
+    // Update only the changed meshes - keep extrusion controls unchanged
+    changedMeshes.forEach(mesh => {
+      mesh.userData.colorHex = newColor;
+      mesh.userData.oldColorHex = null;
+      mesh.visible = threeVisibilityState[newColor] !== false;
+      
+      // Remove from old color group in extrusion levels
+      if (threeExtrusionLevels[oldColor]) {
+        const idx = threeExtrusionLevels[oldColor].meshes.indexOf(mesh);
+        if (idx !== -1) threeExtrusionLevels[oldColor].meshes.splice(idx, 1);
+      }
+      
+      // Add to new color group
+      if (!threeExtrusionLevels[newColor]) {
+        threeExtrusionLevels[newColor] = { 
+          extrusion: 20, // Default extrusion
+          meshes: [] 
+        };
+        threeVisibilityState[newColor] = true;
+      }
+      threeExtrusionLevels[newColor].meshes.push(mesh);
+    });
+
+    // Remove old color entry if no meshes left
+    if (threeExtrusionLevels[oldColor] && threeExtrusionLevels[oldColor].meshes.length === 0) {
+      delete threeExtrusionLevels[oldColor];
+      delete threeVisibilityState[oldColor];
+    }
+  }
+
+  // Rebuild extrusion controls to show new colors (keeps same structure)
+  buildExtrusionControlsFromState();
+}
+
+// Rebuild extrusion controls from current state
+function buildExtrusionControlsFromState() {
+  const container = document.getElementById('extrusion-controls');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  const colors = Object.keys(threeExtrusionLevels);
+
+  if (colors.length === 0) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:10px;text-align:center;padding:12px">Nessun colore</div>';
+    return;
+  }
+
+  colors.forEach((color, idx) => {
+    if (threeExtrusionLevels[color].meshes.length === 0) return;
+
+    const extrusion = threeExtrusionLevels[color].extrusion;
+    const isVisible = threeVisibilityState[color] !== false;
+
+    const controlDiv = document.createElement('div');
+    controlDiv.style.cssText = 'margin-bottom:6px;padding:6px 8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);';
+    controlDiv.dataset.color = color;
+
+    // Header: Colore N + visibility toggle
+    const label = document.createElement('div');
+    label.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+
+    const colorBox = document.createElement('div');
+    colorBox.style.cssText = `width:14px;height:14px;border-radius:3px;background:${color};border:1px solid var(--border);flex-shrink:0;`;
+
+    const colorText = document.createElement('span');
+    colorText.style.cssText = 'flex:1;font-size:10px;font-weight:600;color:var(--text);';
+    colorText.textContent = `Colore ${idx + 1}`;
+
+    // Eye button for visibility toggle
+    const eyeBtn = document.createElement('button');
+    eyeBtn.style.cssText = 'width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);font-size:14px;padding:0;flex-shrink:0;';
+    eyeBtn.innerHTML = isVisible ? '👁' : '👁‍🗨';
+    eyeBtn.style.opacity = isVisible ? '1' : '0.5';
+    eyeBtn.title = 'Mostra/Nascondi oggetto';
+    eyeBtn.dataset.color = color;
+    eyeBtn.addEventListener('click', () => {
+      toggleColorVisibility(color);
+    });
+
+    label.appendChild(colorBox);
+    label.appendChild(colorText);
+    label.appendChild(eyeBtn);
+    controlDiv.appendChild(label);
+
+    // Slider + input sulla stessa riga
+    const rowDiv = document.createElement('div');
+    rowDiv.style.cssText = 'display:flex;align-items:center;gap:6px;';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.value = extrusion;
+    slider.style.cssText = 'flex:1;accent-color:var(--accent);';
+
+    const numberInput = document.createElement('input');
+    numberInput.type = 'number';
+    numberInput.min = '0';
+    numberInput.max = '200';
+    numberInput.value = slider.value;
+    numberInput.style.cssText = 'width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:\'DM Mono\',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;flex-shrink:0;';
+
+    const unitLabel = document.createElement('span');
+    unitLabel.style.cssText = 'color:var(--muted);font-size:10px;min-width:16px;';
+    unitLabel.textContent = 'px';
+
+    rowDiv.appendChild(slider);
+    rowDiv.appendChild(numberInput);
+    rowDiv.appendChild(unitLabel);
+    controlDiv.appendChild(rowDiv);
+
+    // Event listeners sincronizzati
+    slider.addEventListener('input', () => {
+      const val = parseFloat(slider.value) || 0;
+      numberInput.value = val;
+      updateExtrusion(color, val, true); // Don't save state while sliding
+    });
+
+    slider.addEventListener('change', () => {
+      const val = parseFloat(slider.value) || 0;
+      updateExtrusion(color, val); // Save state when slider is released
+    });
+
+    numberInput.addEventListener('input', () => {
+      const val = parseFloat(numberInput.value) || 0;
+      slider.value = Math.min(100, Math.max(0, val));
+      updateExtrusion(color, val, true); // Don't save state while typing
+    });
+
+    numberInput.addEventListener('change', () => {
+      const val = parseFloat(numberInput.value) || 0;
+      updateExtrusion(color, val); // Save state when input loses focus
+    });
+
+    container.appendChild(controlDiv);
+  });
+}
+
 // Toggle transform controls visibility (show/hide gizmo arrows)
 let threeTransformEnabled = false;
 
@@ -7272,9 +7581,12 @@ function update3DSelectionHUD() {
     html += '<div style="background:rgba(200,255,0,.1);color:#c8ff00;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #c8ff00;">↑ Premi Unisci o Sottrai</div>';
   }
   hud.innerHTML = html;
-  
+
   // Update position inputs when selection changes
   update3DPositionInputs();
+  
+  // Update color inputs when selection changes
+  update3DColorInputs();
 }
 
 function updateSelectionIndicators() {
@@ -9715,6 +10027,15 @@ function aiExecuteRecolor(op) {
         <label style="color:var(--muted);font-size:10px;min-width:12px;">Z</label>
         <input type="number" id="pos3d-z" value="0" step="1" style="width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectPosition('z', +this.value)" onmousedown="event.stopPropagation(); this.focus();">
       </div>
+    </div>
+
+    <!-- Colore compatta -->
+    <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px 0;">
+      <div class="sec-title" style="margin:0">Colore</div>
+    </div>
+    <div id="color-3d-controls" style="margin-bottom:12px;padding:6px 8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+      <input type="color" id="color3d-picker" value="#ffffff" oninput="update3DObjectColor(this.value)" onchange="finalize3DObjectColor()" style="width:36px;height:28px;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;">
+      <input type="text" id="color3d-text" value="#ffffff" style="flex:1;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectColorFromText(this.value)" onchange="finalize3DObjectColor()">
     </div>
     
     <!-- Info -->
