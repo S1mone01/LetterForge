@@ -1549,7 +1549,12 @@ window.CSG = (function () {
   .rp::-webkit-scrollbar{width:4px}
   .rp::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
   .rp::-webkit-scrollbar-corner{background:var(--panel)}
-  
+
+  /* 3D Panel Controls Scrollbar */
+  #preview-3d-controls::-webkit-scrollbar{width:4px}
+  #preview-3d-controls::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  #preview-3d-controls::-webkit-scrollbar-corner{background:var(--panel)}
+
   /* Ordine section buttons - uniform size */
   .ordine-btn{
     width:100% !important;
@@ -1914,7 +1919,7 @@ window.CSG = (function () {
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.7</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.9</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -2275,7 +2280,7 @@ window.CSG = (function () {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path><polyline points="21 12 16 7 21 12"></polyline><path d="M12 19v-6"></path><polyline points="9 16 12 19 15 16"></polyline></svg>
     <span class="un-title">Aggiornamento disponibile!</span>
   </div>
-  <div class="un-ver" id="un-version">Versione 4.2.7</div>
+  <div class="un-ver" id="un-version">Versione 4.2.8</div>
   <div class="un-bar"><div class="un-fill" id="un-fill"></div></div>
   <div class="un-pct" id="un-pct">0%</div>
   <div class="un-btns" id="un-btns">
@@ -3940,7 +3945,7 @@ function smd(e){
     // Non fare nulla se il click è avvenuto su un input
     return;
   }
-  if(e.button === 2){
+  if(e.button === 2 || e.button === 1){
     e.preventDefault(); e.stopPropagation(); startPan(e); return;
   }
   if(e.target.closest('.lg') || e.target.closest('.svgobj') || e.target.closest('.lg-handle')) return;
@@ -5221,7 +5226,12 @@ function toast(msg){
 
 const svgEl = document.getElementById('svg');
 svgEl.addEventListener('mousedown', e => {
-  if(e.button === 1) { e.preventDefault(); e.stopPropagation(); return; }
+  if(e.button === 1) { 
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    startPan(e); // Middle mouse button - start panning
+    return; 
+  }
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' ||
      e.target.closest('input') || e.target.closest('textarea')) return;
   smd(e);
@@ -5872,6 +5882,15 @@ function init3DScene() {
   threeControls.rotateSpeed = 0.6;
   threeControls.zoomSpeed = 1.2;
   threeControls.panSpeed = 0.8;
+  // Configure mouse buttons: Middle = PAN, Right = ZOOM
+  threeControls.mouseButtons = {
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.PAN,
+    RIGHT: THREE.MOUSE.DOLLY
+  };
+  console.log('3D Controls configured - Middle: PAN, Right: ZOOM');
+  console.log('mouseButtons:', threeControls.mouseButtons);
+  toast('3D Preview: Rotella=Pan, Destro=Zoom');
 
   // Add click handler for 3D object selection
   threeRenderer.domElement.addEventListener('click', on3DObjectClick);
@@ -7806,7 +7825,6 @@ function subtract3DObjects() {
     return;
   }
 
-  // Selection order: first clicked = cutter (utensile), second clicked = target (destinazione)
   const cutter = threeSelectionOrder[0];
   const target = threeSelectionOrder[1];
 
@@ -7814,7 +7832,6 @@ function subtract3DObjects() {
     toast('Sottrazione in corso...');
     const colorTarget = target.material.color.getHex();
 
-    // UNIFIED: Use OpenJSCAD exclusively for boolean operations
     if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) {
       toast('Errore: OpenJSCAD non disponibile per le operazioni booleane');
       return;
@@ -7822,21 +7839,44 @@ function subtract3DObjects() {
 
     console.log('✓ Using OpenJSCAD for subtract operation');
 
-    // Perform boolean subtraction using OpenJSCAD: target - cutter
+    // =====================================================================
+    // FIX DEFINITIVO CSG (Manifold & Z-Fighting)
+    // =====================================================================
+    const origScale = cutter.scale.clone();
+    const origPos = cutter.position.clone();
+    
+    // 1. Z-Overkill: Scaliamo il cutter sull'asse Z in modo che sia 
+    // esageratamente più alto, assicurandoci che buchi da parte a parte.
+    cutter.scale.z = origScale.z * 1.5; 
+    
+    // 2. Centratura Z: Abbassiamo il cutter per distribuire l'extra altezza
+    cutter.geometry.computeBoundingBox();
+    const cutterZHeight = (cutter.geometry.boundingBox.max.z - cutter.geometry.boundingBox.min.z) * cutter.scale.z;
+    cutter.position.z -= (cutterZHeight * 0.15); // Lo abbassiamo del 15%
+
+    // 3. Micro-Jitter X/Y: Sfalsamento infinitesimale per rompere la coplanarità
+    // dei bordi laterali. Previene "Self-intersections" e "CSG Artifacts".
+    cutter.position.x += 0.001;
+    cutter.position.y += 0.001;
+
+    cutter.updateMatrixWorld(true);
+    // =====================================================================
+
+    // Perform boolean subtraction using OpenJSCAD
     const resultMesh = window.OpenJSCADBridge.booleanOperation('subtract', target, cutter, colorTarget);
 
+    // Ripristino immediato del cutter originale per non rovinare la scena
+    cutter.scale.copy(origScale);
+    cutter.position.copy(origPos);
+    cutter.updateMatrixWorld(true);
+
     if (!resultMesh) {
-      toast('Errore: sottrazione ha rimosso tutto');
+      toast('Errore: sottrazione ha rimosso tutto o generato geometria invalida');
       return;
     }
 
     console.log(`Result mesh: ${resultMesh.geometry.attributes.position.count} vertices`);
 
-    // CRITICAL: Cutter must remain completely unchanged in the scene
-    // Do NOT modify cutter in any way - no material clone, no dispose
-
-    // Replace target with result mesh
-    // Clone target material properties to result
     const targetMaterialClone = new THREE.MeshPhongMaterial({
       color: target.material.color.clone(),
       specular: target.material.specular ? target.material.specular.clone() : new THREE.Color(0x444444),
@@ -7848,11 +7888,9 @@ function subtract3DObjects() {
     resultMesh.material.dispose();
     resultMesh.material = targetMaterialClone;
 
-    // Hide target instead of removing it (so undo can restore it)
     target.visible = false;
     target.userData.hiddenByBoolean = true;
 
-    // Remove target from threeExtrusionLevels so it's excluded from visibility toggles
     const colorTargetHex = '#' + colorTarget.toString(16).padStart(6, '0');
     if (threeExtrusionLevels[colorTargetHex]) {
       const targetIdx = threeExtrusionLevels[colorTargetHex].meshes.indexOf(target);
@@ -7861,28 +7899,21 @@ function subtract3DObjects() {
       }
     }
 
-    // Add result mesh (vertices are already in world space)
     resultMesh.position.set(0, 0, 0);
     resultMesh.userData.isBooleanResult = true;
     resultMesh.userData.isSubtractResult = true;
-    resultMesh.userData._hiddenTarget = target; // Reference to hidden target for undo
-    resultMesh.userData.colorHex = colorTargetHex; // For visibility tracking
+    resultMesh.userData._hiddenTarget = target; 
+    resultMesh.userData.colorHex = colorTargetHex;
 
     threeScene.add(resultMesh);
     threeMeshes.push(resultMesh);
 
-    // Add result mesh to threeExtrusionLevels so it responds to visibility toggles
     if (!threeExtrusionLevels[colorTargetHex]) {
       threeExtrusionLevels[colorTargetHex] = { extrusion: 10, meshes: [] };
       if (threeVisibilityState[colorTargetHex] === undefined) threeVisibilityState[colorTargetHex] = true;
     }
     resultMesh.visible = threeVisibilityState[colorTargetHex];
     threeExtrusionLevels[colorTargetHex].meshes.push(resultMesh);
-
-    // Verify result position
-    resultMesh.updateMatrixWorld(true);
-    const resultBox = new THREE.Box3().setFromObject(resultMesh);
-    console.log(`Result mesh bounds: ${resultBox.min.x.toFixed(2)} to ${resultBox.max.x}, ${resultBox.min.y.toFixed(2)} to ${resultBox.max.y}`);
 
     if (threeControls) threeControls.update();
     if (threeRenderer && threeScene && threeCamera) {
@@ -7893,13 +7924,338 @@ function subtract3DObjects() {
     saveState3D();
 
     const triCount = resultMesh.geometry.attributes.position.count / 3;
-    toast(`✓ Sottrazione completata! ${triCount} triangoli (OpenJSCAD)`);
-    console.log(`✓ Subtract done: ${triCount} triangles, cutter unchanged`);
+    toast(`✓ Sottrazione completata! ${triCount} triangoli (Watertight)`);
 
   } catch (e) {
     console.error('❌ Errore sottrazione:', e);
-    toast('Errore: ' + e.message);
+    toast('Errore CSG: ' + e.message);
   }
+}
+
+// Create pocket: duplicate first object, reduce to 5px height, offset 5px, subtract from second object
+/**
+ * Crea un offset 2D robusto combinando la geometria originale con il suo "bordo spesso".
+ * Previene i crash di OpenJSCAD su font complessi o spigoli acuti.
+ */
+function robust2DOffset(pathD, delta) {
+  const jscad = window.OpenJSCADBridge.jscad;
+  
+  // 1. Geometria di base (il "cuore" della lettera)
+  let finalGeom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(pathD);
+  if (!finalGeom2) return null;
+
+  // 2. Dividiamo il path originale nei suoi sub-path (es. l'esterno e il buco della "O")
+  const segs = pathToAbsoluteSegments(pathD);
+  const subpaths = [];
+  let cur = [];
+  
+  for (const s of segs) {
+    if (s.cmd === 'M') {
+      if (cur.length > 0) subpaths.push(cur);
+      cur = [s];
+    } else {
+      cur.push(s);
+    }
+  }
+  if (cur.length > 0) subpaths.push(cur);
+
+  // 3. Per ogni sub-path, generiamo un contorno spesso spesso (2 * delta)
+  // e lo "saldiamo" (Union) alla geometria di base.
+  for (const sub of subpaths) {
+    const strokeD = strokeToFillPath(sub, delta * 2);
+    if (strokeD) {
+      const strokeGeom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(strokeD);
+      if (strokeGeom2) {
+        try {
+          // L'unione booleana risolve automaticamente i self-intersections e le sbavature
+          finalGeom2 = jscad.booleans.union(finalGeom2, strokeGeom2);
+        } catch (e) {
+          console.warn("Union con il bordo fallita per un subpath, skippato.", e);
+        }
+      }
+    }
+  }
+  
+  return finalGeom2;
+}
+
+function createPocket3D() {
+  console.log('=== CREATE POCKET FUNCTION CALLED ===');
+
+  if (threeSelectionOrder.length !== 2) {
+    toast('Seleziona esattamente 2 oggetti: primo = da duplicare, secondo = da bucare');
+    return;
+  }
+
+  const sourceMesh = threeSelectionOrder[0];
+  const targetMesh = threeSelectionOrder[1];
+
+  try {
+    toast('Creazione tasca in corso...');
+
+    const originalPathD = sourceMesh.geometry.userData?.originalPathD;
+    
+    if (!originalPathD) {
+      toast('Errore: impossibile trovare il path SVG originale dell\'oggetto');
+      return;
+    }
+
+    const sourceColorHex = sourceMesh.userData.colorHex || '#' + sourceMesh.material.color.getHexString();
+    const originalExtrusion = threeExtrusionLevels[sourceColorHex]?.extrusion || 20;
+
+    if (originalExtrusion <= 5) {
+      toast('Errore: l\'oggetto originale deve essere più alto di 5px');
+      return;
+    }
+
+    if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) {
+      toast('Errore: OpenJSCAD non disponibile');
+      return;
+    }
+
+    const jscad = window.OpenJSCADBridge.jscad;
+    const geom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(originalPathD);
+    
+    if (!geom2) {
+      toast('Errore: geometria non valida');
+      return;
+    }
+
+    // Offset aumentato in qualità (segments: 32) per prevenire loop e self-intersection in 2D
+    try {
+      // Read offset value from the input field
+      const offsetValue = parseFloat(document.getElementById('pocket-offset-input').value.replace(/[^0-9.]/g, '')) || 2;
+      const expandedGeom2 = jscad.expansions.expand({ delta: offsetValue, corners: 'round', segments: 32 }, geom2);
+      
+      if (expandedGeom2) {
+        const cutterGeom2 = expandedGeom2;
+        
+        // =====================================================================
+        // FIX DEFINITIVO CSG POCKET (Manifold & Z-Fighting)
+        // =====================================================================
+        // Read depth value from the input field
+        const pocketDepth = parseFloat(document.getElementById('pocket-depth-input').value.replace(/[^0-9.]/g, '')) || 5;
+        const zOverkill = 15; // Spropositato margine superiore
+        
+        // Estrudiamo il cutter per la profondità della tasca + un enorme margine per il tetto
+        const cutterGeom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(cutterGeom2, pocketDepth + zOverkill);
+        
+        if (!cutterGeom3) {
+          toast('Errore: impossibile estrudere il cutter');
+          return;
+        }
+
+        const targetPathD = targetMesh.geometry.userData?.originalPathD;
+        if (!targetPathD) return;
+
+        const targetGeom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(targetPathD);
+        if (!targetGeom2) return;
+
+        const targetGeom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(targetGeom2, originalExtrusion);
+        if (!targetGeom3) return;
+
+        // La base del cutter è a (Altezza Totale - Profondità Tasca). 
+        const zPosition = originalExtrusion - pocketDepth;
+        
+        // Applichiamo Traslazione Z e il MICRO-JITTER X/Y per rompere la coplanarità dei bordi
+        const cutterGeom3Positioned = jscad.transforms.translate([0.001, 0.001, zPosition], cutterGeom3);
+
+        // =====================================================================
+
+        // Sottrazione booleana:
+        const resultGeom3 = jscad.booleans.subtract(targetGeom3, cutterGeom3Positioned);
+        const resultPolygons = jscad.geometries.geom3.toPolygons(resultGeom3);
+        
+        if (resultPolygons.length === 0) {
+          toast('Errore: la sottrazione ha rimosso tutto (geometria fallita)');
+          return;
+        }
+
+        const resultGeometry = window.OpenJSCADBridge.geom3ToThreeGeometry(resultGeom3);
+        
+        const targetColor = targetMesh.material.color.getHex();
+        const resultMaterial = new THREE.MeshPhongMaterial({
+          color: new THREE.Color(targetColor),
+          specular: targetMesh.material.specular ? targetMesh.material.specular.clone() : new THREE.Color(0x444444),
+          shininess: targetMesh.material.shininess || 30,
+          side: THREE.DoubleSide,
+          transparent: targetMesh.material.transparent,
+          opacity: targetMesh.material.opacity
+        });
+
+        const resultMesh = new THREE.Mesh(resultGeometry, resultMaterial);
+        
+        // Non serve aggiustare la posizione Y e X della mesh result perché 
+        // le geometrie create tramite JSCAD qui mantengono l'allineamento allo spazio 0,0,0 originale
+        resultMesh.position.copy(targetMesh.position);
+        resultMesh.rotation.copy(targetMesh.rotation);
+        resultMesh.scale.copy(targetMesh.scale);
+        
+        resultMesh.userData.isBooleanResult = true;
+        resultMesh.userData.isPocketResult = true;
+        resultMesh.userData.colorHex = '#' + targetColor.toString(16).padStart(6, '0');
+        resultMesh.userData._hiddenTarget = targetMesh;
+
+        targetMesh.visible = false;
+        targetMesh.userData.hiddenByBoolean = true;
+
+        const targetColorHex = '#' + targetColor.toString(16).padStart(6, '0');
+        if (threeExtrusionLevels[targetColorHex]) {
+          const targetIdx = threeExtrusionLevels[targetColorHex].meshes.indexOf(targetMesh);
+          if (targetIdx !== -1) {
+            threeExtrusionLevels[targetColorHex].meshes.splice(targetIdx, 1);
+          }
+        }
+
+        resultMesh.updateMatrixWorld(true);
+        threeScene.add(resultMesh);
+        threeMeshes.push(resultMesh);
+
+        if (!threeExtrusionLevels[targetColorHex]) {
+          threeExtrusionLevels[targetColorHex] = { extrusion: originalExtrusion, meshes: [] };
+          threeVisibilityState[targetColorHex] = true;
+        }
+        resultMesh.visible = threeVisibilityState[targetColorHex];
+        threeExtrusionLevels[targetColorHex].meshes.push(resultMesh);
+
+        if (threeControls) threeControls.update();
+        if (threeRenderer && threeScene && threeCamera) {
+          threeRenderer.render(threeScene, threeCamera);
+        }
+
+        clear3DSelection();
+        saveState3D();
+
+        const triCount = resultMesh.geometry.attributes.position.count / 3;
+        toast(`✓ Tasca creata in sicurezza! ${triCount} triangoli chiusi.`);
+
+      }
+    } catch (expandError) {
+      console.error('Error expanding geometry:', expandError);
+      toast('Errore nell\'applicazione dell\'offset (forme troppo complesse).');
+    }
+
+  } catch (e) {
+    console.error('❌ Errore creazione tasca:', e);
+    toast('Errore CSG: ' + e.message);
+  }
+}
+
+// Duplicate selected 3D object(s)
+function duplicate3DSelection() {
+  if (threeSelectionOrder.length === 0) {
+    toast('Seleziona almeno un oggetto da duplicare');
+    return;
+  }
+
+  const newSelections = [];
+
+  threeSelectionOrder.forEach((mesh, idx) => {
+    try {
+      // Clone the mesh geometry and material
+      const clonedGeometry = mesh.geometry.clone();
+      const clonedMaterial = mesh.material.clone();
+      const clonedMesh = new THREE.Mesh(clonedGeometry, clonedMaterial);
+
+      // Copy all userData
+      Object.keys(mesh.userData).forEach(key => {
+        if (key !== 'bbox2D' && key !== 'groupId') {
+          clonedMesh.userData[key] = mesh.userData[key];
+        }
+      });
+
+      // Offset the clone slightly to make it visible (shift by 10 units on X axis)
+      const bbox = new THREE.Box3().setFromObject(mesh);
+      const size = bbox.getSize(new THREE.Vector3());
+      const offset = Math.max(size.x, 10);
+      
+      clonedMesh.position.copy(mesh.position);
+      clonedMesh.position.x += offset;
+      clonedMesh.rotation.copy(mesh.rotation);
+      clonedMesh.scale.copy(mesh.scale);
+
+      // Apply the same transform
+      clonedMesh.updateMatrix();
+      clonedMesh.updateMatrixWorld(true);
+
+      // Add to scene
+      threeScene.add(clonedMesh);
+      threeMeshes.push(clonedMesh);
+
+      // Add to extrusion levels for visibility tracking
+      const colorHex = mesh.userData.colorHex || '#' + mesh.material.color.getHexString();
+      if (!threeExtrusionLevels[colorHex]) {
+        threeExtrusionLevels[colorHex] = { extrusion: 20, meshes: [] };
+        threeVisibilityState[colorHex] = true;
+      }
+      clonedMesh.visible = threeVisibilityState[colorHex];
+      threeExtrusionLevels[colorHex].meshes.push(clonedMesh);
+
+      newSelections.push(clonedMesh);
+
+      console.log(`✓ Duplicated mesh ${idx + 1}, offset by ${offset} units on X`);
+    } catch (err) {
+      console.error('Error duplicating mesh:', err);
+      toast('Errore nella duplicazione: ' + err.message);
+    }
+  });
+
+  // Update selection to the new cloned meshes
+  threeSelectionOrder = newSelections;
+  
+  // Update selection indicators
+  updateSelectionIndicators();
+  
+  // Update position controls to reflect new selection
+  if (threeSelectionOrder.length > 0) {
+    update3DPositionInputs();
+  }
+
+  saveState3D();
+  toast(`✓ Duplicato ${newSelections.length} oggetto/i`);
+}
+
+// Delete selected 3D object(s)
+function delete3DSelection() {
+  if (threeSelectionOrder.length === 0) {
+    toast('Seleziona almeno un oggetto da eliminare');
+    return;
+  }
+
+  const count = threeSelectionOrder.length;
+
+  threeSelectionOrder.forEach((mesh, idx) => {
+    try {
+      // Hide instead of removing (for undo support)
+      mesh.visible = false;
+      mesh.userData.hiddenByDelete = true;
+
+      // Remove from extrusion levels
+      const colorHex = mesh.userData.colorHex || '#' + mesh.material.color.getHexString();
+      if (threeExtrusionLevels[colorHex]) {
+        const meshIdx = threeExtrusionLevels[colorHex].meshes.indexOf(mesh);
+        if (meshIdx !== -1) {
+          threeExtrusionLevels[colorHex].meshes.splice(meshIdx, 1);
+        }
+      }
+
+      console.log(`✓ Deleted mesh ${idx + 1}`);
+    } catch (err) {
+      console.error('Error deleting mesh:', err);
+      toast('Errore nell\'eliminazione: ' + err.message);
+    }
+  });
+
+  // Clear selection
+  clear3DSelection();
+
+  // Hide transform controls if visible
+  if (threeTransformControls) {
+    threeTransformControls.detach();
+  }
+
+  saveState3D();
+  toast(`✓ Eliminato ${count} oggetto/i`);
 }
 
 function start3DAnimation() {
@@ -8016,10 +8372,18 @@ let threeJSState = {
 };
 
 function init3DPreview() {
-  if (threeJSState.isInitialized) return;
-  
+  if (threeJSState.isInitialized) {
+    console.log('3D Preview already initialized');
+    return;
+  }
+
   const container = document.getElementById('threejs-container');
-  if (!container) return;
+  if (!container) {
+    console.error('threejs-container not found');
+    return;
+  }
+
+  console.log('Initializing 3D preview...');
   
   // Scene
   const scene = new THREE.Scene();
@@ -8041,11 +8405,18 @@ function init3DPreview() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.screenSpacePanning = true;
+  // Configure mouse buttons
   controls.mouseButtons = {
     LEFT: THREE.MOUSE.ROTATE,
-    MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT: THREE.MOUSE.PAN
+    MIDDLE: THREE.MOUSE.PAN,
+    RIGHT: THREE.MOUSE.DOLLY
   };
+  controls.enableZoom = true;
+  controls.zoomSpeed = 1.2;
+  
+  console.log('3D Controls configured - Middle: PAN, Right: ZOOM');
+  console.log('mouseButtons:', controls.mouseButtons);
+  toast('3D Preview: Rotella=Pan, Destro=Zoom');
   
   // Lights
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -8817,6 +9188,210 @@ ${facesXml}
 
   const nObj = objId - 1;
   toast(`3MF esportato! ✓  ${nObj} oggett${nObj===1?'o':'i'} (gruppi connessi per colore)`);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// EXPORT 3MF E APERTURA IN BAMBUSTUDIO
+// Salva il file e lo apre direttamente in Bambu Studio
+// ────────────────────────────────────────────────────────────────────────────
+async function exportTo3MFAndOpenInBambu() {
+  const groupsList = _groupMeshesConnected();
+  if (!groupsList) { toast('Nessun elemento 3D visibile!'); return; }
+
+  // Costruisce XML 3MF (stesso codice di exportTo3MF)
+  let objectsXml = '';
+  let buildItemsXml = '';
+  let objId = 1;
+
+  groupsList.forEach((meshes) => {
+    const colorHex = meshes[0].material.color.getHexString();
+    const tris = [];
+    meshes.forEach(m => tris.push(..._collectTrisFromMesh(m)));
+    if (!tris.length) return;
+
+    const WELD = 1e-4, INV = 1.0 / 1e-4;
+    const vertMap = new Map();
+    const verts = [];
+    let vi = 0;
+    function weld(v) {
+      const ix=Math.round(v[0]*INV), iy=Math.round(v[1]*INV), iz=Math.round(v[2]*INV);
+      const k=ix+','+iy+','+iz;
+      if (vertMap.has(k)) return vertMap.get(k);
+      verts.push([ix*WELD, iy*WELD, iz*WELD]);
+      vertMap.set(k, vi); return vi++;
+    }
+
+    const faces = [];
+    tris.forEach(([a,b,c]) => {
+      const ia=weld(a), ib=weld(b), ic=weld(c);
+      if (ia===ib||ib===ic||ia===ic) return;
+      faces.push([ia, ib, ic]);
+    });
+
+    if (!faces.length) return;
+
+    const vertsXml = verts.map(([x,y,z]) =>
+      `          <vertex x="${x.toFixed(6)}" y="${y.toFixed(6)}" z="${z.toFixed(6)}"/>`
+    ).join('\n');
+
+    const facesXml = faces.map(([v1,v2,v3]) =>
+      `          <triangle v1="${v1}" v2="${v2}" v3="${v3}"/>`
+    ).join('\n');
+
+    objectsXml += `
+    <object id="${objId}" type="model" name="color_${colorHex}">
+      <mesh>
+        <vertices>
+${vertsXml}
+        </vertices>
+        <triangles>
+${facesXml}
+        </triangles>
+      </mesh>
+    </object>`;
+
+    buildItemsXml += `\n      <item objectid="${objId}"/>`;
+    objId++;
+  });
+
+  if (!objectsXml) { toast('Nessuna geometria da esportare!'); return; }
+
+  const modelXml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US"
+  xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+  xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06">
+  <metadata name="Application">LetterForge</metadata>
+  <resources>${objectsXml}
+  </resources>
+  <build>${buildItemsXml}
+  </build>
+</model>`;
+
+  const contentTypesXml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+</Types>`;
+
+  const relsXml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" Target="/3D/3dmodel.model" Id="model"/>
+</Relationships>`;
+
+  // Funzioni ZIP helper
+  function crc32(data) {
+    let crc = 0xFFFFFFFF;
+    const table = [];
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[i] = c;
+    }
+    for (let i = 0; i < data.length; i++) crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function makeLocalFileHeader(name, data) {
+    const nameBytes = new TextEncoder().encode(name);
+    const buf = new Uint8Array(30 + nameBytes.length + data.length);
+    let o = 0;
+    buf[o++] = 0x50; buf[o++] = 0x4B; buf[o++] = 3; buf[o++] = 4;
+    buf[o++] = 20; buf[o++] = 0; buf[o++] = 0; buf[o++] = 0;
+    buf[o++] = 0; buf[o++] = 0;
+    const crc = crc32(data);
+    new DataView(buf.buffer).setUint32(o, crc, true); o += 4;
+    new DataView(buf.buffer).setUint32(o, data.length, true); o += 4;
+    new DataView(buf.buffer).setUint32(o, data.length, true); o += 4;
+    new DataView(buf.buffer).setUint16(o, nameBytes.length, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, 0, true); o += 2;
+    buf.set(nameBytes, o); o += nameBytes.length;
+    buf.set(data, o);
+    return { buf, nameBytes, crc, size: data.length };
+  }
+
+  function makeCentralDir(name, nameBytes, crc, size, offset) {
+    const buf = new Uint8Array(46 + nameBytes.length);
+    let o = 0;
+    buf[o++] = 0x50; buf[o++] = 0x4B; buf[o++] = 1; buf[o++] = 2;
+    buf[o++] = 20; buf[o++] = 3; buf[o++] = 20; buf[o++] = 0;
+    buf[o++] = 0; buf[o++] = 0; buf[o++] = 0; buf[o++] = 0;
+    new DataView(buf.buffer).setUint32(o, crc, true); o += 4;
+    new DataView(buf.buffer).setUint32(o, size, true); o += 4;
+    new DataView(buf.buffer).setUint32(o, size, true); o += 4;
+    new DataView(buf.buffer).setUint16(o, nameBytes.length, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, 0, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, 0, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, 0, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, 0, true); o += 2;
+    new DataView(buf.buffer).setUint32(o, 0, true); o += 4;
+    new DataView(buf.buffer).setUint32(o, offset, true); o += 4;
+    buf.set(nameBytes, o);
+    return buf;
+  }
+
+  function makeEndOfCentralDir(entries, centralDirSize, centralDirOffset) {
+    const buf = new Uint8Array(22);
+    let o = 0;
+    buf[o++] = 0x50; buf[o++] = 0x4B; buf[o++] = 5; buf[o++] = 6;
+    new DataView(buf.buffer).setUint16(o, 0, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, 0, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, entries, true); o += 2;
+    new DataView(buf.buffer).setUint16(o, entries, true); o += 2;
+    new DataView(buf.buffer).setUint32(o, centralDirSize, true); o += 4;
+    new DataView(buf.buffer).setUint32(o, centralDirOffset, true); o += 4;
+    new DataView(buf.buffer).setUint16(o, 0, true);
+    return buf;
+  }
+
+  const files = [
+    { name: '[Content_Types].xml', data: new TextEncoder().encode(contentTypesXml) },
+    { name: '_rels/.rels', data: new TextEncoder().encode(relsXml) },
+    { name: '3D/3dmodel.model', data: new TextEncoder().encode(modelXml) }
+  ];
+
+  const localHeaders = [];
+  const centralDirs = [];
+  let offset = 0;
+
+  files.forEach(({ name, data }) => {
+    const entry = makeLocalFileHeader(name, data);
+    const cd    = makeCentralDir(name, entry.nameBytes, entry.crc, entry.size, offset);
+    localHeaders.push(entry.buf);
+    centralDirs.push(cd);
+    offset += entry.buf.length;
+  });
+
+  const centralDirOffset2 = offset;
+  const centralDirBytes  = centralDirs.reduce((a,b) => { const r=new Uint8Array(a.length+b.length); r.set(a); r.set(b,a.length); return r; }, new Uint8Array(0));
+  const eocd = makeEndOfCentralDir(files.length, centralDirBytes.length, centralDirOffset2);
+
+  const allParts = [...localHeaders, centralDirBytes, eocd];
+  const total = allParts.reduce((s,p) => s + p.length, 0);
+  const zipBytes = new Uint8Array(total);
+  let pos = 0;
+  allParts.forEach(p => { zipBytes.set(p, pos); pos += p.length; });
+
+  // Chiama l'IPC handler per salvare e aprire in Bambu Studio
+  try {
+    toast('Salvataggio 3MF e apertura in Bambu Studio...');
+    const result = await window.electronAPI.saveAndOpen3MFInBambu(zipBytes);
+    
+    if (result.success) {
+      const nObj = objId - 1;
+      if (result.method === 'bambu') {
+        toast(`3MF aperto in Bambu Studio! ✓  ${nObj} oggett${nObj===1?'o':'i'}`);
+      } else {
+        toast(`3MF salvato! ✓  ${nObj} oggett${nObj===1?'o':'i'} (aperto con app predefinita)`);
+      }
+    } else {
+      toast('Errore durante il salvataggio/apertura 3MF');
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    toast('Errore durante il salvataggio/apertura 3MF');
+  }
 }
 
 // Hook into render to update 3D preview when canvas changes
@@ -9952,6 +10527,10 @@ function aiExecuteRecolor(op) {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 12h6"/></svg>
         Sottrai
       </button>
+      <button class="btn" onclick="createPocket3D()" onmousedown="event.stopPropagation()" style="border-color:#9b59b6;color:#9b59b6;padding:4px 10px;font-size:11px;" title="Crea tasca: duplica il primo oggetto, lo riduce a 5px di altezza, applica offset 2px e lo sottrae dal secondo">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+        Fai Spazio
+      </button>
     </div>
     <div style="flex:1"></div>
     <button class="btn btn-accent" onclick="exportTo3MF()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta 3MF — ogni colore = un oggetto separato in PrusaSlicer/Bambu">
@@ -10027,6 +10606,27 @@ function aiExecuteRecolor(op) {
         <label style="color:var(--muted);font-size:10px;min-width:12px;">Z</label>
         <input type="number" id="pos3d-z" value="0" step="1" style="width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectPosition('z', +this.value)" onmousedown="event.stopPropagation(); this.focus();">
       </div>
+    </div>
+
+    <!-- Duplicate & Delete Buttons -->
+    <div id="action-3d-buttons" style="margin-bottom:12px;display:flex;gap:8px;">
+      <button onclick="duplicate3DSelection()" style="flex:1;padding:6px 12px;background:var(--accent);border:none;border-radius:5px;color:#000;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#d4ff1a'" onmouseout="this.style.background='var(--accent)'">
+        Duplica
+      </button>
+      <button onclick="delete3DSelection()" style="flex:1;padding:6px 12px;background:#ff4444;border:none;border-radius:5px;color:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#ff6666'" onmouseout="this.style.background='#ff4444'">
+        Elimina
+      </button>
+    </div>
+
+    <!-- Fai Spazio compatta -->
+    <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px 0;">
+      <div class="sec-title" style="margin:0">Fai Spazio</div>
+    </div>
+    <div style="padding:6px 8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);display:flex;align-items:center;gap:6px;">
+      <label style="color:var(--muted);font-size:9px;">Prof.</label>
+      <input type="text" id="pocket-depth-input" value="5" style="width:48px;padding:3px 4px;background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:3px;outline:none;text-align:center;" onmousedown="event.stopPropagation(); this.focus();" oninput="this.value=this.value.replace(/[^0-9.]/g,'')" title="Profondità della tasca in px">
+      <label style="color:var(--muted);font-size:9px;">Off.</label>
+      <input type="text" id="pocket-offset-input" value="2" style="width:48px;padding:3px 4px;background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:3px;outline:none;text-align:center;" onmousedown="event.stopPropagation(); this.focus();" oninput="this.value=this.value.replace(/[^0-9.]/g,'')" title="Offset di espansione in px">
     </div>
 
     <!-- Colore compatta -->

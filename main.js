@@ -3,6 +3,10 @@ const path  = require('path');
 const fs    = require('fs');
 const pkg   = require('./package.json');
 
+// ── Fix cache permission errors on Windows ──
+app.commandLine.appendSwitch('disable-http-cache');
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+
 // MCP Server
 const mcpServer = require('./mcp-server');
 
@@ -438,6 +442,58 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Errore durante il salvataggio del progetto:', error);
       throw error;
+    }
+  });
+
+  // ── Gestione salvataggio 3MF e apertura in Bambu Studio ─────────────────
+  ipcMain.handle('save-and-open-3mf-bambu', async (event, content) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: 'Salva 3MF per Bambu Studio',
+      defaultPath: 'letterforge-design.3mf',
+      filters: [
+        { name: 'Modello 3MF', extensions: ['3mf'] }
+      ]
+    });
+
+    if (canceled || !filePath) {
+      return { success: false };
+    }
+
+    try {
+      // Salva il file 3MF
+      fs.writeFileSync(filePath, content, 'binary');
+      
+      // Cerca Bambu Studio nei percorsi comuni di Windows
+      const bambuPaths = [
+        'C:\\Program Files\\Bambu Studio\\bin\\bambu-studio.exe',
+        'C:\\Program Files (x86)\\Bambu Studio\\bin\\bambu-studio.exe',
+        `${process.env.LOCALAPPDATA}\\Programs\\Bambu Studio\\bin\\bambu-studio.exe`
+      ];
+      
+      let bambuPath = null;
+      for (const path of bambuPaths) {
+        if (fs.existsSync(path)) {
+          bambuPath = path;
+          break;
+        }
+      }
+      
+      if (bambuPath) {
+        // Apri direttamente con Bambu Studio
+        shell.openPath(bambuPath).then(() => {
+          // Passa il file come argomento (Bambu Studio lo aprirà)
+          const { spawn } = require('child_process');
+          spawn(bambuPath, [filePath], { detached: true }).unref();
+        });
+        return { success: true, method: 'bambu' };
+      } else {
+        // Se Bambu Studio non è trovato, apri con l'app predefinita
+        shell.openPath(filePath);
+        return { success: true, method: 'default' };
+      }
+    } catch (error) {
+      console.error('Errore durante il salvataggio/apertura 3MF:', error);
+      return { success: false, error: error.message };
     }
   });
   

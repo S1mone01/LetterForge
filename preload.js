@@ -1,13 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Try to load OpenJSCAD modeling from node_modules
+// Note: Primary loading is via CDN in index.html, this is a fallback
 let jscadModeling = null;
 try {
-  // In Electron, we can use require directly
   jscadModeling = require('@jscad/modeling');
   console.log('✓ OpenJSCAD modeling loaded in preload');
 } catch (err) {
-  console.warn('OpenJSCAD modeling not available:', err.message);
+  // Silent fail - CDN in index.html is the primary source
+  // console.log('OpenJSCAD will be loaded via CDN');
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -25,6 +26,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Salva e carica progetto
     saveProjectFile: (content) => ipcRenderer.invoke('save-project', content),
     loadProjectFile: () => ipcRenderer.invoke('load-project'),
+
+    // Salva 3MF e apri in Bambu Studio
+    saveAndOpen3MFInBambu: (content) => ipcRenderer.invoke('save-and-open-3mf-bambu', content),
 
     // Apri cartelle utente
     openFontFolder: () => ipcRenderer.invoke('open-font-folder'),
