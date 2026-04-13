@@ -416,7 +416,6 @@ window.OpenJSCADBridge = {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     
-    console.log(`  → Converted geom3 to Three.js: ${positions.length / 9} triangles`);
     return geometry;
   },
 
@@ -438,8 +437,6 @@ window.OpenJSCADBridge = {
         throw new Error('Failed to convert meshes to OpenJSCAD');
       }
 
-      console.log(`Mesh A polygons, Mesh B polygons`);
-
       // Perform boolean operation
       let resultGeom;
       switch (operation) {
@@ -454,7 +451,6 @@ window.OpenJSCADBridge = {
       }
 
       const resultPolygons = this.jscad.geometries.geom3.toPolygons(resultGeom);
-      console.log(`Result: ${resultPolygons.length} polygons`);
 
       if (resultPolygons.length === 0) {
         throw new Error('Boolean operation resulted in empty geometry');
@@ -1343,8 +1339,7 @@ window.CSG = (function () {
   .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#2a2a3a;transition:.25s cubic-bezier(.4,0,.2,1);border-radius:20px}
   .slider:before{position:absolute;content:"";height:16px;width:16px;left:2px;bottom:2px;background-color:white;transition:.25s cubic-bezier(.4,0,.2,1);border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3)}
   input:checked + .slider{background-color:var(--accent)}
-  input:checked + .slider:before{transform:translateX(18px)}
-  input:checked + .slider:before{background-color:#000}
+  input:checked + .slider:before{transform:translateX(18px);background-color:#000}
 
   .search-w{padding:8px 12px;border-bottom:1px solid var(--border)}
   .search-w input{
@@ -1673,28 +1668,6 @@ window.CSG = (function () {
     box-shadow:0 2px 6px rgba(200,255,0,.15);
     transform:translateY(-1px);
   }
-  .ag{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-  .tbtn{
-    width:30px;height:30px;
-    border:1px solid var(--border);
-    background:linear-gradient(180deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.01) 100%);
-    color:var(--muted);
-    border-radius:5px;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:14px;
-    transition:all .2s cubic-bezier(.4,0,.2,1);
-    box-shadow:0 1px 2px rgba(0,0,0,.15),inset 0 1px 0 rgba(255,255,255,.05);
-  }
-  .tbtn:hover{
-    background:var(--panel2);
-    color:var(--text);
-    border-color:var(--accent);
-    box-shadow:0 2px 6px rgba(200,255,0,.15);
-    transform:translateY(-1px);
-  }
   .hint{color:var(--muted);font-size:10px;line-height:1.6}
   .badge{display:inline-block;padding:1px 7px;background:rgba(200,255,0,.12);color:var(--accent);border-radius:20px;font-size:9px;font-weight:700;letter-spacing:.06em}
   .nsel{color:var(--muted);font-size:10px;text-align:center;padding:14px 0}
@@ -1919,7 +1892,7 @@ window.CSG = (function () {
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.2.9</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.3.0</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -5394,8 +5367,6 @@ function quitAndInstall() {
 }
 
 function handleUpdateStatus(data) {
-  console.log('[RENDERER] Update status received:', data);
-  
   const panel = document.getElementById('update-notify');
   const verEl = document.getElementById('un-version');
   const fillEl = document.getElementById('un-fill');
@@ -5406,16 +5377,13 @@ function handleUpdateStatus(data) {
 
   switch(data.status) {
     case 'checking':
-      console.log('[RENDERER] Checking for updates...');
       break;
 
     case 'available':
-      console.log('[RENDERER] Update available:', data.version);
       showUpdateNotify({ version: data.version });
       break;
 
     case 'not-available':
-      console.log('[RENDERER] No update available');
       hideUpdateNotify();
       break;
 
@@ -5424,7 +5392,6 @@ function handleUpdateStatus(data) {
       const pct = Math.round(data.percent);
       fillEl.style.width = pct + '%';
       pctEl.textContent = pct + '% - Download in corso...';
-      console.log('[RENDERER] Downloading:', pct + '%');
       break;
 
     case 'downloaded':
@@ -5437,7 +5404,6 @@ function handleUpdateStatus(data) {
       restartBtn.style.display = 'block';
       infoEl.style.display = 'block';
       infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
-      console.log('[RENDERER] Download completed, ready to install');
       toast('Download completato! Riavvia per installare.');
       break;
 
@@ -5888,8 +5854,6 @@ function init3DScene() {
     MIDDLE: THREE.MOUSE.PAN,
     RIGHT: THREE.MOUSE.DOLLY
   };
-  console.log('3D Controls configured - Middle: PAN, Right: ZOOM');
-  console.log('mouseButtons:', threeControls.mouseButtons);
   toast('3D Preview: Rotella=Pan, Destro=Zoom');
 
   // Add click handler for 3D object selection
@@ -6928,71 +6892,6 @@ function toggleColorVisibility(color) {
   saveState3D();
 }
 
-function toggle3DGrid(visible) {
-  threeGraphicsSettings.gridVisible = visible;
-  if (threeGridHelper) threeGridHelper.visible = visible;
-  saveState3D();
-}
-
-function change3DBgColor(color) {
-  threeGraphicsSettings.bgColor = color;
-  if (threeScene) threeScene.background = new THREE.Color(color);
-}
-
-function finalize3DBgColor() {
-  saveState3D();
-}
-
-function change3DAmbientLight(value) {
-  const intensity = parseFloat(value) / 100;
-  threeGraphicsSettings.ambientIntensity = intensity;
-  const label = document.getElementById('ambient-light-value');
-  if (label) label.textContent = value + '%';
-  if (threeAmbientLight) {
-    threeAmbientLight.intensity = intensity;
-  }
-}
-
-function finalize3DAmbientLight() {
-  saveState3D();
-}
-
-function change3DSpecular(value) {
-  const specular = new THREE.Color(`hsl(0, 0%, ${value}%)`);
-  threeGraphicsSettings.specular = specular.getHex();
-  const label = document.getElementById('specular-value');
-  if (label) label.textContent = value + '%';
-
-  // Update all mesh materials
-  threeMeshes.forEach(mesh => {
-    if (mesh.material) {
-      mesh.material.specular = specular;
-    }
-  });
-}
-
-function finalize3DSpecular() {
-  saveState3D();
-}
-
-function change3DShininess(value) {
-  const shininess = parseFloat(value);
-  threeGraphicsSettings.shininess = shininess;
-  const label = document.getElementById('shininess-value');
-  if (label) label.textContent = value + '%';
-
-  // Update all mesh materials
-  threeMeshes.forEach(mesh => {
-    if (mesh.material) {
-      mesh.material.shininess = shininess;
-    }
-  });
-}
-
-function finalize3DShininess() {
-  saveState3D();
-}
-
 // Update 3D object position from input fields
 function update3DObjectPosition(axis, value) {
   if (threeSelectionOrder.length === 0) return;
@@ -7693,7 +7592,6 @@ function union3DObjects() {
 
     // Try OpenJSCAD first, fallback to legacy CSG
     if (window.OpenJSCADBridge && window.OpenJSCADBridge.initialized) {
-      console.log('✓ Using OpenJSCAD for union operation');
 
       const resultMesh = window.OpenJSCADBridge.booleanOperation('union', meshA, meshB, colorA);
 
@@ -7740,13 +7638,11 @@ function union3DObjects() {
 
       const triCount = resultMesh.geometry.attributes.position.count / 3;
       toast(`✓ Unione completata! (${triCount} triangoli, OpenJSCAD)`);
-      console.log(`✓ Union done: ${triCount} triangles, watertight: true`);
       saveState3D();
       return;
     }
 
     // Fallback to legacy CSG (BSP-based boolean union)
-    console.warn('⚠ OpenJSCAD not available, using legacy CSG');
     toast('⚠ OpenJSCAD non disponibile, uso CSG legacy');
 
     const csgA = CSG.fromMesh(meshA, colorA);
@@ -7818,8 +7714,6 @@ function union3DObjects() {
 }
 
 function subtract3DObjects() {
-  console.log('=== SUBTRACT FUNCTION CALLED ===');
-
   if (threeSelectionOrder.length !== 2) {
     toast('Seleziona esattamente 2 oggetti per la sottrazione (Shift+click)');
     return;
@@ -7836,8 +7730,6 @@ function subtract3DObjects() {
       toast('Errore: OpenJSCAD non disponibile per le operazioni booleane');
       return;
     }
-
-    console.log('✓ Using OpenJSCAD for subtract operation');
 
     // =====================================================================
     // FIX DEFINITIVO CSG (Manifold & Z-Fighting)
@@ -7980,7 +7872,6 @@ function robust2DOffset(pathD, delta) {
 }
 
 function createPocket3D() {
-  console.log('=== CREATE POCKET FUNCTION CALLED ===');
 
   if (threeSelectionOrder.length !== 2) {
     toast('Seleziona esattamente 2 oggetti: primo = da duplicare, secondo = da bucare');
@@ -8193,7 +8084,6 @@ function duplicate3DSelection() {
 
       newSelections.push(clonedMesh);
 
-      console.log(`✓ Duplicated mesh ${idx + 1}, offset by ${offset} units on X`);
     } catch (err) {
       console.error('Error duplicating mesh:', err);
       toast('Errore nella duplicazione: ' + err.message);
@@ -8239,7 +8129,6 @@ function delete3DSelection() {
         }
       }
 
-      console.log(`✓ Deleted mesh ${idx + 1}`);
     } catch (err) {
       console.error('Error deleting mesh:', err);
       toast('Errore nell\'eliminazione: ' + err.message);
@@ -8298,6 +8187,7 @@ function toggle3DGrid(visible) {
   if (threeGridHelper) {
     threeGridHelper.visible = visible;
   }
+  saveState3D();
 }
 
 function change3DBgColor(color) {
@@ -8305,6 +8195,7 @@ function change3DBgColor(color) {
   if (threeScene) {
     threeScene.background = new THREE.Color(color);
   }
+  saveState3D();
 }
 
 function change3DAmbientLight(value) {
@@ -8314,32 +8205,35 @@ function change3DAmbientLight(value) {
   if (threeAmbientLight) {
     threeAmbientLight.intensity = intensity;
   }
+  saveState3D();
 }
 
 function change3DSpecular(value) {
   const specular = new THREE.Color(`hsl(0, 0%, ${value}%)`);
   threeGraphicsSettings.specular = specular.getHex();
   document.getElementById('specular-value').textContent = value + '%';
-  
+
   // Update all mesh materials
   threeMeshes.forEach(mesh => {
     if (mesh.material) {
       mesh.material.specular = specular;
     }
   });
+  saveState3D();
 }
 
 function change3DShininess(value) {
   const shininess = parseFloat(value);
   threeGraphicsSettings.shininess = shininess;
   document.getElementById('shininess-value').textContent = value + '%';
-  
+
   // Update all mesh materials
   threeMeshes.forEach(mesh => {
     if (mesh.material) {
       mesh.material.shininess = shininess;
     }
   });
+  saveState3D();
 }
 
 // ── ELECTRON AUTO-UPDATE INTEGRATION ─────────────────────────────────────
@@ -8355,428 +8249,6 @@ if (window.electronAPI && window.electronAPI.onAppVersion) {
     if (verEl) verEl.textContent = 'v' + version;
     if (unVerEl) unVerEl.textContent = 'Versione ' + version;
   });
-}
-
-// ===========================
-// 3D PREVIEW FUNCTIONALITY
-// ===========================
-let threeJSState = {
-  scene: null,
-  camera: null,
-  renderer: null,
-  controls: null,
-  meshes: [],
-  colorHeights: {}, // Maps hex color to extrusion height
-  isInitialized: false,
-  animationId: null
-};
-
-function init3DPreview() {
-  if (threeJSState.isInitialized) {
-    console.log('3D Preview already initialized');
-    return;
-  }
-
-  const container = document.getElementById('threejs-container');
-  if (!container) {
-    console.error('threejs-container not found');
-    return;
-  }
-
-  console.log('Initializing 3D preview...');
-  
-  // Scene
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x13131a);
-  
-  // Camera
-  const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 10000);
-  camera.position.set(0, -500, 600);
-  
-  // Renderer
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  container.appendChild(renderer.domElement);
-  
-  // Orbit Controls
-  const controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.screenSpacePanning = true;
-  // Configure mouse buttons
-  controls.mouseButtons = {
-    LEFT: THREE.MOUSE.ROTATE,
-    MIDDLE: THREE.MOUSE.PAN,
-    RIGHT: THREE.MOUSE.DOLLY
-  };
-  controls.enableZoom = true;
-  controls.zoomSpeed = 1.2;
-  
-  console.log('3D Controls configured - Middle: PAN, Right: ZOOM');
-  console.log('mouseButtons:', controls.mouseButtons);
-  toast('3D Preview: Rotella=Pan, Destro=Zoom');
-  
-  // Lights
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-  scene.add(ambientLight);
-  
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  dirLight.position.set(200, -200, 400);
-  dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 2048;
-  dirLight.shadow.mapSize.height = 2048;
-  scene.add(dirLight);
-  
-  const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
-  dirLight2.position.set(-200, 200, 300);
-  scene.add(dirLight2);
-  
-  // Grid helper
-  const gridHelper = new THREE.GridHelper(1000, 50, 0x2a2a3a, 0x1a1a25);
-  gridHelper.rotation.x = Math.PI / 2;
-  scene.add(gridHelper);
-  
-  // Store state
-  threeJSState.scene = scene;
-  threeJSState.camera = camera;
-  threeJSState.renderer = renderer;
-  threeJSState.controls = controls;
-  threeJSState.isInitialized = true;
-  
-  // Handle resize
-  window.addEventListener('resize', on3DResize);
-  
-  // Animation loop
-  animate3D();
-}
-
-function on3DResize() {
-  const container = document.getElementById('threejs-container');
-  if (!container || !threeJSState.isInitialized) return;
-  
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-  
-  threeJSState.camera.aspect = width / height;
-  threeJSState.camera.updateProjectionMatrix();
-  threeJSState.renderer.setSize(width, height);
-}
-
-function animate3D() {
-  threeJSState.animationId = requestAnimationFrame(animate3D);
-  if (threeJSState.controls) {
-    threeJSState.controls.update();
-  }
-  if (threeJSState.renderer && threeJSState.scene && threeJSState.camera) {
-    threeJSState.renderer.render(threeJSState.scene, threeJSState.camera);
-  }
-}
-
-function extractColorsFromSVG() {
-  const svgLayer = document.getElementById('svg-layer');
-  if (!svgLayer) return [];
-  
-  const colorMap = new Map();
-  const elements = svgLayer.querySelectorAll('path, circle, rect, ellipse, polygon, polyline');
-  
-  elements.forEach(el => {
-    let fill = el.getAttribute('fill');
-    if (fill && fill !== 'none' && !fill.startsWith('url')) {
-      // Normalize color
-      const hex = normalizeColor(fill);
-      if (hex) {
-        if (!colorMap.has(hex)) {
-          colorMap.set(hex, []);
-        }
-        colorMap.get(hex).push(el);
-      }
-    }
-  });
-  
-  return Array.from(colorMap.entries()).map(([color, els]) => ({
-    color: color,
-    elements: els,
-    height: threeJSState.colorHeights[color] || 20 // Default height 20mm
-  }));
-}
-
-function normalizeColor(colorStr) {
-  // Simple RGB/Hex normalizer
-  if (colorStr.startsWith('#')) {
-    return colorStr.toUpperCase();
-  }
-  // Parse rgb()
-  const rgbMatch = colorStr.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-  if (rgbMatch) {
-    const r = parseInt(rgbMatch[1], 10).toString(16).padStart(2, '0');
-    const g = parseInt(rgbMatch[2], 10).toString(16).padStart(2, '0');
-    const b = parseInt(rgbMatch[3], 10).toString(16).padStart(2, '0');
-    return '#' + r + g + b;
-  }
-  return null;
-}
-
-function buildColorHeightsList(colorsData) {
-  const listEl = document.getElementById('color-heights-list');
-  if (!listEl) return;
-  
-  listEl.innerHTML = '';
-  
-  colorsData.forEach(item => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px;background:var(--panel2);border-radius:6px;border:1px solid var(--border);';
-    
-    // Color swatch
-    const swatch = document.createElement('div');
-    swatch.style.cssText = `width:24px;height:24px;border-radius:4px;background:${item.color};border:1px solid var(--border);flex-shrink:0;`;
-    row.appendChild(swatch);
-    
-    // Color label
-    const label = document.createElement('span');
-    label.textContent = item.color;
-    label.style.cssText = 'font-size:10px;color:var(--muted);min-width:70px;font-family:"DM Mono",monospace;';
-    row.appendChild(label);
-    
-    // Slider
-    const sliderContainer = document.createElement('div');
-    sliderContainer.style.cssText = 'flex:1;display:flex;align-items:center;gap:6px;';
-    
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0';
-    slider.max = '200';
-    slider.step = '1';
-    slider.value = item.height;
-    slider.style.cssText = 'flex:1;height:4px;-webkit-appearance:none;background:var(--border);border-radius:2px;outline:none;cursor:pointer;';
-    slider.oninput = (e) => {
-      const newHeight = parseFloat(e.target.value);
-      threeJSState.colorHeights[item.color] = newHeight;
-      valueDisplay.textContent = newHeight + ' mm';
-      update3DPreview();
-    };
-    
-    sliderContainer.appendChild(slider);
-    
-    // Value display
-    const valueDisplay = document.createElement('span');
-    valueDisplay.textContent = item.height + ' mm';
-    valueDisplay.style.cssText = 'font-size:10px;color:var(--text);min-width:45px;text-align:right;font-weight:500;';
-    sliderContainer.appendChild(valueDisplay);
-    
-    row.appendChild(sliderContainer);
-    listEl.appendChild(row);
-  });
-  
-  if (colorsData.length === 0) {
-    listEl.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:10px;text-align:center;">Nessun colore rilevato</div>';
-  }
-}
-
-function pathToThreeShape(pathD, scale = 1) {
-  const shape = new THREE.Shape();
-  const cmds = parsePathDForThree(pathD);
-  
-  let currentX = 0;
-  let currentY = 0;
-  
-  cmds.forEach(cmd => {
-    switch(cmd.type) {
-      case 'M':
-        currentX = cmd.x * scale;
-        currentY = cmd.y * scale;
-        shape.moveTo(currentX, currentY);
-        break;
-      case 'L':
-        currentX = cmd.x * scale;
-        currentY = cmd.y * scale;
-        shape.lineTo(currentX, currentY);
-        break;
-      case 'Q':
-        currentX = cmd.x2 * scale;
-        currentY = cmd.y2 * scale;
-        shape.quadraticCurveTo(cmd.x1 * scale, cmd.y1 * scale, currentX, currentY);
-        break;
-      case 'C':
-        currentX = cmd.x3 * scale;
-        currentY = cmd.y3 * scale;
-        shape.bezierCurveTo(cmd.x1 * scale, cmd.y1 * scale, cmd.x2 * scale, cmd.y2 * scale, currentX, currentY);
-        break;
-      case 'Z':
-        shape.closePath();
-        break;
-    }
-  });
-  
-  return shape;
-}
-
-function parsePathDForThree(d) {
-  const cmds = [];
-  const regex = /([MmLlQqCcZz])([^MmLlQqCcZz]*)/g;
-  let match;
-  
-  let currentX = 0;
-  let currentY = 0;
-  
-  while ((match = regex.exec(d)) !== null) {
-    const type = match[1];
-    const params = match[2].trim().split(/[\s,]+/).filter(p => p !== '').map(Number);
-    
-    switch(type) {
-      case 'M':
-        currentX = params[0];
-        currentY = params[1];
-        cmds.push({ type: 'M', x: currentX, y: currentY });
-        break;
-      case 'm':
-        currentX += params[0];
-        currentY += params[1];
-        cmds.push({ type: 'M', x: currentX, y: currentY });
-        break;
-      case 'L':
-        currentX = params[0];
-        currentY = params[1];
-        cmds.push({ type: 'L', x: currentX, y: currentY });
-        break;
-      case 'l':
-        currentX += params[0];
-        currentY += params[1];
-        cmds.push({ type: 'L', x: currentX, y: currentY });
-        break;
-      case 'Q':
-        cmds.push({ type: 'Q', x1: params[0], y1: params[1], x2: params[2], y2: params[3] });
-        currentX = params[2];
-        currentY = params[3];
-        break;
-      case 'q':
-        cmds.push({ 
-          type: 'Q', 
-          x1: currentX + params[0], 
-          y1: currentY + params[1], 
-          x2: currentX + params[2], 
-          y2: currentY + params[3] 
-        });
-        currentX += params[2];
-        currentY += params[3];
-        break;
-      case 'C':
-        cmds.push({ type: 'C', x1: params[0], y1: params[1], x2: params[2], y2: params[3], x3: params[4], y3: params[5] });
-        currentX = params[4];
-        currentY = params[5];
-        break;
-      case 'c':
-        cmds.push({ 
-          type: 'C', 
-          x1: currentX + params[0], 
-          y1: currentY + params[1], 
-          x2: currentX + params[2], 
-          y2: currentY + params[3], 
-          x3: currentX + params[4], 
-          y3: currentY + params[5] 
-        });
-        currentX += params[4];
-        currentY += params[5];
-        break;
-      case 'Z':
-      case 'z':
-        cmds.push({ type: 'Z' });
-        break;
-    }
-  }
-  
-  return cmds;
-}
-
-function update3DPreview() {
-  if (!threeJSState.isInitialized) return;
-  
-  const scene = threeJSState.scene;
-  
-  // Clear existing meshes
-  threeJSState.meshes.forEach(mesh => scene.remove(mesh));
-  threeJSState.meshes = [];
-  
-  // Extract colors and build UI
-  const colorsData = extractColorsFromSVG();
-  buildColorHeightsList(colorsData);
-  
-  // Create extruded meshes for each color
-  const svgLayer = document.getElementById('svg-layer');
-  if (!svgLayer) return;
-  
-  const svgElement = document.getElementById('svg');
-  const viewBox = svgElement ? svgElement.viewBox.baseVal : { width: 800, height: 500 };
-  
-  colorsData.forEach(colorItem => {
-    const height = threeJSState.colorHeights[colorItem.color] || 20;
-
-    colorItem.elements.forEach(el => {
-      const d = el.getAttribute('d');
-      if (!d) return;
-
-      const shape = pathToThreeShape(d, 1);
-      if (!shape || shape.curves.length === 0) return;
-
-      const geometry = new THREE.ExtrudeGeometry(shape, {
-        depth: height,
-        bevelEnabled: false,
-        curveSegments: 12
-      });
-
-      // Center X and Y, but keep front face at z=0
-      geometry.computeBoundingBox();
-      const bbox = geometry.boundingBox;
-      const centerX = (bbox.max.x + bbox.min.x) / 2;
-      const centerY = (bbox.max.y + bbox.min.y) / 2;
-      geometry.translate(-centerX, -centerY, -bbox.min.z);
-
-      // Rotate to align with SVG coordinate system (Y is flipped in SVG)
-      geometry.rotateX(Math.PI / 2);
-      
-      const material = new THREE.MeshStandardMaterial({
-        color: colorItem.color,
-        roughness: 0.5,
-        metalness: 0.1
-      });
-      
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      
-      // Position at origin (centered)
-      mesh.position.set(0, 0, 0);
-      
-      scene.add(mesh);
-      threeJSState.meshes.push(mesh);
-    });
-  });
-  
-  // Reset camera to fit scene
-  fitCameraToObject();
-}
-
-function fitCameraToObject() {
-  if (!threeJSState.isInitialized || threeJSState.meshes.length === 0) return;
-
-  const box = new THREE.Box3();
-  threeMeshes.forEach(mesh => {
-    box.union(new THREE.Box3().setFromObject(mesh));
-  });
-
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const fov = threeJSState.camera.fov * (Math.PI / 180);
-  let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
-  cameraZ *= 1.5; // Zoom out a bit
-
-  threeJSState.camera.position.set(center.x, center.y - cameraZ * 0.5, cameraZ);
-  threeJSState.camera.lookAt(center);
-  threeJSState.controls.target.copy(center);
-  threeJSState.controls.update();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -9573,8 +9045,6 @@ function updateMCPStatus(status, text) {
 
 // Listen for operations from MCP server
 window.electronAPI.onMCPExecuteOperation(async (operation) => {
-  console.log('[MCP] Executing operation:', operation);
-  
   try {
     let result;
     
@@ -10561,27 +10031,27 @@ function aiExecuteRecolor(op) {
         </label>
         <div style="flex:1"></div>
         <label style="color:var(--text);font-size:11px;font-weight:500;">Sfondo</label>
-        <input type="color" id="bg-color-picker" value="#1a1a22" oninput="change3DBgColor(this.value)" onchange="finalize3DBgColor()" style="width:28px;height:22px;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;">
+        <input type="color" id="bg-color-picker" value="#1a1a22" oninput="change3DBgColor(this.value)" style="width:28px;height:22px;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;">
       </div>
       
       <!-- Ambient Light -->
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="color:var(--muted);font-size:10px;min-width:70px;">Luce</label>
-        <input type="range" id="ambient-light-slider" min="0" max="100" value="60" style="flex:1;accent-color:var(--accent);" oninput="change3DAmbientLight(this.value)" onchange="finalize3DAmbientLight()">
+        <input type="range" id="ambient-light-slider" min="0" max="100" value="60" style="flex:1;accent-color:var(--accent);" oninput="change3DAmbientLight(this.value)">
         <span id="ambient-light-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">60%</span>
       </div>
       
       <!-- Specular -->
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="color:var(--muted);font-size:10px;min-width:70px;">Riflessi</label>
-        <input type="range" id="specular-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DSpecular(this.value)" onchange="finalize3DSpecular()">
+        <input type="range" id="specular-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DSpecular(this.value)">
         <span id="specular-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
       </div>
       
       <!-- Shininess -->
       <div style="display:flex;align-items:center;gap:6px;">
         <label style="color:var(--muted);font-size:10px;min-width:70px;">Lucentezza</label>
-        <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DShininess(this.value)" onchange="finalize3DShininess()">
+        <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DShininess(this.value)">
         <span id="shininess-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
       </div>
     </div>
