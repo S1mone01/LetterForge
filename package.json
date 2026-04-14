@@ -1,0 +1,95 @@
+{
+  "name": "letterforge-pro",
+  "version": "4.3.1",
+  "description": "LetterForge Pro – editor tipografico SVG desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "electron-builder",
+    "release": "node build-and-publish.js"
+  },
+  "build": {
+    "appId": "com.letterforge.pro",
+    "productName": "LetterForge Pro",
+    "copyright": "Copyright © 2024 LetterForge",
+    "files": [
+      "main.js",
+      "preload.js",
+      "mcp-server.js",
+      "src/**/*"
+    ],
+    "extraResources": [],
+    "extraFiles": [],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "publish": {
+        "provider": "github",
+        "owner": "S1mone01",
+        "repo": "LetterForge",
+        "releaseType": "release"
+      }
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns",
+      "publish": {
+        "provider": "github",
+        "owner": "S1mone01",
+        "repo": "LetterForge",
+        "releaseType": "release"
+      }
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png",
+      "publish": {
+        "provider": "github",
+        "owner": "S1mone01",
+        "repo": "LetterForge",
+        "releaseType": "release"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "it_IT",
+        "en_US"
+      ],
+      "language": "1040",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LetterForge Pro"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "S1mone01",
+      "repo": "LetterForge",
+      "private": false,
+      "releaseType": "release"
+    }
+  },
+  "dependencies": {
+    "@jscad/modeling": "^2.13.0",
+    "electron-updater": "^6.1.7",
+    "manifold-3d": "^3.4.1",
+    "three-bvh-csg": "^0.0.18"
+  },
+  "devDependencies": {
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3",
+    "electron-packager": "^17.1.2"
+  }
+}

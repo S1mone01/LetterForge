@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm start)",
+      "Bash(copy *)",
+      "Bash(node *)",
+      "Bash(dir *)",
+      "Bash(taskkill *)",
+      "Bash(npm install)",
+      "Bash(git init)",
+      "Bash(git remote *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git config *)",
+      "Bash(set *)",
+      "Bash(start *)",
+      "Bash(git push *)",
+      "Bash($env:gh_token=\"ghp_xusu5glnuxczlm5lifqxucuogvbo1y1batyz\")",
+      "Bash(npm run *)",
+      "Bash(rmdir *)",
+      "Bash(npx *)",
+      "Bash(powershell *)",
+      "Bash(select-object *)",
+      "Bash(curl *)",
+      "Bash(jq *)"
+    ]
+  },
+  "$version": 3
+}
