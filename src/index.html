@@ -134,7 +134,7 @@ window.OpenJSCADBridge = {
           points.push([currentX, -cmd.y]);
         } else if (cmd.type === 'C' && started) {
           // Cubic bezier: approximate with line segments
-          const segments = 12;
+          const segments = 24;
           for (let i = 1; i <= segments; i++) {
             const t = i / segments;
             const mt = 1 - t;
@@ -147,7 +147,7 @@ window.OpenJSCADBridge = {
           currentY = cmd.y;
         } else if (cmd.type === 'Q' && started) {
           // Quadratic bezier: approximate with line segments
-          const segments = 8;
+          const segments = 16;
           for (let i = 1; i <= segments; i++) {
             const t = i / segments;
             const mt = 1 - t;
@@ -238,9 +238,19 @@ window.OpenJSCADBridge = {
     if (outerContours.length === 0) return null;
 
     // Create initial geom2 with largest outer contour
+    // Ensure polygon is closed (first == last) for fromPoints requirement
+    let initialPts = outerContours[0].points;
+    if (initialPts.length > 0) {
+      const n = initialPts.length;
+      const first = initialPts[0];
+      const last = initialPts[n - 1];
+      if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 0.01) {
+        initialPts = [...initialPts, [...first]];
+      }
+    }
     let geom = null;
     try {
-      geom = this.jscad.geometries.geom2.fromPoints(outerContours[0].points);
+      geom = this.jscad.geometries.geom2.fromPoints(initialPts);
     } catch (err) {
       console.warn('⚠ Failed to create initial geom2:', err.message);
       return null;
@@ -249,7 +259,16 @@ window.OpenJSCADBridge = {
     // Add remaining outer contours via union
     for (let i = 1; i < outerContours.length; i++) {
       try {
-        const additional = this.jscad.geometries.geom2.fromPoints(outerContours[i].points);
+        let pts = outerContours[i].points;
+        if (pts.length > 0) {
+          const n = pts.length;
+          const first = pts[0];
+          const last = pts[n - 1];
+          if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 0.01) {
+            pts = [...pts, [...first]];
+          }
+        }
+        const additional = this.jscad.geometries.geom2.fromPoints(pts);
         geom = this.jscad.booleans.union(geom, additional);
       } catch (err) {
         console.warn('⚠ Failed to union outer contour:', err.message);
@@ -261,8 +280,17 @@ window.OpenJSCADBridge = {
       try {
         // Since holePoints are CW from the loop above, and subtract needs a solid (CCW),
         // we flip them to CCW for the subtraction.
-        const holePointsCCW = [...hole.points].reverse();
-        const holeGeom = this.jscad.geometries.geom2.fromPoints(holePointsCCW);
+        let holePts = [...hole.points].reverse();
+        // Ensure closed
+        if (holePts.length > 0) {
+          const n = holePts.length;
+          const first = holePts[0];
+          const last = holePts[n - 1];
+          if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 0.01) {
+            holePts = [...holePts, [...first]];
+          }
+        }
+        const holeGeom = this.jscad.geometries.geom2.fromPoints(holePts);
         geom = this.jscad.booleans.subtract(geom, holeGeom);
       } catch (err) {
         console.warn('⚠ Failed to subtract hole contour:', err.message);
@@ -286,8 +314,15 @@ window.OpenJSCADBridge = {
   extrudeGeom2ToGeom3(geom2, depth = 20) {
     if (!this.jscad) throw new Error('OpenJSCAD not initialized');
 
-    // Validate geom2 before extrusion
-    const outlines = this.jscad.geometries.geom2.toOutlines(geom2);
+    // Validate geom2 before extrusion – toOutlines throws for non-closed geom2
+    // (e.g. produced by boolean subtract on self-intersecting offset contours)
+    let outlines;
+    try {
+      outlines = this.jscad.geometries.geom2.toOutlines(geom2);
+    } catch (err) {
+      console.warn('⚠ geom2 not closed (toOutlines failed):', err.message);
+      return null;
+    }
     if (!outlines || outlines.length === 0) {
       console.warn('⚠ geom2 has no outlines - cannot extrude');
       return null;
@@ -1775,6 +1810,26 @@ window.CSG = (function () {
     font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.5;
   }
   #custom-confirm .dlg-btns{display:flex;gap:10px;justify-content:center;}
+
+  /* ── Custom Color Picker ── */
+  .cp-wrap{position:relative;display:inline-flex;align-items:center;flex-shrink:0;}
+  .cp-swatch{display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--panel2);transition:border-color .15s;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);user-select:none;white-space:nowrap;}
+  .cp-swatch:hover{border-color:var(--accent);color:var(--text);}
+  .cp-dot{width:14px;height:14px;border-radius:3px;border:1px solid rgba(255,255,255,.12);flex-shrink:0;}
+  .cp-popup{position:fixed;z-index:1000000;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);width:220px;display:none;flex-direction:column;gap:10px;}
+  .cp-popup.open{display:flex;}
+  .cp-gradient{position:relative;width:100%;height:130px;border-radius:5px;cursor:crosshair;overflow:hidden;flex-shrink:0;}
+  .cp-gradient canvas{display:block;width:100%;height:100%;}
+  .cp-gradient-cursor{position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;}
+  .cp-hue{position:relative;width:100%;height:12px;border-radius:6px;cursor:pointer;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);flex-shrink:0;}
+  .cp-hue-cursor{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;}
+  .cp-hex-row{display:flex;align-items:center;gap:6px;}
+  .cp-hex{flex:1;padding:4px 7px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;border-radius:4px;outline:none;text-transform:uppercase;}
+  .cp-hex:focus{border-color:var(--accent);}
+  .cp-preview{width:28px;height:26px;border-radius:4px;border:1px solid var(--border);flex-shrink:0;}
+  .cp-swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;}
+  .cp-sw{width:100%;aspect-ratio:1;border-radius:3px;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform .1s;}
+  .cp-sw:hover{transform:scale(1.15);border-color:rgba(255,255,255,.3);}
 </style>
 </head>
 <!-- Electron: auto-load fonts and svgs from folder -->
@@ -1875,19 +1930,10 @@ window.CSG = (function () {
   </div>
   <button class="btn" onclick="zoomReset()" title="Reset zoom" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-    Centra
   </button>
   <button class="btn snap-on" id="snap-btn" onclick="toggleSnap()" title="Attiva/Disattiva snap allineamento (Y)" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M21 3l-7 7"></path><path d="M3 3l7 7"></path><path d="M16 21h5v-5"></path><path d="M8 21H3v-5"></path><path d="M21 21l-7-7"></path><path d="M3 21l7-7"></path></svg>
     Snap
-  </button>
-  <button class="btn" style="margin-left: 16px; border-color: var(--accent); color: var(--accent);" onclick="mergeSelected()" title="Raggruppa gli elementi selezionati: il secondo prende il colore del primo e vengono raggruppati" onmousedown="event.stopPropagation()">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M12 8v8"></path><path d="M8 12h8"></path></svg>
-    Raggruppa
-  </button>
-  <button class="btn" style="margin-left: 8px; border-color: #ff6b35; color: #ff6b35;" onclick="unmergeSelected()" title="Separa gli elementi del gruppo selezionato" onmousedown="event.stopPropagation()">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M12 22v-8.5"></path><path d="M3 12l9-9"></path></svg>
-    Separa
   </button>
   <div class="spacer"></div>
   <button class="btn" onclick="deleteUnselected()" onmousedown="event.stopPropagation()">
@@ -1917,7 +1963,7 @@ window.CSG = (function () {
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div class="sec-title" style="margin:0">Progetto</div>
-        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.3.0</span>
+        <span id="app-version" style="font-size:9px;color:var(--accent);font-weight:700;letter-spacing:0.05em">v4.3.4</span>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:3px">
         <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
@@ -1998,6 +2044,16 @@ window.CSG = (function () {
 
   <div class="canvas-area">
     <div class="tbar2" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()">
+      <div class="cp-wrap" onmousedown="event.stopPropagation()">
+        <div class="cp-swatch" onclick="openCP('canvas-bg-picker',this)" title="Colore sfondo foglio">
+          <div class="cp-dot" id="canvas-bg-picker-dot" style="background:#ffffff;"></div>
+          <span>Sfondo</span>
+        </div>
+      </div>
+      <button id="grid-btn" class="btn" onclick="toggleGrid()" onmousedown="event.stopPropagation()" title="Mostra/Nascondi griglia" style="color:var(--accent);padding:4px 7px;min-width:0;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+      </button>
+      <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px;"></div>
       <label>Testo</label>
       <input type="text" id="ti" placeholder="Scrivi qui…" value="Ciao" onkeydown="if(event.key==='Enter')addText()" onmousedown="event.stopPropagation(); this.focus();">
       <label>pt</label>
@@ -2020,7 +2076,12 @@ window.CSG = (function () {
           <div onclick="setFontSize(200)" class="fsize-opt">200</div>
         </div>
       </div>
-      <input type="color" id="fcol" value="#111111" title="Colore" onmousedown="event.stopPropagation();" onchange="apFill(this.value)">
+      <div class="cp-wrap" onmousedown="event.stopPropagation()">
+        <div class="cp-swatch" onclick="openCP('fcol',this)" title="Colore testo">
+          <div class="cp-dot" id="fcol-dot" style="background:#111111;"></div>
+          <span>Colore</span>
+        </div>
+      </div>
       <button class="btn primary" onclick="addText()" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         Aggiungi
@@ -2136,12 +2197,19 @@ window.CSG = (function () {
       <div class="pr"><label>Bordo</label>
         <input type="range" id="pborder" min="0" max="100" step="0.5" value="0" oninput="apBorder(+this.value)" onmousedown="event.stopPropagation()">
         <span class="val" id="vborder">0px</span></div>
-      <div class="pr"><label>Col.</label><input type="color" id="pbordercol" value="#000000" oninput="apBorderCol(this.value)" onmousedown="event.stopPropagation()"></div>
+      <div class="pr"><label>Col.</label>
+        <div class="cp-wrap" onmousedown="event.stopPropagation()">
+          <div class="cp-swatch" onclick="openCP('pbordercol',this)" title="Colore bordo">
+            <div class="cp-dot" id="pbordercol-dot" style="background:#000000;"></div>
+            <span>Bordo</span>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-title">Spaziatura (selezionati)</div>
       <div class="pr"><label>Gap</label>
-        <input type="range" id="pgap" min="-50" max="200" value="4" oninput="apGap(+this.value)" onmousedown="event.stopPropagation()">
+        <input type="range" id="pgap" min="-50" max="200" value="4" oninput="apGap(+this.value)" onmousedown="startGapDrag();event.stopPropagation()">
         <span class="val" id="vgap">4px</span></div>
       <button class="btn ordine-btn" style="margin-top:6px" onclick="distrib('h')" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>
@@ -2315,6 +2383,7 @@ const S = {
   svgs:[], // Array of {id, name, pathData, width, height}
   viewMode:'fonts', // 'fonts' or 'svgs'
   gridOn:true,
+  canvasBg:'#ffffff',
   zoom:1, canvasW:800, canvasH:500,
   lockScale:true,
   history:[], historyIndex:-1,
@@ -2324,6 +2393,7 @@ const S = {
   rotHandleAngle: null, // angolo corrente del controllo di rotazione (in gradi)
   rotHandleDistance: null, // distanza fissa dal centro durante la rotazione
   groupCounter: 0, // contatore per generare ID gruppo univoci
+  _gapBase: null,  // stato base per lo slider Gap (salvato su mousedown)
 };
 let uid=0;
 
@@ -2639,17 +2709,20 @@ function processSingleSVGForLibrary(name, content) {
     const realW = Math.max(maxX - minX, 1);
     const realH = Math.max(maxY - minY, 1);
 
-    // Trasliamo il tracciato portandolo esattamente sullo 0,0, rimuovendo gli spazi vuoti
+    // Normalizza il path a 100px sul lato lungo, così sx=1 è sempre sensato
+    const NORM_SIZE = 100;
+    const normScale = NORM_SIZE / Math.max(realW, realH);
     const centeredSegs = translateSegs(allSegs, -minX, -minY);
-    const combinedD = segsToPathD(centeredSegs);
+    const normalizedSegs = scaleSegs(centeredSegs, normScale);
+    const combinedD = segsToPathD(normalizedSegs);
 
     if(combinedD) {
       S.svgs.push({
         id: uid++,
         name: name.replace(/\.svg$/i, ''),
         pathData: `<path d="${combinedD}" fill="currentColor" vector-effect="non-scaling-stroke"/>`,
-        width: realW, 
-        height: realH
+        width: realW * normScale,
+        height: realH * normScale
       });
     }
   } catch(e) { console.error("Errore parsing SVG libreria:", e); }
@@ -2677,11 +2750,17 @@ function addSVGToCanvas(name){
   const svgObj = S.svgs.find(s => s.name === name);
   if(!svgObj) return;
 
-  // Calcola scala automatica per adattare SVG al canvas
-  // Target: 20% del lato più piccolo del canvas (più visibile)
+  // Il path in svgObj è già normalizzato a 100px sul lato lungo (da processSingleSVGForLibrary).
+  // Scala a targetSize (20% del canvas) e metti sx=1 così l'utente parte sempre da 1.
   const targetSize = Math.min(S.canvasW, S.canvasH) * 0.20;
   const svgMaxDim = Math.max(svgObj.width, svgObj.height);
-  const autoScale = svgMaxDim > 0 ? targetSize / svgMaxDim : 1;
+  const toTargetScale = svgMaxDim > 0 ? targetSize / svgMaxDim : 1;
+
+  const rawSegs = pathToAbsoluteSegments(svgObj.pathData.replace(/<path d="([^"]+)"[^>]*>/, '$1'));
+  const scaledSegs = scaleSegs(rawSegs, toTargetScale);
+  const scaledD = segsToPathD(scaledSegs);
+  const objW = svgObj.width * toTargetScale;
+  const objH = svgObj.height * toTargetScale;
 
   S.letters.push({
     id: uid++,
@@ -2694,13 +2773,13 @@ function addSVGToCanvas(name){
     fill: '#111111',
     fontFamily: 'sans-serif',
     fontName: name,
-    sx: autoScale,
-    sy: autoScale,
+    sx: 1,
+    sy: 1,
     rot: 0, skew: 0, op: 1,
-    customPath: svgObj.pathData.replace(/<path d="([^"]+)"[^>]*>/, '$1'),
+    customPath: scaledD,
     isSvgImport: true,
-    svgW: svgObj.width,
-    svgH: svgObj.height,
+    svgW: objW,
+    svgH: objH,
     borderWidth: 0,
     borderColor: '#000000',
     layer: 2
@@ -3027,8 +3106,9 @@ function offsetContour2D(pts, delta) {
     const dot = nax * bix + nay * biy;          // cos(half-angle)
     const miter = Math.abs(dot) > 1e-4 ? delta / dot : delta;
 
-    // Clamp miter at 4× delta to avoid extreme spikes on very acute angles
-    const limit = Math.abs(delta) * 4;
+    // Clamp miter at 2.5× delta – tighter limit reduces self-intersections on
+    // sharp concave corners of curved letters (was 4×)
+    const limit = Math.abs(delta) * 2.5;
     const clamped = Math.max(-limit, Math.min(limit, miter));
 
     result.push([curr[0] + bix * clamped, curr[1] + biy * clamped]);
@@ -3403,39 +3483,31 @@ function importSVGs(files) {
         const realW = Math.max(maxX - minX, 1);
         const realH = Math.max(maxY - minY, 1);
 
-        // Scala se il contenuto è troppo grande
-        const maxSide = 400;
-        const scale = (realW > maxSide || realH > maxSide) ? maxSide / Math.max(realW, realH) : 1;
+        // Normalizza il path a una dimensione fissa (targetSize) così sx=1 all'import
+        // e l'utente vede sempre valori sensati nel pannello scala
+        const targetSize = Math.min(S.canvasW, S.canvasH) * 0.20;
+        const normScale = targetSize / Math.max(realW, realH);
 
-        const scaledSegs = scale !== 1 ? scaleSegs(allSegs, scale) : allSegs;
-        const rawD = segsToPathD(scaledSegs);
-        const bbox = calcRealBBox(rawD);
+        const centeredSegs = translateSegs(allSegs, -minX, -minY);
+        const normalizedSegs = scaleSegs(centeredSegs, normScale);
+        const centeredD = segsToPathD(normalizedSegs);
 
-        if (!bbox || bbox.width < 0.001 || bbox.height < 0.001) {
-          toast(`BBox non valido per ${f.name}`); return;
-        }
-
-        const centeredSegs = translateSegs(scaledSegs, -bbox.x, -bbox.y);
-        const centeredD = segsToPathD(centeredSegs);
+        const objW = realW * normScale;
+        const objH = realH * normScale;
 
         const canvasCX = S.canvasW / 2;
         const canvasCY = S.canvasH / 2;
-        const objW = bbox.width;
-        const objH = bbox.height;
-
-        const posX = canvasCX;
-        const posY = canvasCY - objH / 2;
 
         const baseName = f.name.replace(/\.svg$/i, '');
 
         S.letters.push({
           id: uid++,
           ch: baseName,
-          x: posX,
-          y: posY,
-          originalX: posX,
-          originalY: posY,
-          fontSize: objH,
+          x: canvasCX,
+          y: canvasCY,
+          originalX: canvasCX,
+          originalY: canvasCY,
+          fontSize: 100,
           fill: '#111111',
           fontFamily: 'sans-serif',
           fontName: baseName,
@@ -3467,7 +3539,10 @@ function addText(){
   const txt=document.getElementById('ti').value;
   if(!txt.trim())return;
   const fs=+document.getElementById('fsize').value||80;
-  const fill=document.getElementById('fcol').value;
+  const fcolDot=document.getElementById('fcol-dot');
+  let fill=fcolDot?fcolDot.style.background:'#111111';
+  // Normalize rgb(...) → #hex
+  if(fill.startsWith('rgb')){const m=fill.match(/\d+/g);if(m&&m.length>=3)fill='#'+[+m[0],+m[1],+m[2]].map(c=>c.toString(16).padStart(2,'0')).join('');}
   const fontList=S.selectedFonts.size>0?[...S.selectedFonts]:(S.curFont?[S.curFont]:[]);
   if(!fontList.length){toast('Seleziona almeno un font dalla lista a sinistra!');return;}
   const ctx=document.getElementById('dc').getContext('2d');
@@ -4369,6 +4444,7 @@ document.addEventListener('mouseup', e=>{
 });
 
 function upd(){
+  S._gapBase = null; // resetta la base gap ogni volta che la selezione cambia
   const sel=[...S.sel];
   const gg=document.getElementById('gg'),ns=document.getElementById('nsel'),info=document.getElementById('info');
   if(!sel.length){
@@ -4499,7 +4575,16 @@ function resetPropertyFields(){
   if(layerBtn2) layerBtn2.classList.remove('active');
   if(layerBtn3) layerBtn3.classList.remove('active');
 }
-function v(id,val){const el=document.getElementById(id);if(el&&document.activeElement!==el){el.value=val;}}
+function v(id,val){
+  // Custom color picker dots
+  const dotMap={'fcol':'fcol-dot','pbordercol':'pbordercol-dot','canvas-bg-picker':'canvas-bg-picker-dot','bg-color-picker':'bg-color-picker-dot'};
+  if(dotMap[id]){
+    const dot=document.getElementById(dotMap[id]);
+    if(dot)dot.style.background=val;
+    return;
+  }
+  const el=document.getElementById(id);if(el&&document.activeElement!==el){el.value=val;}
+}
 function t(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
 
 // Applica una trasformazione a tutti gli elementi selezionati
@@ -4712,6 +4797,7 @@ function apFill(val){
   });
   
   v('pfill', val);
+  v('fcol', val);
   render(); renderHandles(); upd(); saveState();
 }
 function apFS(val){
@@ -4752,29 +4838,74 @@ document.addEventListener('click',function(e){
 function apOp(val){t('vop',Math.round(val*100)+'%');aps(l=>l.op=val);}
 function apBorder(val){t('vborder',val.toFixed(1)+'px');aps(l=>l.borderWidth=val);}
 function apBorderCol(val){aps(l=>l.borderColor=val);}
-function apGap(val){
-  t('vgap',val+'px');
-  const sel=[...S.sel].sort((a,b)=>S.letters[a].x-S.letters[b].x);
-  if(sel.length<2)return;
-  const ctx=document.getElementById('dc').getContext('2d');
-  let cx=S.letters[sel[0]].x;
-  sel.forEach((i,j)=>{
-    if(!j)return;
-    const l=S.letters[i];ctx.font=`${l.fontSize}px ${l.fontFamily}`;const w=ctx.measureText(l.ch).width;
-    const prev=S.letters[sel[j-1]];ctx.font=`${prev.fontSize}px ${prev.fontFamily}`;const pw=ctx.measureText(prev.ch).width;
-    S.letters[i].x=cx+pw/2+val+w/2;cx=S.letters[i].x;
-  });
-  render();saveState();
+// ─── Larghezza visiva effettiva di una lettera (tiene conto della scala sx) ───
+function _getLetterW(l, ctx) {
+  ctx.font = `${l.fontSize}px ${l.fontFamily}`;
+  const mw = l.isGroup ? l.groupW
+           : l.isSvgImport ? (l.svgW || ctx.measureText(l.ch).width)
+           : ctx.measureText(l.ch).width;
+  return mw * Math.abs(l.sx || 1);
 }
 
-function distrib(ax){
-  const sel=[...S.sel].sort((a,b)=>ax==='h'?S.letters[a].x-S.letters[b].x:S.letters[a].y-S.letters[b].y);
-  if(sel.length<3)return;
-  const first=ax==='h'?S.letters[sel[0]].x:S.letters[sel[0]].y;
-  const last=ax==='h'?S.letters[sel[sel.length-1]].x:S.letters[sel[sel.length-1]].y;
-  const step=(last-first)/(sel.length-1);
-  sel.forEach((i,j)=>{if(!j||j===sel.length-1)return;if(ax==='h')S.letters[i].x=first+step*j;else S.letters[i].y=first+step*j;});
-  render();renderHandles();upd();saveState();
+// ─── Salva ordine e anchor quando inizia il drag dello slider Gap ───
+function startGapDrag() {
+  const ctx = document.getElementById('dc').getContext('2d');
+  const sel = [...S.sel].sort((a,b) => S.letters[a].x - S.letters[b].x);
+  if (sel.length < 2) return;
+  const items = sel.map(i => ({ id: i, w: _getLetterW(S.letters[i], ctx) }));
+  const firstL = S.letters[items[0].id];
+  S._gapBase = {
+    items,
+    anchorX: firstL.x - items[0].w / 2   // bordo sinistro della prima lettera (ancora fissa)
+  };
+}
+
+// ─── Applica gap: ricalcola sempre dallo stato base → ordine sempre stabile ───
+function apGap(val) {
+  t('vgap', val + 'px');
+  // Prima volta senza mousedown: inizializza la base al volo
+  if (!S._gapBase || S._gapBase.items.length < 2) startGapDrag();
+  if (!S._gapBase || S._gapBase.items.length < 2) return;
+  let cursor = S._gapBase.anchorX;
+  S._gapBase.items.forEach(item => {
+    S.letters[item.id].x = cursor + item.w / 2;
+    cursor += item.w + val;
+  });
+  render(); saveState();
+}
+
+// ─── Distribuisci: bordi che si toccano come in una parola (gap = 0) ───
+function distrib(ax) {
+  const ctx = document.getElementById('dc').getContext('2d');
+  const sel = [...S.sel].sort((a,b) =>
+    ax === 'h' ? S.letters[a].x - S.letters[b].x : S.letters[a].y - S.letters[b].y
+  );
+  if (sel.length < 2) return;
+
+  if (ax === 'h') {
+    // Costruisce la lista con le larghezze reali
+    const items = sel.map(i => ({ id: i, w: _getLetterW(S.letters[i], ctx) }));
+    // Ancora = bordo sinistro della lettera più a sinistra
+    const anchorX = S.letters[items[0].id].x - items[0].w / 2;
+    // Impacchetta con gap = 0: i bordi si toccano
+    let cursor = anchorX;
+    items.forEach(item => {
+      S.letters[item.id].x = cursor + item.w / 2;
+      cursor += item.w;   // nessun gap → bordi a contatto
+    });
+    // Resetta lo slider a 0 e aggiorna lo stato base
+    const slider = document.getElementById('pgap');
+    if (slider) { slider.value = 0; t('vgap', '0px'); }
+    S._gapBase = { items: items.map(it => ({...it})), anchorX };
+  } else {
+    // Verticale: distribuzione uniforme (comportamento originale)
+    const first = S.letters[sel[0]].y;
+    const last  = S.letters[sel[sel.length-1]].y;
+    if (sel.length < 3) return;
+    const step  = (last - first) / (sel.length - 1);
+    sel.forEach((i,j) => { if (!j || j === sel.length-1) return; S.letters[i].y = first + step*j; });
+  }
+  render(); renderHandles(); upd(); saveState();
 }
 
 function flip(ax){aps(l=>{if(ax==='h')l.sx*=-1;else l.sy*=-1;});}
@@ -4844,6 +4975,26 @@ function applySize(){
   if(cw) cw.scrollTop=0;
 }
 
+function setCanvasBg(color) {
+  S.canvasBg = color;
+  document.getElementById('bg').setAttribute('fill', color);
+  const r=parseInt(color.slice(1,3),16), g=parseInt(color.slice(3,5),16), b=parseInt(color.slice(5,7),16);
+  const lum = (r*299 + g*587 + b*114) / 1000;
+  const gridStroke = lum > 128 ? '#cccccc' : '#ffffff33';
+  document.querySelector('#grid path').setAttribute('stroke', gridStroke);
+  const dot = document.getElementById('canvas-bg-picker-dot');
+  if (dot) dot.style.background = color;
+  saveState();
+}
+
+function toggleGrid() {
+  S.gridOn = !S.gridOn;
+  document.getElementById('gr').style.display = S.gridOn ? 'block' : 'none';
+  const btn = document.getElementById('grid-btn');
+  if (btn) btn.style.color = S.gridOn ? 'var(--accent)' : 'var(--muted)';
+  saveState();
+}
+
 function setSelectedLayer(layer){
   if(S.sel.size === 0){ toast('Seleziona almeno un oggetto!'); return; }
   if(layer < 1 || layer > 3){ return; }
@@ -4862,7 +5013,8 @@ async function saveProject() {
       width: S.canvasW,
       height: S.canvasH,
       zoom: S.zoom,
-      gridOn: S.gridOn
+      gridOn: S.gridOn,
+      canvasBg: S.canvasBg
     },
     letters: S.letters,
     svgs: S.svgs,
@@ -4945,6 +5097,7 @@ function applyProjectData(data) {
   S.canvasH = data.canvas.height || 500;
   S.zoom = data.canvas.zoom || 1;
   S.gridOn = data.canvas.gridOn !== false;
+  S.canvasBg = data.canvas.canvasBg || '#ffffff';
   
   // Aggiorna UI canvas
   document.getElementById('cvW').value = S.canvasW;
@@ -4954,7 +5107,12 @@ function applyProjectData(data) {
   // Ripristina griglia
   document.getElementById('gr').style.display = S.gridOn ? 'block' : 'none';
   const gridBtn2 = document.getElementById('grid-btn');
-  if(gridBtn2) gridBtn2.style.color = S.gridOn ? 'var(--accent)' : '';
+  if(gridBtn2) gridBtn2.style.color = S.gridOn ? 'var(--accent)' : 'var(--muted)';
+
+  // Ripristina colore sfondo
+  setCanvasBg(S.canvasBg);
+  const bgDot2d = document.getElementById('canvas-bg-picker-dot');
+  if (bgDot2d) bgDot2d.style.background = S.canvasBg;
   // Ripristina lettere
   S.letters = data.letters || [];
   
@@ -5279,40 +5437,59 @@ function selectAllFonts(){Object.keys(S.fonts).forEach(n=>S.selectedFonts.add(n)
 function clearFontSelection(){S.selectedFonts.clear();renderFonts();upd();}
 function toggleSelFromPanel(i){if(S.sel.has(i))S.sel.delete(i);render();renderHandles();upd();}
 
-document.addEventListener('keydown',e=>{
-  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
-  if(e.key==='Delete'||e.key==='Backspace')deleteSelected();
+document.addEventListener('keydown', e => {
+  // Ignora se l'utente sta scrivendo in un campo di testo
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  const is3D = document.getElementById('preview-3d-overlay').style.display === 'block';
+
+  // 1. Gestione corretta Eliminazione (Canc / Backspace)
+  if(e.key === 'Delete' || e.key === 'Backspace') {
+    if(is3D) delete3DSelection();
+    else deleteSelected();
+    return;
+  }
+
+  // 2. Undo / Redo Robusto (Supporta Maiuscole, Layout diversi e Ctrl+Shift+Z)
+  const keyZ = (e.key && e.key.toLowerCase() === 'z') || e.code === 'KeyZ';
+  const keyY = (e.key && e.key.toLowerCase() === 'y') || e.code === 'KeyY';
   
-  // Undo/Redo handling with 2D/3D separation
-  if((e.ctrlKey||e.metaKey)&&e.key==='z'){
+  const isUndo = (e.ctrlKey || e.metaKey) && keyZ && !e.shiftKey;
+  const isRedo = ((e.ctrlKey || e.metaKey) && keyY) || ((e.ctrlKey || e.metaKey) && e.shiftKey && keyZ);
+
+  if(isUndo) {
     e.preventDefault();
-    if(document.getElementById('preview-3d-overlay').style.display==='block'){
-      undo3D();
-    } else {
-      undo();
-    }
+    if(is3D) undo3D(); else undo();
+    return;
   }
-  if((e.ctrlKey||e.metaKey)&&e.key==='y'){
+  
+  if(isRedo) {
     e.preventDefault();
-    if(document.getElementById('preview-3d-overlay').style.display==='block'){
-      redo3D();
-    } else {
-      redo();
-    }
+    if(is3D) redo3D(); else redo();
+    return;
   }
-  if((e.ctrlKey||e.metaKey)&&e.key==='a'){e.preventDefault();selectAll();}
-  if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();duplicateSel();}
-  if((e.ctrlKey||e.metaKey)&&(e.key==='='||e.key==='+')){ e.preventDefault();zoomIn();}
-  if((e.ctrlKey||e.metaKey)&&e.key==='-'){e.preventDefault();zoomOut();}
-  if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();zoomReset();}
-  const step=e.shiftKey?10:1;
-  if(e.key==='ArrowLeft'){e.preventDefault();aps(l=>l.x-=step);}
-  if(e.key==='ArrowRight'){e.preventDefault();aps(l=>l.x+=step);}
-  if(e.key==='ArrowUp'){e.preventDefault();aps(l=>l.y-=step);}
-  if(e.key==='ArrowDown'){e.preventDefault();aps(l=>l.y+=step);}
-  if(e.ctrlKey&&e.key==='1'){e.preventDefault();setSelectedLayer(1);}
-  if(e.ctrlKey&&e.key==='2'){e.preventDefault();setSelectedLayer(2);}
-  if(e.ctrlKey&&e.key==='3'){e.preventDefault();setSelectedLayer(3);}
+
+  // 3. Altre scorciatoie globali
+  if((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A' || e.code === 'KeyA')) { e.preventDefault(); selectAll(); }
+  if((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D' || e.code === 'KeyD')) { e.preventDefault(); duplicateSel(); }
+  if((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomIn(); }
+  if((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); zoomOut(); }
+  if((e.ctrlKey || e.metaKey) && e.key === '0') { e.preventDefault(); zoomReset(); }
+
+  // 4. Frecce Direzionali della Tastiera
+  // Nel 2D muovono le lettere. Nel 3D NON devono fare nulla (si usa il gizmo/mouse).
+  if(!is3D) {
+    const step = e.shiftKey ? 10 : 1;
+    if(e.key === 'ArrowLeft') { e.preventDefault(); aps(l => l.x -= step); }
+    if(e.key === 'ArrowRight') { e.preventDefault(); aps(l => l.x += step); }
+    if(e.key === 'ArrowUp') { e.preventDefault(); aps(l => l.y -= step); }
+    if(e.key === 'ArrowDown') { e.preventDefault(); aps(l => l.y += step); }
+  }
+
+  // 5. Livelli
+  if(e.ctrlKey && e.key === '1') { e.preventDefault(); setSelectedLayer(1); }
+  if(e.ctrlKey && e.key === '2') { e.preventDefault(); setSelectedLayer(2); }
+  if(e.ctrlKey && e.key === '3') { e.preventDefault(); setSelectedLayer(3); }
 });
 
 function toast(msg){
@@ -5347,67 +5524,6 @@ document.getElementById('cw').addEventListener('contextmenu', e => {
 saveState();
 
 // ── Unisci selezionati: assegna stesso groupId e统一 colore ─────────────
-function mergeSelected() {
-  const sel = [...S.sel];
-  if (sel.length < 2) { toast('Seleziona almeno 2 oggetti per unirli!'); return; }
-
-  // Genera nuovo ID gruppo
-  const groupId = ++S.groupCounter;
-
-  // Colore del primo oggetto
-  const masterColor = S.letters[sel[0]].fill;
-
-  // Assegna groupId a tutti e统一 colore al primo
-  sel.forEach((i, idx) => {
-    S.letters[i].groupId = groupId;
-    if (idx > 0) {
-      // Il secondo (e successivi) prendono il colore del primo
-      S.letters[i].fill = masterColor;
-    }
-  });
-
-  // Seleziona tutto il gruppo
-  S.sel.clear();
-  sel.forEach(i => S.sel.add(i));
-
-  render();
-  renderHandles();
-  upd();
-  saveState();
-
-  toast(`Oggetti uniti nel Gruppo ${groupId}! ✓ (colore unified)`);
-}
-
-// ── Separa gruppo: rimuove groupId dagli elementi selezionati ─────────────
-function unmergeSelected() {
-  const sel = [...S.sel];
-  if (sel.length === 0) { toast('Nessun oggetto selezionato!'); return; }
-
-  // Espandi la selezione per includere tutti gli elementi dei gruppi
-  const expandedSel = new Set();
-  sel.forEach(idx => {
-    getGroupIndices(idx).forEach(gIdx => expandedSel.add(gIdx));
-  });
-
-  // Verifica che almeno un elemento abbia un groupId
-  const hasGroup = [...expandedSel].some(i => S.letters[i] && S.letters[i].groupId);
-  if (!hasGroup) { toast('Gli elementi selezionati non fanno parte di un gruppo!'); return; }
-
-  // Rimuovi groupId da tutti gli elementi del gruppo
-  [...expandedSel].forEach(i => {
-    if (S.letters[i]) {
-      delete S.letters[i].groupId;
-    }
-  });
-
-  render();
-  renderHandles();
-  upd();
-  saveState();
-
-  toast('Elementi separati dal gruppo! ✓');
-}
-
 requestAnimationFrame(() => {
   const cw = document.getElementById('cw');
   cw.scrollLeft = (cw.scrollWidth - cw.clientWidth) / 2;
@@ -5573,17 +5689,22 @@ function saveState3D() {
     S.history3D = S.history3D.slice(0, S.historyIndex3D + 1);
   }
 
-  // Save snapshot of all meshes (including hidden ones)
-  const meshSnapshots = threeMeshes.map(mesh => ({
-    position: mesh.position.clone(),
-    quaternion: mesh.quaternion.clone(),
-    scale: mesh.scale.clone(),
-    visible: mesh.visible,
-    colorHex: mesh.userData.colorHex,
-    isBooleanResult: mesh.userData.isBooleanResult,
-    isSubtractResult: mesh.userData.isSubtractResult,
-    hiddenByBoolean: mesh.userData.hiddenByBoolean || false,
-  }));
+  // Save snapshot of all meshes — store actual material color as source of truth
+  const meshSnapshots = threeMeshes.map(mesh => {
+    const matColor = (mesh.material && mesh.material.color)
+      ? '#' + mesh.material.color.getHexString()
+      : (mesh.userData.colorHex || '#ffffff');
+    return {
+      position: mesh.position.clone(),
+      quaternion: mesh.quaternion.clone(),
+      scale: mesh.scale.clone(),
+      visible: mesh.visible,
+      colorHex: matColor,
+      isBooleanResult: mesh.userData.isBooleanResult || false,
+      isSubtractResult: mesh.userData.isSubtractResult || false,
+      hiddenByBoolean: mesh.userData.hiddenByBoolean || false,
+    };
+  });
 
   const extrusionLevelsData = {};
   for (const col in threeExtrusionLevels) {
@@ -5620,118 +5741,99 @@ function redo3D() {
 }
 
 function restoreState3D(state) {
-  // If more meshes now than saved, remove boolean result meshes and unhide targets
-  if (threeMeshes.length > state.meshCount) {
-    // Remove boolean result meshes
-    const toRemove = threeMeshes.filter(m => m.userData.isBooleanResult || m.userData.isSubtractResult);
-    toRemove.forEach(mesh => {
-      // Reveal hidden targets (union has 2, subtract has 1)
-      if (mesh.userData._hiddenTargetA) {
-        mesh.userData._hiddenTargetA.visible = true;
-        mesh.userData._hiddenTargetA.userData.hiddenByBoolean = false;
-        // Re-add to threeExtrusionLevels
-        const colorA = mesh.userData._hiddenTargetA.userData.colorHex || '#' + mesh.userData._hiddenTargetA.material.color.getHexString();
-        if (!threeExtrusionLevels[colorA]) {
-          threeExtrusionLevels[colorA] = { extrusion: 10, meshes: [] };
-        }
-        if (!threeExtrusionLevels[colorA].meshes.includes(mesh.userData._hiddenTargetA)) {
-          threeExtrusionLevels[colorA].meshes.push(mesh.userData._hiddenTargetA);
-        }
-      }
-      if (mesh.userData._hiddenTargetB) {
-        mesh.userData._hiddenTargetB.visible = true;
-        mesh.userData._hiddenTargetB.userData.hiddenByBoolean = false;
-        // Re-add to threeExtrusionLevels
-        const colorB = mesh.userData._hiddenTargetB.userData.colorHex || '#' + mesh.userData._hiddenTargetB.material.color.getHexString();
-        if (!threeExtrusionLevels[colorB]) {
-          threeExtrusionLevels[colorB] = { extrusion: 10, meshes: [] };
-        }
-        if (!threeExtrusionLevels[colorB].meshes.includes(mesh.userData._hiddenTargetB)) {
-          threeExtrusionLevels[colorB].meshes.push(mesh.userData._hiddenTargetB);
-        }
-      }
-      if (mesh.userData._hiddenTarget) {
-        mesh.userData._hiddenTarget.visible = true;
-        mesh.userData._hiddenTarget.userData.hiddenByBoolean = false;
-        // Re-add to threeExtrusionLevels
-        const colorT = mesh.userData._hiddenTarget.userData.colorHex || '#' + mesh.userData._hiddenTarget.material.color.getHexString();
-        if (!threeExtrusionLevels[colorT]) {
-          threeExtrusionLevels[colorT] = { extrusion: 10, meshes: [] };
-        }
-        if (!threeExtrusionLevels[colorT].meshes.includes(mesh.userData._hiddenTarget)) {
-          threeExtrusionLevels[colorT].meshes.push(mesh.userData._hiddenTarget);
-        }
-      }
-      threeScene.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (mesh.material) mesh.material.dispose();
-    });
-    threeMeshes = threeMeshes.filter(m => !m.userData.isBooleanResult && !m.userData.isSubtractResult);
+  // ── Step 1: Hide result meshes that were added AFTER this state was saved ──
+  // IMPORTANT: We NEVER dispose geometry here. Disposing prevents redo from restoring
+  // the result mesh. Instead we simply hide these meshes; Step 2 will set definitive
+  // visibility via the snapshot, while meshes beyond the snapshot range stay hidden.
+  for (let i = state.meshCount; i < threeMeshes.length; i++) {
+    const mesh = threeMeshes[i];
+    if (!mesh) continue;
+    mesh.visible = false;
+    mesh.userData.hiddenByBoolean = true;
   }
 
-  // Unhide any remaining hidden targets
+  // ── Step 2: Restore per-mesh transform, color, and visibility from snapshot ──
+  // The snapshot is the single source of truth for visible/hiddenByBoolean.
+  // This correctly handles both undo (result hidden, originals shown) and
+  // redo (result shown, originals hidden) without any extra logic.
+  if (state.meshSnapshots) {
+    state.meshSnapshots.forEach((snap, i) => {
+      const mesh = threeMeshes[i];
+      if (!mesh) return;
+      mesh.position.copy(snap.position);
+      mesh.quaternion.copy(snap.quaternion);
+      mesh.scale.copy(snap.scale);
+      if (mesh.material && snap.colorHex) {
+        mesh.material.color.set(snap.colorHex);
+      }
+      mesh.userData.colorHex = snap.colorHex;
+      mesh.userData.oldColorHex = null;
+      mesh.visible = snap.visible;
+      mesh.userData.hiddenByBoolean = snap.hiddenByBoolean || false;
+    });
+  }
+
+  // ── Step 3: Rebuild threeExtrusionLevels from currently visible meshes ──
+  const oldExtrusion = {};
+  for (const col in threeExtrusionLevels) {
+    oldExtrusion[col] = threeExtrusionLevels[col].extrusion;
+  }
+  for (const col in state.extrusionLevels) {
+    oldExtrusion[col] = state.extrusionLevels[col];
+  }
+
+  threeExtrusionLevels = {};
   threeMeshes.forEach(mesh => {
-    if (mesh.userData.hiddenByBoolean) {
-      mesh.visible = true;
-      mesh.userData.hiddenByBoolean = false;
+    if (!mesh || mesh.userData.hiddenByBoolean) return;
+    const color = mesh.userData.colorHex || '#ffffff';
+    if (!threeExtrusionLevels[color]) {
+      threeExtrusionLevels[color] = {
+        extrusion: oldExtrusion[color] !== undefined ? oldExtrusion[color] : 20,
+        meshes: []
+      };
+    }
+    if (!threeExtrusionLevels[color].meshes.includes(mesh)) {
+      threeExtrusionLevels[color].meshes.push(mesh);
     }
   });
 
-  // Restore mesh positions
-  if (state.meshSnapshots && state.meshCount === threeMeshes.length) {
-    state.meshSnapshots.forEach((snapshot, i) => {
-      const mesh = threeMeshes[i];
-      if (!mesh) return;
-      mesh.position.copy(snapshot.position);
-      mesh.quaternion.copy(snapshot.quaternion);
-      mesh.scale.copy(snapshot.scale);
-      mesh.visible = snapshot.visible;
-      mesh.userData.colorHex = snapshot.colorHex;
-    });
-  }
-
-  // Restore visibility and extrusion
+  // ── Step 4: Restore visibility state (skip meshes hidden by boolean ops) ──
   threeVisibilityState = JSON.parse(JSON.stringify(state.visibilityState));
-  for (const color in state.extrusionLevels) {
-    const val = state.extrusionLevels[color];
-    updateExtrusion(color, val, true);
-  }
   threeMeshes.forEach(mesh => {
-    const color = mesh.userData.colorHex || (mesh.material && mesh.material.color ? '#' + mesh.material.color.getHexString() : null);
-    if (color && threeVisibilityState[color] !== undefined) {
+    if (mesh.userData.hiddenByBoolean) return; // Preserve snapshot-driven visibility
+    const color = mesh.userData.colorHex || '#ffffff';
+    if (threeVisibilityState[color] !== undefined) {
       mesh.visible = threeVisibilityState[color];
     }
   });
 
-  // Ripristina grafica
+  // ── Step 5: Restore graphics settings ──
   threeGraphicsSettings = JSON.parse(JSON.stringify(state.graphics));
-  const gridToggle = document.getElementById('grid-toggle');
-  if (gridToggle) gridToggle.checked = threeGraphicsSettings.gridVisible;
-  const bgColorPicker = document.getElementById('bg-color-picker');
-  if (bgColorPicker) bgColorPicker.value = threeGraphicsSettings.bgColor;
-
+  const gridToggleBtn = document.getElementById('grid-toggle-btn');
+  if (gridToggleBtn) gridToggleBtn.style.color = threeGraphicsSettings.gridVisible ? 'var(--accent)' : 'var(--muted)';
+  const bgColorDot = document.getElementById('bg-color-picker-dot');
+  if (bgColorDot) bgColorDot.style.background = threeGraphicsSettings.bgColor;
   if (threeGridHelper) threeGridHelper.visible = threeGraphicsSettings.gridVisible;
   if (threeScene) threeScene.background = new THREE.Color(threeGraphicsSettings.bgColor);
   if (threeAmbientLight) threeAmbientLight.intensity = threeGraphicsSettings.ambientIntensity;
 
-  // Ripristina visibilità
-  threeVisibilityState = JSON.parse(JSON.stringify(state.visibilityState));
-  
-  // Ripristina estrusione (per le mesh base)
-  for (const color in state.extrusionLevels) {
-    const val = state.extrusionLevels[color];
-    updateExtrusion(color, val, true);
+  // ── Step 6: Clear selection (avoids stale references after undo/redo) ──
+  threeSelectionOrder = [];
+  threeSelectedMesh = null;
+  threeSelectionIndicator.forEach(ind => { if (threeScene) threeScene.remove(ind); });
+  threeSelectionIndicator = [];
+  if (threeTransformControls) {
+    threeTransformControls.detach();
+    if (threeTransformControls._pivot) {
+      threeScene.remove(threeTransformControls._pivot);
+      threeTransformControls._pivot = null;
+    }
   }
 
-  // Assicura che la visibilità sia applicata correttamente
-  threeMeshes.forEach(mesh => {
-    const color = mesh.userData.colorHex || (mesh.material && mesh.material.color ? '#' + mesh.material.color.getHexString() : null);
-    if (color && threeVisibilityState[color] !== undefined) {
-      mesh.visible = threeVisibilityState[color];
-    }
-  });
-
+  // ── Step 7: Rebuild UI ──
+  buildExtrusionControlsFromState();
   refresh3DControlsUI();
+  update3DSelectionHUD();
   if (threeControls) threeControls.update();
 }
 
@@ -5873,7 +5975,7 @@ function close3DPreview() {
   });
 }
 
-// Keyboard shortcuts for 3D preview
+// Keyboard shortcuts for 3D preview (Escape + Home only — Ctrl+Z/Y handled by main listener)
 document.addEventListener('keydown', (e) => {
   const overlay = document.getElementById('preview-3d-overlay');
   if (overlay.style.display === 'block') {
@@ -5896,12 +5998,6 @@ document.addEventListener('keydown', (e) => {
         threeControls.target.set(0, 0, 0);
         threeControls.update();
       }
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      e.preventDefault();
-      undo3D();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-      e.preventDefault();
-      redo3D();
     }
   }
 });
@@ -5934,13 +6030,8 @@ function setup3DCanvasKeyboard() {
         threeControls.target.set(0, 0, 0);
         threeControls.update();
       }
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      e.preventDefault();
-      undo3D();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-      e.preventDefault();
-      redo3D();
     }
+    // Ctrl+Z / Ctrl+Y propagate to document listener — no duplicate handling here
   });
   
   // Auto-focus canvas when 3D preview opens
@@ -6089,7 +6180,7 @@ function buildBorderGeom2(pathD, delta) {
   const segs = pathToAbsoluteSegments(pathD);
   if (!segs || !segs.length) return null;
 
-  const BSTEPS = 16;
+  const BSTEPS = 24;   // was 16 – more steps → smoother curves → fewer self-intersections in offset
   const subpaths = [];
   let cur = [], cx = 0, cy = 0, sx = 0, sy = 0;
 
@@ -6148,9 +6239,19 @@ function buildBorderGeom2(pathD, delta) {
   // ── 4. Convert SVG-space point array → JSCAD geom2 (flip Y) ───────────────
   // After normalization above, pts passed here are always CCW in SVG (positive area).
   // Flipping Y reverses winding → CW in JSCAD. fromPoints needs CCW → must reverse.
+  // Also ensure polygon is closed (first == last) for fromPoints requirement.
   function toGeom2(svgPts) {
     // Flip Y and reverse to get CCW in JSCAD space
-    const jpts = svgPts.map(p => [p[0], -p[1]]).reverse();
+    let jpts = svgPts.map(p => [p[0], -p[1]]).reverse();
+    // Close the polygon: if last != first, append first at end
+    const n = jpts.length;
+    if (n > 0) {
+      const first = jpts[0];
+      const last = jpts[n - 1];
+      if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 0.01) {
+        jpts = [...jpts, [...first]];
+      }
+    }
     return jscad.geometries.geom2.fromPoints(jpts);
   }
 
@@ -6184,26 +6285,70 @@ function buildBorderGeom2(pathD, delta) {
     }
     // Holes ignored
   }
-  if (!outers.length) return null;
+  if (!outers.length) {
+    console.warn(`buildBorderGeom2: no outers found. allContours.length=${allContours.length}, isReversed=${isReversed}, pathD="${pathD.substring(0, 120)}"`);
+    return null;
+  }
 
   // ── 6. For each outer: build inflated MINUS original, then union all rings ──
+  // Helper: test whether a geom2 has valid closed outlines
+  function isValidGeom2(g) {
+    if (!g) return false;
+    try { const ol = jscad.geometries.geom2.toOutlines(g); return ol && ol.length > 0; }
+    catch(_) { return false; }
+  }
+
   let borderGeom2 = null;
 
   for (const pts of outers) {
     // pts are CCW in SVG space (normalized). offsetContour2D expands CCW contours outward.
     const expandedSVG = offsetContour2D(pts, delta);
-    if (!expandedSVG || expandedSVG.length < 3) continue;
+    if (!expandedSVG || expandedSVG.length < 3) {
+      console.warn(`buildBorderGeom2: expandedSVG too few points for one outer (${expandedSVG?.length || 0})`);
+      continue;
+    }
 
     try {
       const inflatedG2 = toGeom2(expandedSVG);
       const originalG2 = toGeom2(pts);
 
-      // Ring = inflated shell MINUS the original glyph area
-      const ring = jscad.booleans.subtract(inflatedG2, originalG2);
+      if (!inflatedG2 || !originalG2) {
+        console.warn('buildBorderGeom2: toGeom2 returned null');
+        continue;
+      }
 
-      borderGeom2 = borderGeom2
-        ? jscad.booleans.union(borderGeom2, ring)
-        : ring;
+      // Ring = inflated shell MINUS the original glyph area.
+      // For complex/curved letters the boolean subtract can produce a non-closed
+      // geom2 (self-intersecting offset). Validate and fall back to inflated alone.
+      let ring = null;
+      try {
+        const candidate = jscad.booleans.subtract(inflatedG2, originalG2);
+        if (isValidGeom2(candidate)) {
+          ring = candidate;
+        } else {
+          console.warn('buildBorderGeom2: subtract produced invalid geom2 – using inflated shape as fallback');
+          ring = isValidGeom2(inflatedG2) ? inflatedG2 : null;
+        }
+      } catch(subErr) {
+        console.warn('buildBorderGeom2: subtract threw – using inflated shape as fallback:', subErr.message);
+        ring = isValidGeom2(inflatedG2) ? inflatedG2 : null;
+      }
+
+      if (!ring) {
+        console.warn('buildBorderGeom2: no valid ring for this outer contour, skipping');
+        continue;
+      }
+
+      if (!borderGeom2) {
+        borderGeom2 = ring;
+      } else {
+        try {
+          const united = jscad.booleans.union(borderGeom2, ring);
+          borderGeom2 = isValidGeom2(united) ? united : borderGeom2;
+        } catch(uErr) {
+          console.warn('buildBorderGeom2: union threw, keeping previous geom2:', uErr.message);
+        }
+      }
     } catch(e) {
       console.warn('buildBorderGeom2: ring failed for one outer contour:', e.message);
     }
@@ -6307,13 +6452,14 @@ function build3DObjects() {
       items.push({ pathD, bbox, color, opacity, renderOrder, groupId, isBorder: false, borderWidth: 0 });
 
       // Add border as a SEPARATE 3D object
-      // Convert the stroke to a fill path so it can be extruded as a 3D object
+      // Use buildBorderGeom2 directly (same logic used by build3DObjects) which
+      // creates a proper ring via CSG subtract: inflated - original
       if (bw > 0) {
-        // Convert stroke to fill path
-        const borderFillPathD = strokeToFillPath(pathToAbsoluteSegments(pathD), bw * 2);
-        if (borderFillPathD) {
+        const borderGeom2 = buildBorderGeom2(pathD, bw);
+        if (borderGeom2) {
           items.push({
-            pathD: borderFillPathD,
+            geom2: borderGeom2,   // pass geom2 directly, skip parseSVGPathToGeom2
+            pathD,
             bbox,
             color: bc,
             opacity,
@@ -6322,6 +6468,8 @@ function build3DObjects() {
             isBorder: true,
             borderWidth: bw
           });
+        } else {
+          console.warn(`buildBorderGeom2 returned null for letter "${l.ch}" (id=${l.id}, font=${l.fontName}, pathD="${pathD.substring(0, 80)}...")`);
         }
       }
     }
@@ -6342,8 +6490,10 @@ function build3DObjects() {
       if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) return;
 
       const jscad = window.OpenJSCADBridge.jscad;
-      // parseSVGPathToGeom2 now returns geom2 directly (with .sourceContours attached)
-      const geom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(item.pathD);
+      // Use pre-computed geom2 for borders (from buildBorderGeom2 via CSG subtract),
+      // otherwise parse the path normally
+      let geom2 = item.geom2
+        || window.OpenJSCADBridge.parseSVGPathToGeom2(item.pathD);
       if (!geom2) return;
 
       // Both border and normal shapes are now handled the same way
@@ -7046,6 +7196,7 @@ function update3DObjectPosition(axis, value) {
 
   // Update selection indicators
   updateSelectionIndicators();
+  saveState3D();
 }
 
 // Update position input fields to reflect selected object's position
@@ -7137,7 +7288,7 @@ const COLOR_NAME_TO_HEX = {
   'blu': '#0066ff',
   'giallo': '#ffcc00',
   'arancione': '#ff6b35',
-  'viola': '#9933ff',
+  'viola': '#8800ff',
   'rosa': '#ff66b2',
   'ciano': '#00cccc',
   'grigio': '#808080',
@@ -7153,7 +7304,7 @@ const COLOR_PRESETS = [
   { name: 'Blu', hex: '#0066ff' },
   { name: 'Giallo', hex: '#ffcc00' },
   { name: 'Arancione', hex: '#ff6b35' },
-  { name: 'Viola', hex: '#9933ff' },
+  { name: 'Viola', hex: '#8800ff' },
   { name: 'Rosa', hex: '#ff66b2' },
   { name: 'Ciano', hex: '#00cccc' },
 ];
@@ -7302,7 +7453,8 @@ function finalize3DObjectColor() {
     presetsContainer.style.display = 'none';
   }
 
-  toast(`Colore appliccato a ${threeSelectionOrder.length} oggetti`);
+  saveState3D();
+  toast(`Colore applicato a ${threeSelectionOrder.length} oggetti`);
 }
 
 // Update canvas letter color when 3D color changes
@@ -7724,6 +7876,33 @@ function addSelectionIndicatorForGroup(meshes) {
 
   threeScene.add(wireframe);
   threeSelectionIndicator.push(wireframe);
+}
+
+function selectAll3D() {
+  if (!threeMeshes || threeMeshes.length === 0) return;
+  // Clear current selection first
+  threeSelectionIndicator.forEach(ind => {
+    if (threeScene) threeScene.remove(ind);
+    if (ind.geometry) ind.geometry.dispose();
+    if (ind.material) ind.material.dispose();
+  });
+  threeSelectionIndicator = [];
+  threeSelectionOrder = [];
+  if (threeTransformControls) {
+    threeTransformControls.detach();
+    threeTransformControls.visible = false;
+    if (threeTransformControls._pivot) {
+      threeScene.remove(threeTransformControls._pivot);
+      threeTransformControls._pivot = null;
+    }
+  }
+  // Add all visible meshes to selection
+  threeMeshes.filter(m => m.visible).forEach(mesh => {
+    threeSelectionOrder.push(mesh);
+  });
+  updateSelectionIndicators();
+  const n = threeSelectionOrder.length;
+  toast(`${n} oggett${n === 1 ? 'o' : 'i'} selezionat${n === 1 ? 'o' : 'i'} ✓`);
 }
 
 function clear3DSelection() {
@@ -8167,17 +8346,31 @@ function createPocket3D() {
   try {
     toast('Creazione tasca in corso...');
 
-    const originalPathD = sourceMesh.geometry.userData?.originalPathD;
+    // HELPER: Trova il path SVG originale anche se l'oggetto è il risultato di sottrazioni/unioni precedenti
+    function getRootOriginalPathD(mesh) {
+      if (mesh.geometry && mesh.geometry.userData && mesh.geometry.userData.originalPathD) {
+        return mesh.geometry.userData.originalPathD;
+      }
+      if (mesh.userData && mesh.userData._hiddenTarget) {
+        return getRootOriginalPathD(mesh.userData._hiddenTarget);
+      }
+      if (mesh.userData && mesh.userData._hiddenTargetA) {
+        return getRootOriginalPathD(mesh.userData._hiddenTargetA); // Se è un'unione, prendi il corpo base
+      }
+      return null;
+    }
+
+    const originalPathD = getRootOriginalPathD(sourceMesh);
     
     if (!originalPathD) {
-      toast('Errore: impossibile trovare il path SVG originale dell\'oggetto');
+      toast('Errore: impossibile trovare il path SVG originale dell\'utensile');
       return;
     }
 
     const sourceColorHex = sourceMesh.userData.colorHex || '#' + sourceMesh.material.color.getHexString();
-    const originalExtrusion = threeExtrusionLevels[sourceColorHex]?.extrusion || 20;
+    const sourceExtrusion = threeExtrusionLevels[sourceColorHex]?.extrusion || 20;
 
-    if (originalExtrusion <= 5) {
+    if (sourceExtrusion <= 5) {
       toast('Errore: l\'oggetto originale deve essere più alto di 5px');
       return;
     }
@@ -8204,9 +8397,6 @@ function createPocket3D() {
       if (expandedGeom2) {
         const cutterGeom2 = expandedGeom2;
         
-        // =====================================================================
-        // FIX DEFINITIVO CSG POCKET (Manifold & Z-Fighting)
-        // =====================================================================
         // Read depth value from the input field
         const pocketDepth = parseFloat(document.getElementById('pocket-depth-input').value.replace(/[^0-9.]/g, '')) || 5;
         const zOverkill = 15; // Spropositato margine superiore
@@ -8219,24 +8409,39 @@ function createPocket3D() {
           return;
         }
 
-        const targetPathD = targetMesh.geometry.userData?.originalPathD;
-        if (!targetPathD) return;
+        // Recuperiamo l'SVG originale del target tramite l'helper
+        const targetPathD = getRootOriginalPathD(targetMesh);
+        if (!targetPathD) {
+          toast('Errore: impossibile trovare l\'SVG originale del destinatario');
+          return;
+        }
 
         const targetGeom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(targetPathD);
         if (!targetGeom2) return;
 
-        const targetGeom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(targetGeom2, originalExtrusion);
+        // Recuperiamo in modo sicuro l'estrusione del target
+        const targetColorHex = targetMesh.userData.colorHex || '#' + targetMesh.material.color.getHexString();
+        const targetExtrusion = threeExtrusionLevels[targetColorHex]?.extrusion || 20;
+
+        const targetGeom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(targetGeom2, targetExtrusion);
         if (!targetGeom3) return;
 
-        // La base del cutter è a (Altezza Totale - Profondità Tasca). 
-        const zPosition = originalExtrusion - pocketDepth;
+        // -- FIX SPOSTAMENTO 3D VIRTUALIZZATO SULL'SVG --
+        // Calcoliamo la differenza di posizione tra l'utensile e il bersaglio 
+        const deltaX = sourceMesh.position.x - targetMesh.position.x;
+        const deltaY = sourceMesh.position.y - targetMesh.position.y;
+
+        // La base del cutter è posizionata calcolando l'altezza del target - la profondità
+        const zPosition = targetExtrusion - pocketDepth;
         
-        // Applichiamo Traslazione Z e il MICRO-JITTER X/Y per rompere la coplanarità dei bordi
-        const cutterGeom3Positioned = jscad.transforms.translate([0.001, 0.001, zPosition], cutterGeom3);
+        // Applichiamo Traslazione X/Y (virtual move dell'SVG) + Traslazione Z
+        // Manteniamo anche il MICRO-JITTER (0.001) per evitare errori di facce complanari in CSG.
+        const cutterGeom3Positioned = jscad.transforms.translate(
+          [deltaX + 0.001, deltaY + 0.001, zPosition], 
+          cutterGeom3
+        );
 
-        // =====================================================================
-
-        // Sottrazione booleana:
+        // Sottrazione booleana (usando le forme base rigenerate dall'SVG):
         const resultGeom3 = jscad.booleans.subtract(targetGeom3, cutterGeom3Positioned);
         const resultPolygons = jscad.geometries.geom3.toPolygons(resultGeom3);
         
@@ -8259,21 +8464,19 @@ function createPocket3D() {
 
         const resultMesh = new THREE.Mesh(resultGeometry, resultMaterial);
         
-        // Non serve aggiustare la posizione Y e X della mesh result perché 
-        // le geometrie create tramite JSCAD qui mantengono l'allineamento allo spazio 0,0,0 originale
+        // Posizioniamo il risultato esattamente dove si trovava il target originale
         resultMesh.position.copy(targetMesh.position);
         resultMesh.rotation.copy(targetMesh.rotation);
         resultMesh.scale.copy(targetMesh.scale);
         
         resultMesh.userData.isBooleanResult = true;
         resultMesh.userData.isPocketResult = true;
-        resultMesh.userData.colorHex = '#' + targetColor.toString(16).padStart(6, '0');
+        resultMesh.userData.colorHex = targetColorHex;
         resultMesh.userData._hiddenTarget = targetMesh;
 
         targetMesh.visible = false;
         targetMesh.userData.hiddenByBoolean = true;
 
-        const targetColorHex = '#' + targetColor.toString(16).padStart(6, '0');
         if (threeExtrusionLevels[targetColorHex]) {
           const targetIdx = threeExtrusionLevels[targetColorHex].meshes.indexOf(targetMesh);
           if (targetIdx !== -1) {
@@ -8286,7 +8489,7 @@ function createPocket3D() {
         threeMeshes.push(resultMesh);
 
         if (!threeExtrusionLevels[targetColorHex]) {
-          threeExtrusionLevels[targetColorHex] = { extrusion: originalExtrusion, meshes: [] };
+          threeExtrusionLevels[targetColorHex] = { extrusion: targetExtrusion, meshes: [] };
           threeVisibilityState[targetColorHex] = true;
         }
         resultMesh.visible = threeVisibilityState[targetColorHex];
@@ -8301,7 +8504,7 @@ function createPocket3D() {
         saveState3D();
 
         const triCount = resultMesh.geometry.attributes.position.count / 3;
-        toast(`✓ Tasca creata in sicurezza! ${triCount} triangoli chiusi.`);
+        toast(`✓ Tasca creata! ${triCount} triangoli chiusi.`);
 
       }
     } catch (expandError) {
@@ -8466,10 +8669,16 @@ function start3DAnimation() {
 // ── 3D GRAPHICS CONTROLS ──────────────────────────────────────────────────
 
 function toggle3DGrid(visible) {
-  threeGraphicsSettings.gridVisible = visible;
-  if (threeGridHelper) {
-    threeGridHelper.visible = visible;
+  if (typeof visible === 'boolean') {
+    threeGraphicsSettings.gridVisible = visible;
+  } else {
+    threeGraphicsSettings.gridVisible = !threeGraphicsSettings.gridVisible;
   }
+  if (threeGridHelper) {
+    threeGridHelper.visible = threeGraphicsSettings.gridVisible;
+  }
+  const btn = document.getElementById('grid-toggle-btn');
+  if (btn) btn.style.color = threeGraphicsSettings.gridVisible ? 'var(--accent)' : 'var(--muted)';
   saveState3D();
 }
 
@@ -8478,6 +8687,8 @@ function change3DBgColor(color) {
   if (threeScene) {
     threeScene.background = new THREE.Color(color);
   }
+  const dot = document.getElementById('bg-color-picker-dot');
+  if (dot) dot.style.background = color;
   saveState3D();
 }
 
@@ -10301,41 +10512,57 @@ function aiExecuteRecolor(op) {
   </div>
   <div id="preview-3d-canvas" style="position:absolute;top:56px;left:0;right:280px;bottom:0;"></div>
   <div id="preview-3d-controls" style="position:absolute;top:56px;right:0;width:280px;bottom:0;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;padding:12px;">
-    <!-- Grafica compatta -->
+    <!-- Grafica -->
     <div class="sec-title" style="margin-bottom:8px">Grafica</div>
-    
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
-      <!-- Grid Toggle + BG Color -->
-      <div style="display:flex;align-items:center;gap:8px;">
-        <label style="color:var(--text);font-size:11px;font-weight:500;white-space:nowrap;">Griglia</label>
-        <label class="switch" style="flex-shrink:0;">
-          <input type="checkbox" id="grid-toggle" checked onchange="toggle3DGrid(this.checked)">
-          <span class="slider"></span>
-        </label>
-        <div style="flex:1"></div>
-        <label style="color:var(--text);font-size:11px;font-weight:500;">Sfondo</label>
-        <input type="color" id="bg-color-picker" value="#1a1a22" oninput="change3DBgColor(this.value)" style="width:28px;height:22px;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;">
+
+    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;">
+
+      <!-- Riga 1: Griglia + Sfondo -->
+      <div style="display:flex;align-items:stretch;border-bottom:1px solid var(--border);">
+        <!-- Griglia toggle -->
+        <button id="grid-toggle-btn" onclick="toggle3DGrid()" onmousedown="event.stopPropagation()" title="Mostra/Nascondi griglia"
+          style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;background:transparent;border:none;border-right:1px solid var(--border);cursor:pointer;color:var(--accent);transition:background 0.15s;"
+          onmouseover="this.style.background='rgba(200,255,0,0.06)'" onmouseout="this.style.background='transparent'">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+          <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.06em;color:inherit;">Griglia</span>
+        </button>
+        <!-- Sfondo colore -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;cursor:pointer;"
+          onclick="openCP('bg-color-picker',this)"
+          onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'"
+          title="Colore sfondo scena">
+          <div id="bg-color-picker-dot" style="width:20px;height:20px;border-radius:4px;border:1px solid rgba(255,255,255,.15);background:#1a1a22;flex-shrink:0;"></div>
+          <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.06em;color:var(--muted);">Sfondo</span>
+        </div>
       </div>
-      
-      <!-- Ambient Light -->
-      <div style="display:flex;align-items:center;gap:6px;">
-        <label style="color:var(--muted);font-size:10px;min-width:70px;">Luce</label>
-        <input type="range" id="ambient-light-slider" min="0" max="100" value="60" style="flex:1;accent-color:var(--accent);" oninput="change3DAmbientLight(this.value)">
-        <span id="ambient-light-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">60%</span>
-      </div>
-      
-      <!-- Specular -->
-      <div style="display:flex;align-items:center;gap:6px;">
-        <label style="color:var(--muted);font-size:10px;min-width:70px;">Riflessi</label>
-        <input type="range" id="specular-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DSpecular(this.value)">
-        <span id="specular-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
-      </div>
-      
-      <!-- Shininess -->
-      <div style="display:flex;align-items:center;gap:6px;">
-        <label style="color:var(--muted);font-size:10px;min-width:70px;">Lucentezza</label>
-        <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);" oninput="change3DShininess(this.value)">
-        <span id="shininess-value" style="color:var(--text);font-size:10px;min-width:28px;text-align:right;">30%</span>
+
+      <!-- Riga 2: Sliders -->
+      <div style="display:flex;flex-direction:column;gap:0;">
+
+        <!-- Luce -->
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a5a7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <span style="color:#5a5a7a;font-size:9px;font-family:'DM Mono',monospace;min-width:58px;">Luce</span>
+          <input type="range" id="ambient-light-slider" min="0" max="100" value="60" style="flex:1;accent-color:var(--accent);height:3px;" oninput="change3DAmbientLight(this.value)">
+          <span id="ambient-light-value" style="color:#5a5a7a;font-size:9px;min-width:24px;text-align:right;font-family:'DM Mono',monospace;">60%</span>
+        </div>
+
+        <!-- Riflessi -->
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a5a7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 0 18"/><path d="M12 3C8 7 8 17 12 21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+          <span style="color:#5a5a7a;font-size:9px;font-family:'DM Mono',monospace;min-width:58px;">Riflessi</span>
+          <input type="range" id="specular-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);height:3px;" oninput="change3DSpecular(this.value)">
+          <span id="specular-value" style="color:#5a5a7a;font-size:9px;min-width:24px;text-align:right;font-family:'DM Mono',monospace;">30%</span>
+        </div>
+
+        <!-- Lucentezza -->
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a5a7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span style="color:#5a5a7a;font-size:9px;font-family:'DM Mono',monospace;min-width:58px;">Lucentezza</span>
+          <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);height:3px;" oninput="change3DShininess(this.value)">
+          <span id="shininess-value" style="color:#5a5a7a;font-size:9px;min-width:24px;text-align:right;font-family:'DM Mono',monospace;">30%</span>
+        </div>
+
       </div>
     </div>
 
@@ -10382,6 +10609,14 @@ function aiExecuteRecolor(op) {
       <input type="text" id="pocket-offset-input" value="2" style="width:48px;padding:3px 4px;background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:3px;outline:none;text-align:center;" onmousedown="event.stopPropagation(); this.focus();" oninput="this.value=this.value.replace(/[^0-9.]/g,'')" title="Offset di espansione in px">
     </div>
 
+    <!-- Seleziona tutto -->
+    <div style="margin-bottom:16px;margin-top:12px;">
+      <button onclick="selectAll3D()" onmousedown="event.stopPropagation()" style="width:100%;padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text)'" title="Seleziona tutti gli oggetti nella scena 3D">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Seleziona tutto
+      </button>
+    </div>
+
     <!-- Colore compatta -->
     <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px 0;">
       <div class="sec-title" style="margin:0">Colore</div>
@@ -10391,7 +10626,7 @@ function aiExecuteRecolor(op) {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <button id="color-palette-btn" onclick="toggleColorPalette()" style="width:36px;height:28px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:#ffffff;transition:all 0.2s;" title="Clicca per aprire la tavolozza colori">
         </button>
-        <input type="text" id="color3d-text" value="Bianco" style="flex:1;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectColorFromText(this.value)" onchange="finalize3DObjectColor()">
+        <input type="text" id="color3d-text" value="Bianco" readonly style="flex:1;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;cursor:pointer;user-select:none;" onclick="toggleColorPalette()" title="Clicca per aprire la tavolozza colori">
       </div>
       <!-- Color Presets Grid (hidden by default) -->
       <div id="color-presets" style="display:none;grid-template-columns:repeat(5,1fr);gap:6px;">
@@ -10418,5 +10653,248 @@ function aiExecuteRecolor(op) {
   </div>
 </div>
 
+<!-- ── Custom Color Picker ─────────────────────────────────────────── -->
+<div id="cp-popup" class="cp-popup">
+  <div class="cp-gradient" id="cp-gradient">
+    <canvas id="cp-canvas" width="196" height="130"></canvas>
+    <div class="cp-gradient-cursor" id="cp-gcursor"></div>
+  </div>
+  <div class="cp-hue" id="cp-hue">
+    <div class="cp-hue-cursor" id="cp-hcursor"></div>
+  </div>
+  <div class="cp-hex-row">
+    <div class="cp-preview" id="cp-preview"></div>
+    <input class="cp-hex" id="cp-hex" type="text" maxlength="7" spellcheck="false">
+    <button onclick="closeCP()" style="padding:4px 8px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">OK</button>
+  </div>
+  <div class="cp-swatches" id="cp-swatches"></div>
+</div>
+
+<script>
+(function(){
+  const PRESETS = [
+    '#ffffff','#e8e8f0','#c8c8d8','#888899','#5a5a7a','#2a2a3a','#1a1a25','#0d0d0f',
+    '#c8ff00','#b8ef00','#ff6b35','#ff4444','#00ff88','#00ccff','#9933ff','#ff66b2',
+    '#ff0000','#ff8800','#ffff00','#00ff00','#00ffff','#0088ff','#8800ff','#ff0088',
+  ];
+
+  let cpId = null;       // which picker id is open
+  let cpCallback = null; // function(hex) to call on change
+  let cpDotId = null;    // dot element id to update
+  let cpHue = 0;         // 0-360
+  let cpSat = 1;         // 0-1
+  let cpVal = 1;         // 0-1 (value/brightness)
+  let cpDraggingGrad = false;
+  let cpDraggingHue = false;
+
+  // ── Colour math ──────────────────────────────────────────────────
+  function hsvToRgb(h,s,v){
+    let r,g,b;
+    const i=Math.floor(h/60)%6, f=h/60-Math.floor(h/60);
+    const p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
+    [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i].forEach((c,idx)=>{[r,g,b]=[r,g,b];if(idx===0)r=c;else if(idx===1)g=c;else b=c;});
+    // simpler:
+    const rgb=[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i];
+    return rgb.map(c=>Math.round(c*255));
+  }
+  function rgbToHex(r,g,b){return '#'+[r,g,b].map(c=>c.toString(16).padStart(2,'0')).join('');}
+  function hexToRgb(hex){
+    const m=hex.replace('#','').match(/.{2}/g);
+    return m?m.map(c=>parseInt(c,16)):[0,0,0];
+  }
+  function rgbToHsv(r,g,b){
+    r/=255;g/=255;b/=255;
+    const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+    let h=0,s=max===0?0:d/max,v=max;
+    if(d!==0){
+      if(max===r) h=((g-b)/d)%6;
+      else if(max===g) h=(b-r)/d+2;
+      else h=(r-g)/d+4;
+      h=((h*60)+360)%360;
+    }
+    return[h,s,v];
+  }
+  function currentHex(){const[r,g,b]=hsvToRgb(cpHue,cpSat,cpVal);return rgbToHex(r,g,b);}
+
+  // ── Draw gradient ────────────────────────────────────────────────
+  function drawGradient(){
+    const canvas=document.getElementById('cp-canvas');
+    if(!canvas)return;
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width,H=canvas.height;
+    // White → Hue
+    const gH=ctx.createLinearGradient(0,0,W,0);
+    const[r,g,b]=hsvToRgb(cpHue,1,1);
+    gH.addColorStop(0,'#fff');
+    gH.addColorStop(1,`rgb(${r},${g},${b})`);
+    ctx.fillStyle=gH; ctx.fillRect(0,0,W,H);
+    // Transparent → Black
+    const gV=ctx.createLinearGradient(0,0,0,H);
+    gV.addColorStop(0,'rgba(0,0,0,0)');
+    gV.addColorStop(1,'#000');
+    ctx.fillStyle=gV; ctx.fillRect(0,0,W,H);
+  }
+
+  // ── Update cursors & preview ─────────────────────────────────────
+  function updateUI(){
+    drawGradient();
+    const canvas=document.getElementById('cp-canvas');
+    const W=canvas?canvas.offsetWidth:196,H=canvas?canvas.offsetHeight:130;
+    const gc=document.getElementById('cp-gcursor');
+    if(gc){gc.style.left=(cpSat*W)+'px';gc.style.top=((1-cpVal)*H)+'px';}
+    const hc=document.getElementById('cp-hcursor');
+    const hbar=document.getElementById('cp-hue');
+    if(hc&&hbar){hc.style.left=(cpHue/360*hbar.offsetWidth)+'px';}
+    const hex=currentHex();
+    const prev=document.getElementById('cp-preview');
+    if(prev)prev.style.background=hex;
+    const inp=document.getElementById('cp-hex');
+    if(inp&&document.activeElement!==inp)inp.value=hex.toUpperCase();
+  }
+
+  // ── Gradient mouse ───────────────────────────────────────────────
+  function gradPos(e,canvas){
+    const r=canvas.getBoundingClientRect();
+    const x=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+    const y=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));
+    cpSat=x; cpVal=1-y;
+  }
+  function huePos(e,bar){
+    const r=bar.getBoundingClientRect();
+    cpHue=Math.max(0,Math.min(360,(e.clientX-r.left)/r.width*360));
+  }
+
+  // ── Dispatch colour to callback ──────────────────────────────────
+  function dispatchColor(){
+    const hex=currentHex();
+    // Update dot
+    const dot=document.getElementById(cpDotId);
+    if(dot)dot.style.background=hex;
+    if(cpCallback)cpCallback(hex);
+  }
+
+  // ── Position popup near anchor ───────────────────────────────────
+  function positionPopup(anchor){
+    const popup=document.getElementById('cp-popup');
+    const r=anchor.getBoundingClientRect();
+    let top=r.bottom+6, left=r.left;
+    if(left+224>window.innerWidth)left=window.innerWidth-228;
+    if(top+320>window.innerHeight)top=r.top-326;
+    popup.style.top=top+'px';
+    popup.style.left=left+'px';
+  }
+
+  // ── Build swatches ───────────────────────────────────────────────
+  function buildSwatches(){
+    const cont=document.getElementById('cp-swatches');
+    if(!cont||cont.children.length)return;
+    PRESETS.forEach(hex=>{
+      const d=document.createElement('div');
+      d.className='cp-sw';
+      d.style.background=hex;
+      d.title=hex;
+      d.onclick=()=>{
+        const[r,g,b]=hexToRgb(hex);
+        [cpHue,cpSat,cpVal]=rgbToHsv(r,g,b);
+        updateUI(); dispatchColor();
+      };
+      cont.appendChild(d);
+    });
+  }
+
+  // ── Public API ───────────────────────────────────────────────────
+  window.openCP=function(id, anchorEl){
+    cpId=id;
+    // Map id → callback and dotId
+    const map={
+      'canvas-bg-picker':{ cb: v=>{ if(typeof setCanvasBg==='function')setCanvasBg(v); }, dot:'canvas-bg-picker-dot' },
+      'fcol':            { cb: v=>{ if(typeof apFill==='function')apFill(v); const el=document.getElementById('pfill'); if(el)el.value=v; }, dot:'fcol-dot' },
+      'pbordercol':      { cb: v=>{ if(typeof apBorderCol==='function')apBorderCol(v); }, dot:'pbordercol-dot' },
+      'bg-color-picker': { cb: v=>{ if(typeof change3DBgColor==='function')change3DBgColor(v); }, dot:'bg-color-picker-dot' },
+    };
+    const entry=map[id]||{cb:()=>{},dot:null};
+    cpCallback=entry.cb;
+    cpDotId=entry.dot;
+
+    // Read current colour from dot
+    const dot=document.getElementById(cpDotId);
+    const currentColor=dot?dot.style.background:'#ffffff';
+    // Parse it
+    let hex=currentColor;
+    if(hex.startsWith('rgb')){
+      const m=hex.match(/\d+/g);
+      if(m)hex=rgbToHex(+m[0],+m[1],+m[2]);
+    }
+    const[r,g,b]=hexToRgb(hex);
+    [cpHue,cpSat,cpVal]=rgbToHsv(r,g,b);
+
+    buildSwatches();
+    const popup=document.getElementById('cp-popup');
+    popup.classList.add('open');
+    // Wait for layout then position & draw
+    requestAnimationFrame(()=>{
+      positionPopup(anchorEl||dot||document.body);
+      updateUI();
+    });
+  };
+
+  window.closeCP=function(){
+    const popup=document.getElementById('cp-popup');
+    if(popup)popup.classList.remove('open');
+  };
+
+  // ── Mouse events ─────────────────────────────────────────────────
+  document.addEventListener('mousedown',function(e){
+    const popup=document.getElementById('cp-popup');
+    if(!popup||!popup.classList.contains('open'))return;
+    const canvas=document.getElementById('cp-canvas');
+    const hbar=document.getElementById('cp-hue');
+    if(canvas&&canvas.contains(e.target)){
+      cpDraggingGrad=true;
+      gradPos(e,canvas); updateUI(); dispatchColor(); e.preventDefault();
+    } else if(hbar&&hbar.contains(e.target)){
+      cpDraggingHue=true;
+      huePos(e,hbar); updateUI(); dispatchColor(); e.preventDefault();
+    } else if(!popup.contains(e.target)){
+      closeCP();
+    }
+  },true);
+
+  document.addEventListener('mousemove',function(e){
+    if(cpDraggingGrad){
+      const canvas=document.getElementById('cp-canvas');
+      if(canvas){gradPos(e,canvas);updateUI();dispatchColor();}
+    } else if(cpDraggingHue){
+      const hbar=document.getElementById('cp-hue');
+      if(hbar){huePos(e,hbar);updateUI();dispatchColor();}
+    }
+  });
+
+  document.addEventListener('mouseup',function(){
+    cpDraggingGrad=false; cpDraggingHue=false;
+  });
+
+  // ── Hex input ────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded',function(){
+    const inp=document.getElementById('cp-hex');
+    if(inp){
+      inp.addEventListener('input',function(){
+        let v=this.value.trim();
+        if(!v.startsWith('#'))v='#'+v;
+        if(/^#[0-9a-fA-F]{6}$/.test(v)){
+          const[r,g,b]=hexToRgb(v);
+          [cpHue,cpSat,cpVal]=rgbToHsv(r,g,b);
+          updateUI(); dispatchColor();
+        }
+      });
+      inp.addEventListener('keydown',function(e){
+        if(e.key==='Enter'||e.key==='Escape')closeCP();
+        e.stopPropagation();
+      });
+      inp.addEventListener('mousedown',function(e){e.stopPropagation();this.focus();});
+    }
+  });
+})();
+</script>
 </body>
 </html>
