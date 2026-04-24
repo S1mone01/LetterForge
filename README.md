@@ -131,4 +131,4 @@ LetterForge-Desktop/
 
 ---
 
-*Versione corrente: 4.2.3*
+*Versione corrente: 4.3.5*
