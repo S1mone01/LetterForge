@@ -5,7 +5,7 @@
 
 **LetterForge Pro** è un editor tipografico SVG e 3D per desktop per creare, manipolare ed esportare lettere, logo e modelli 3D stampabili. Costruito con Electron.
 
-> 🎨 **Editor visivo intuitivo** · 🔤 **Gestione font avanzata** · ⬡ **Libreria SVG** · 🧊 **Operazioni booleane 3D** · 💾 **Esportazione SVG/STL/3MF**
+> 🎨 **Editor visivo intuitivo** · 🔤 **Gestione font avanzata** · ⬡ **Libreria SVG** · 🧊 **Operazioni booleane 3D** · 🤖 **AI-Ready (MCP)** · 💾 **Esportazione SVG/STL/3MF**
 
 ![Logo](images/Logo.png)
 
@@ -20,7 +20,8 @@
 - **Libreria SVG**: importa e usa elementi SVG come asset
 - **3D Preview**: anteprima 3D con operazioni booleane (unione, sottrazione)
 - **OpenJSCAD Integration**: mesh watertight per stampa 3D
-- **Esportazione**: SVG, STL, 3MF
+- **AI Integration (MCP)**: server Model Context Protocol integrato per controllo via AI
+- **Esportazione**: SVG, STL, 3MF (ottimizzato per Bambu Studio)
 - **Undo/Redo**: cronologia completa delle operazioni
 - **Salva/Carica Progetto**: ripristina lo stato completo del workspace
 - **Auto-Update**: aggiornamento automatico all'avvio
@@ -47,8 +48,8 @@
 ### Sviluppo
 
 ```bash
-git clone https://github.com/S1mone01/LetterForge-Desktop.git
-cd LetterForge-Desktop
+git clone https://github.com/S1mone01/LetterForge.git
+cd LetterForge
 npm install
 npm start
 ```
@@ -61,11 +62,17 @@ npm start
 | `npm run build:win` | Crea installer Windows (.exe) |
 | `npm run build:mac` | Crea DMG per macOS |
 | `npm run build:linux` | Crea AppImage per Linux |
-| `npm run release` | Build + publish su GitHub |
+| `npm run release` | Build + publish su GitHub (richiede GITHUB_TOKEN) |
 
 ---
 
 ## 📖 Guida Rapida
+
+### AI Integration (MCP)
+LetterForge Pro include un server **Model Context Protocol (MCP)** sulla porta `3100`. Questo permette a client AI esterni (come Claude Desktop o Gemini CLI) di:
+- Leggere lo stato del canvas
+- Aggiungere testo e SVG programmaticamente
+- Spostare, scalare e ricolorare elementi
 
 ### Scorciatoie da Tastiera
 
@@ -95,16 +102,19 @@ npm start
 ## 📂 Struttura del Progetto
 
 ```
-LetterForge-Desktop/
+LetterForge/
 ├── main.js              # Electron main process (IPC, auto-update)
 ├── preload.js           # Preload script (contextBridge)
+├── mcp-server.js        # Model Context Protocol Server (Port 3100)
 ├── package.json         # Configurazione progetto e build
 ├── src/
-│   ├── index.html       # UI renderer + logica frontend
-│   └── splash.html      # Splash screen di caricamento
-├── font/                # Font automatici (sviluppo)
-├── svg/                 # Asset SVG (sviluppo)
-└── assets/              # Icone app
+│   ├── index.html       # UI renderer
+│   ├── splash.html      # Splash screen di caricamento
+│   ├── styles.css       # Stili CSS
+│   ├── script/          # Logica applicativa (script.js, OpenJSCAD.js)
+│   └── librerie/        # Dipendenze locali (three.js, opentype.js)
+├── assets/              # Icone app
+└── GEMINI.md            # Documentazione tecnica e contesto AI
 ```
 
 **Nota**: In produzione, font e SVG utente sono salvati in `%APPDATA%/LetterForge Pro/` (Windows) e migrati automaticamente dagli aggiornamenti.
@@ -114,10 +124,10 @@ LetterForge-Desktop/
 ## 🛠️ Tecnologie
 
 - **Runtime**: Electron 29.x
-- **3D/CSG Engine**: OpenJSCAD (@jscad/modeling v2.13.0)
-- **3D Rendering**: Three.js
+- **3D/CSG Engine**: OpenJSCAD (@jscad/modeling) + Manifold3D
+- **3D Rendering**: Three.js + three-bvh-csg
 - **Font Parsing**: opentype.js
-- **Build Tool**: electron-builder 24.x
+- **Build Tool**: electron-builder
 - **State Management**: Oggetto globale `S` (vanilla JS)
 
 ---
@@ -127,7 +137,7 @@ LetterForge-Desktop/
 | File | Descrizione |
 |------|-------------|
 | [`README.md`](README.md) | Panoramica del progetto |
-| [`QWEN.md`](QWEN.md) | Architettura, OpenJSCAD integration, convenzioni di sviluppo |
+| [`GEMINI.md`](GEMINI.md) | Architettura, integrazione MCP, convenzioni di sviluppo |
 
 ---
 
