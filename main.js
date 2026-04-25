@@ -463,6 +463,24 @@ app.whenReady().then(() => {
     };
   });
 
+  ipcMain.handle('delete-saved-project', async (event, filePath) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        // Also delete the preview image if it exists
+        const previewPath = filePath.replace('.json', '.png');
+        if (fs.existsSync(previewPath)) {
+          fs.unlinkSync(previewPath);
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Error deleting project:', e);
+      return false;
+    }
+  });
+
   ipcMain.handle('import-stl', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       title: 'Importa Modello 3D',

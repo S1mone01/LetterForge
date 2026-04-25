@@ -4441,9 +4441,8 @@ function build3DObjects() {
   });
 
   if (!items.length) {
-    toast('Nessun elemento valido per il 3D!');
-    close3DPreview();
-    return;
+    // Non chiudere più l'anteprima se non ci sono elementi, permetti di entrare per importare STL
+    console.log('3D: Nessun elemento SVG/Testo da estrudere.');
   }
 
   // STEP 2: Convert paths to 3D meshes using OpenJSCAD ONLY
@@ -9189,6 +9188,9 @@ async function renderRecentProjects() {
               <div class="recent-name" title="${p.name}">${p.name.replace('.json', '')}</div>
               <div class="recent-date">${date}</div>
             </div>
+            <div class="recent-delete" onclick="event.stopPropagation(); deleteRecentProject('${p.path.replace(/\\/g, '/')}')" title="Elimina progetto">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </div>
           </div>
         `;
       }).join('');
@@ -9197,6 +9199,20 @@ async function renderRecentProjects() {
       grid.innerHTML = `<div style="grid-column: 1/-1; padding: 20px; color: #ff4444; font-size: 11px;">Errore nel recupero dei file</div>`;
     }
   }
+}
+
+async function deleteRecentProject(path) {
+  customConfirm('Sei sicuro di voler eliminare questo progetto? L\'azione è irreversibile.', async () => {
+    if (window.electronAPI && window.electronAPI.deleteSavedProject) {
+      const success = await window.electronAPI.deleteSavedProject(path);
+      if (success) {
+        toast('Progetto eliminato ✓');
+        renderRecentProjects();
+      } else {
+        toast('Errore durante l\'eliminazione');
+      }
+    }
+  });
 }
 
 // Ensure the version is also updated on the home screen when received

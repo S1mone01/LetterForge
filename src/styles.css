@@ -1732,6 +1732,7 @@ input[type=range]::-webkit-slider-thumb {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 20px;
+    padding-top: 10px;
     padding-bottom: 20px;
     overflow-y: auto;
     padding-right: 12px;
@@ -1760,6 +1761,34 @@ input[type=range]::-webkit-slider-thumb {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    position: relative;
+}
+
+.recent-delete {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: rgba(255, 68, 68, 0.1);
+    color: #ff4444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    opacity: 0;
+    z-index: 10;
+}
+
+.recent-item:hover .recent-delete {
+    opacity: 1;
+}
+
+.recent-delete:hover {
+    background: #ff4444;
+    color: #fff;
+    transform: scale(1.1);
 }
 
 .recent-item:hover {
