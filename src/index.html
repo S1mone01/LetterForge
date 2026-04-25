@@ -25,7 +25,7 @@
       <div class="home-logo">Letter<span>Forge</span></div>
       <div class="home-version-wrap">
         <span id="home-version-display">v4.4.0</span>
-        <div id="home-update-status" class="update-status" style="display:none">
+        <div id="home-update-status" class="update-status">
           <div class="spinner" id="home-update-spinner"></div>
           <div id="home-update-icon" style="display:none; align-items:center; gap:8px; cursor:pointer;"></div>
         </div>
@@ -44,6 +44,13 @@
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
         </div>
         <span>Apri file</span>
+      </button>
+
+      <button class="home-btn" onclick="if(window.electronAPI && window.electronAPI.checkForUpdates) window.electronAPI.checkForUpdates(); toast('Ricerca aggiornamenti in corso...')">
+        <div class="home-btn-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </div>
+        <span>Aggiornamenti</span>
       </button>
     </div>
 
@@ -124,7 +131,7 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           Home
         </button>
-        <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="saveProject()" title="Salva il progetto corrente">
+        <button class="btn" style="flex:1;border-color:var(--accent);color:var(--accent)" onclick="showSaveDialog()" title="Salva il progetto corrente">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
           Salva
         </button>
@@ -505,6 +512,58 @@
     </div>
   </div>
 </div>
+
+<div id="save-options-dialog">
+  <div class="dlg">
+    <div class="dlg-msg" style="margin-bottom: 15px;">Opzioni di Salvataggio</div>
+    <div class="dlg-btns" style="flex-direction: row; gap: 10px; justify-content: center; align-items: stretch;">
+      <button class="btn btn-accent" id="save-opt-as" style="flex: 1; justify-content: center; white-space: nowrap; height: 36px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        Salva con nome
+      </button>
+      <button class="btn" id="save-opt-save" style="flex: 1; justify-content: center; white-space: nowrap; height: 36px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        Salva
+      </button>
+      <button class="btn danger" id="save-opt-cancel" style="flex: 1; justify-content: center; white-space: nowrap; height: 36px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        Annulla
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+  #save-options-dialog {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(0, 0, 0, .6);
+    backdrop-filter: blur(4px);
+    align-items: center;
+    justify-content: center;
+  }
+  #save-options-dialog.show {
+    display: flex;
+  }
+  #save-options-dialog .dlg {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 24px 28px;
+    min-width: 380px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .7);
+  }
+  #save-opt-save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: var(--muted) !important;
+    color: var(--muted) !important;
+    background: transparent !important;
+  }
+</style>
 
 <!-- Overlay for updates -->
 <div id="update-overlay" class="update-overlay" onclick="hideUpdateNotify()"></div>

@@ -23,6 +23,7 @@ const S = {
   rotHandleDistance: null, // distanza fissa dal centro durante la rotazione
   groupCounter: 0, // contatore per generare ID gruppo univoci
   _gapBase: null,  // stato base per lo slider Gap (salvato su mousedown)
+  currentProjectName: null, // nome del file progetto attualmente aperto
 };
 let uid=0;
 
@@ -2621,6 +2622,7 @@ function clearCanvas(){
     S.letters=[];
     S.sel.clear();
     uid = 0; // Reset unique IDs for elements
+    S.currentProjectName = null;
     
     // Reset 3D state to avoid sync errors and stale data
     threeMeshes = [];
@@ -2781,69 +2783,117 @@ async function capturePreview() {
 }
 
 // ── SALVA PROGETTO ─────────────────────────────────────────────────────────
-async function saveProject() {
+function showSaveDialog() {
+  const dlg = document.getElementById('save-options-dialog');
+  const saveBtn = document.getElementById('save-opt-save');
+  const asBtn = document.getElementById('save-opt-as');
+  const cancelBtn = document.getElementById('save-opt-cancel');
+
+  if (S.currentProjectName) {
+    saveBtn.disabled = false;
+    saveBtn.style.borderColor = 'var(--accent)';
+    saveBtn.style.color = 'var(--accent)';
+    saveBtn.style.opacity = '1';
+    saveBtn.style.cursor = 'pointer';
+  } else {
+    saveBtn.disabled = true;
+    saveBtn.style.borderColor = 'var(--muted)';
+    saveBtn.style.color = 'var(--muted)';
+    saveBtn.style.opacity = '0.5';
+    saveBtn.style.cursor = 'not-allowed';
+  }
+
+  dlg.classList.add('show');
+
+  asBtn.onclick = () => {
+    dlg.classList.remove('show');
+    saveProjectAs();
+  };
+
+  saveBtn.onclick = () => {
+    if (!saveBtn.disabled) {
+      dlg.classList.remove('show');
+      saveProjectDirectly();
+    }
+  };
+
+  cancelBtn.onclick = () => {
+    dlg.classList.remove('show');
+  };
+}
+
+async function saveProjectAs() {
   customPrompt('Nome del progetto:', async (name) => {
     if (!name) return;
     if (!name.endsWith('.json')) name += '.json';
-
-    // Cattura la preview prima di salvare
-    const previewData = await capturePreview();
-
-    // Prepara i dati del progetto
-    const projectData = {
-      version: '1.0',
-      canvas: {
-        width: S.canvasW,
-        height: S.canvasH,
-        zoom: S.zoom,
-        gridOn: S.gridOn,
-        canvasBg: S.canvasBg
-      },
-      letters: S.letters,
-      svgs: S.svgs,
-      fontNames: Object.keys(S.fonts),
-      savedAt: new Date().toISOString()
-    };
-
-    try {
-      const content = JSON.stringify(projectData, null, 2);
-
-      if (window.electronAPI && window.electronAPI.saveProjectInternal) {
-        const success = await window.electronAPI.saveProjectInternal(name, content);
-        if (success) {
-          // Se abbiamo la preview, salviamola pure (stesso nome ma .png)
-          if (previewData && window.electronAPI.saveProjectInternal) {
-            const previewName = name.replace('.json', '.png');
-            // Nota: saveProjectInternal accetta testo, per il base64 serve un altro handler o conversione
-            // Per ora lo passiamo come stringa, ma in main.js dovremo gestire il buffer
-            await window.electronAPI.saveProjectInternal(previewName, previewData);
-          }
-          toast('Progetto salvato ✓');
-        }
-      } else {
-        // Fallback per browser
-        const blob = new Blob([content], {type: 'application/json'});
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = name;
-        a.click();
-        toast('Progetto scaricato ✓');
-      }
-    } catch (error) {
-      console.error('Errore salvataggio progetto:', error);
-      toast('Errore salvataggio progetto!');
-    }
+    S.currentProjectName = name;
+    await saveProjectDirectly();
   });
+}
+
+async function saveProjectDirectly() {
+  if (!S.currentProjectName) return;
+  const name = S.currentProjectName;
+
+  // Cattura la preview prima di salvare
+  const previewData = await capturePreview();
+
+  // Prepara i dati del progetto
+  const projectData = {
+    version: '1.0',
+    canvas: {
+      width: S.canvasW,
+      height: S.canvasH,
+      zoom: S.zoom,
+      gridOn: S.gridOn,
+      canvasBg: S.canvasBg
+    },
+    letters: S.letters,
+    svgs: S.svgs,
+    fontNames: Object.keys(S.fonts),
+    savedAt: new Date().toISOString()
+  };
+
+  try {
+    const content = JSON.stringify(projectData, null, 2);
+
+    if (window.electronAPI && window.electronAPI.saveProjectInternal) {
+      const success = await window.electronAPI.saveProjectInternal(name, content);
+      if (success) {
+        // Se abbiamo la preview, salviamola pure (stesso nome ma .png)
+        if (previewData) {
+          const previewName = name.replace('.json', '.png');
+          await window.electronAPI.saveProjectInternal(previewName, previewData);
+        }
+        renderRecentProjects();
+        toast('Progetto salvato ✓');
+      }
+    } else {
+      // Fallback per browser
+      const blob = new Blob([content], {type: 'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      renderRecentProjects();
+      toast('Progetto scaricato ✓');
+    }
+  } catch (error) {
+    console.error('Errore salvataggio progetto:', error);
+    toast('Errore salvataggio progetto!');
+  }
 }// ── CARICA PROGETTO ────────────────────────────────────────────────────────
 async function loadProject() {
   try {
     let projectData;
     
     if (window.electronAPI && window.electronAPI.loadProjectFile) {
-      projectData = await window.electronAPI.loadProjectFile();
-      if (!projectData) {
+      const response = await window.electronAPI.loadProjectFile();
+      if (!response) {
         return; // Annullato dall'utente
       }
+      projectData = response.content;
+      S.currentProjectName = response.name;
     } else {
       // Fallback per browser: input file
       const input = document.createElement('input');
@@ -3426,7 +3476,7 @@ function handleUpdateStatus(data) {
     case 'available':
       updateState.version = data.version;
       updateState.available = true;
-      if (homeVer) homeVer.style.display = 'none'; 
+      if (homeVer) homeVer.style.display = 'block'; 
       if (homeStatus) homeStatus.style.display = 'flex';
       if (homeSpinner) homeSpinner.style.display = 'none';
       if (homeIcon) {
@@ -3455,7 +3505,9 @@ function handleUpdateStatus(data) {
       const pct = Math.round(data.percent);
       if (fillEl) fillEl.style.width = pct + '%';
       if (pctEl) pctEl.textContent = pct + '% - Download in corso...';
-      if (homeVer) homeVer.style.display = 'none';
+      if (homeVer) homeVer.style.display = 'block';
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'none';
       if (homeIcon) {
         homeIcon.style.display = 'flex';
         homeIcon.innerHTML = `
@@ -3480,7 +3532,7 @@ function handleUpdateStatus(data) {
         infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
       }
 
-      if (homeVer) homeVer.style.display = 'none';
+      if (homeVer) homeVer.style.display = 'block';
       if (homeStatus) homeStatus.style.display = 'flex';
       if (homeSpinner) homeSpinner.style.display = 'none';
       if (homeIcon) {
@@ -9123,8 +9175,9 @@ async function renderRecentProjects() {
       // Show ALL projects, not just 4
       grid.innerHTML = projects.map(p => {
         const date = new Date(p.mtime).toLocaleDateString();
+        // Aggiungo timestamp ?t= per forzare il refresh dell'anteprima se il file è stato sovrascritto
         const previewImg = p.preview 
-          ? `<img src="file://${p.preview.replace(/\\/g, '/')}" style="width:100%;height:100%;object-fit:contain;border-radius:4px">`
+          ? `<img src="file://${p.preview.replace(/\\/g, '/')}?t=${Date.now()}" style="width:100%;height:100%;object-fit:contain;border-radius:4px">`
           : `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`;
         
         return `
@@ -9164,6 +9217,7 @@ function newProject() {
   if (typeof S !== 'undefined') {
     S.letters = [];
     S.sel.clear();
+    S.currentProjectName = null;
     if (typeof render === 'function') render();
     if (typeof renderHandles === 'function') renderHandles();
     if (typeof upd === 'function') upd();
@@ -9178,9 +9232,10 @@ function newProject() {
 
 async function openProjectFromFile() {
   if (window.electronAPI && window.electronAPI.loadProjectFile) {
-    const projectData = await window.electronAPI.loadProjectFile();
-    if (projectData) {
-      applyProjectData(projectData);
+    const response = await window.electronAPI.loadProjectFile();
+    if (response) {
+      applyProjectData(response.content);
+      S.currentProjectName = response.name;
       const home = document.getElementById('home-screen');
       if (home) {
         home.classList.add('hidden');
@@ -9193,9 +9248,10 @@ async function openProjectFromFile() {
 async function loadRecentProject(path) {
   if (window.electronAPI && window.electronAPI.loadSavedProjectByPath) {
     try {
-      const projectData = await window.electronAPI.loadSavedProjectByPath(path);
-      if (projectData) {
-        applyProjectData(projectData);
+      const response = await window.electronAPI.loadSavedProjectByPath(path);
+      if (response) {
+        applyProjectData(response.content);
+        S.currentProjectName = response.name;
         const home = document.getElementById('home-screen');
         if (home) {
           home.classList.add('hidden');
@@ -9212,6 +9268,7 @@ function goHome() {
   customConfirm('Tornare alla home? I progressi non salvati andranno persi.', () => {
     const home = document.getElementById('home-screen');
     if (home) {
+      renderRecentProjects();
       home.style.display = 'flex';
       setTimeout(() => home.classList.remove('hidden'), 10);
     }

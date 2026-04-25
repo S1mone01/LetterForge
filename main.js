@@ -224,18 +224,10 @@ function createWindow() {
 
   // ── Auto-update configuration (only in production) ──────────────────────
   if (autoUpdater) {
-    // Disable automatic download in production
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
-
-    // Set feed URL for GitHub releases
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'S1mone01',
-      repo: 'LetterForge'
-    });
 
     autoUpdater.on('checking-for-update', () => {
       if (win && !win.isDestroyed()) {
@@ -330,22 +322,25 @@ function createWindow() {
 
   // Quando la pagina è pronta
   win.webContents.once('did-finish-load', () => {
-    win.webContents.send('app-version', pkg.version);
-
-    updateSplashProgress(20, 'Caricamento font...');
-    const fontDir = getFontDir();
-    const fonts = loadFontsFromDir(fontDir);
-    if (fonts.length > 0) win.webContents.send('fonts-loaded', fonts);
-
-    updateSplashProgress(50, 'Caricamento SVG...');
-    const svgDir = getSvgDir();
-    const svgs = loadSvgsFromDir(svgDir);
-    if (svgs.length > 0) win.webContents.send('svgs-loaded', svgs);
-    
-    updateSplashProgress(100, 'Pronto!');
+    // Delay slightly to ensure listeners are ready
     setTimeout(() => {
-      win.show();
-      hideSplashWindow();
+      win.webContents.send('app-version', pkg.version);
+
+      updateSplashProgress(20, 'Caricamento font...');
+      const fontDir = getFontDir();
+      const fonts = loadFontsFromDir(fontDir);
+      if (fonts.length > 0) win.webContents.send('fonts-loaded', fonts);
+
+      updateSplashProgress(50, 'Caricamento SVG...');
+      const svgDir = getSvgDir();
+      const svgs = loadSvgsFromDir(svgDir);
+      if (svgs.length > 0) win.webContents.send('svgs-loaded', svgs);
+      
+      updateSplashProgress(100, 'Pronto!');
+      setTimeout(() => {
+        win.show();
+        hideSplashWindow();
+      }, 500);
     }, 500);
   });
 }
@@ -429,7 +424,12 @@ app.whenReady().then(() => {
       properties: ['openFile']
     });
     if (canceled || !filePaths.length) return null;
-    return JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
+    const content = JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
+    return {
+      content,
+      filePath: filePaths[0],
+      name: path.basename(filePaths[0])
+    };
   });
 
   ipcMain.handle('list-saved-projects', async () => {
@@ -455,7 +455,12 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('load-saved-project-by-path', async (event, filePath) => {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return {
+      content,
+      filePath,
+      name: path.basename(filePath)
+    };
   });
 
   ipcMain.handle('import-stl', async () => {
