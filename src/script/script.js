@@ -3426,14 +3426,14 @@ function handleUpdateStatus(data) {
     case 'available':
       updateState.version = data.version;
       updateState.available = true;
-      if (homeVer) homeVer.style.display = 'none';
+      if (homeVer) homeVer.style.display = 'none'; 
       if (homeStatus) homeStatus.style.display = 'flex';
       if (homeSpinner) homeSpinner.style.display = 'none';
       if (homeIcon) {
         homeIcon.style.display = 'flex';
         homeIcon.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:var(--accent2);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          <span style="color:var(--accent2); font-size:13px; font-weight:700; white-space:nowrap;">Download disponibile</span>
+          <span style="color:var(--accent2); font-size:13px; font-weight:700; white-space:nowrap;">Download</span>
         `;
         homeIcon.onclick = () => showUpdateNotify({ version: data.version });
       }
@@ -3441,7 +3441,13 @@ function handleUpdateStatus(data) {
 
     case 'not-available':
       if (homeVer) homeVer.style.display = 'block';
-      if (homeStatus) homeStatus.style.display = 'none';
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'flex';
+        homeIcon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" title="Software aggiornato"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+        homeIcon.onclick = null;
+      }
       break;
 
     case 'downloading':
@@ -3449,9 +3455,11 @@ function handleUpdateStatus(data) {
       const pct = Math.round(data.percent);
       if (fillEl) fillEl.style.width = pct + '%';
       if (pctEl) pctEl.textContent = pct + '% - Download in corso...';
+      if (homeVer) homeVer.style.display = 'none';
       if (homeIcon) {
+        homeIcon.style.display = 'flex';
         homeIcon.innerHTML = `
-          <div class="spinner" style="width:12px; height:12px; border-width:2px;"></div>
+          <div class="spinner" style="width:12px; height:12px; border-width:2px; margin-right:5px"></div>
           <span style="font-size:13px; font-weight:700; color:var(--accent2)">Download ${pct}%</span>
         `;
       }
@@ -3472,17 +3480,21 @@ function handleUpdateStatus(data) {
         infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
       }
 
+      if (homeVer) homeVer.style.display = 'none';
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'none';
       if (homeIcon) {
+        homeIcon.style.display = 'flex';
         homeIcon.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:var(--accent);"><path d="M20 6L9 17l-5-5"></path></svg>
-          <span style="color:var(--accent); font-size:13px; font-weight:700; white-space:nowrap;">Aggiornamento pronto</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span style="color:#4caf50; font-size:13px; font-weight:700; white-space:nowrap;">Riavvia per installare</span>
         `;
         homeIcon.onclick = () => showUpdateNotify();
       }
 
       // Se il pannello è già aperto, lo aggiorniamo, altrimenti lo mostriamo
       if (panel && panel.classList.contains('show')) {
-        // Già mostrato, i campi sono stati aggiornati sopra
+        // Già mostrato
       } else {
         toast('Download completato! Riavvia per installare.');
       }
@@ -7099,8 +7111,10 @@ if (window.electronAPI && window.electronAPI.onAppVersion) {
   window.electronAPI.onAppVersion((version) => {
     const verEl = document.getElementById('app-version');
     const unVerEl = document.getElementById('un-version');
+    const homeVerEl = document.getElementById('home-version-display');
     if (verEl) verEl.textContent = 'v' + version;
     if (unVerEl) unVerEl.textContent = 'Versione ' + version;
+    if (homeVerEl) homeVerEl.textContent = 'v' + version;
   });
 }
 
