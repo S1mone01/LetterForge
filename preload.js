@@ -25,7 +25,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Salva e carica progetto
     saveProjectFile: (content) => ipcRenderer.invoke('save-project', content),
+    saveProjectInternal: (name, content) => ipcRenderer.invoke('save-project-internal', name, content),
     loadProjectFile: () => ipcRenderer.invoke('load-project'),
+    listSavedProjects: () => ipcRenderer.invoke('list-saved-projects'),
+    loadSavedProjectByPath: (filePath) => ipcRenderer.invoke('load-saved-project-by-path', filePath),
 
     // Salva 3MF e apri in Bambu Studio
     saveAndOpen3MFInBambu: (content) => ipcRenderer.invoke('save-and-open-3mf-bambu', content),

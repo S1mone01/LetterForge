@@ -66,6 +66,12 @@ function getSvgDir() {
   return path.join(userData, 'svg');
 }
 
+// ── Percorso cartella salvataggi ──
+function getSalvataggioDir() {
+  const userData = app.getPath('userData');
+  return path.join(userData, 'saved');
+}
+
 // ── MIGRAZIONE: Copia file dalla vecchia cartella (accanto all'exe) alla userData ──
 function migrateUserFiles() {
   const userData = app.getPath('userData');
@@ -74,14 +80,12 @@ function migrateUserFiles() {
   // Crea directory utente se non esistono
   const newFontDir = path.join(userData, 'font');
   const newSvgDir = path.join(userData, 'svg');
+  const newSaveDir = path.join(userData, 'saved');
   
   try {
-    if (!fs.existsSync(newFontDir)) {
-      fs.mkdirSync(newFontDir, { recursive: true });
-    }
-    if (!fs.existsSync(newSvgDir)) {
-      fs.mkdirSync(newSvgDir, { recursive: true });
-    }
+    if (!fs.existsSync(newFontDir)) fs.mkdirSync(newFontDir, { recursive: true });
+    if (!fs.existsSync(newSvgDir)) fs.mkdirSync(newSvgDir, { recursive: true });
+    if (!fs.existsSync(newSaveDir)) fs.mkdirSync(newSaveDir, { recursive: true });
   } catch (e) {
     console.warn('Errore nel creare directory utente:', e.message);
     return;
@@ -89,68 +93,45 @@ function migrateUserFiles() {
 
   // Migra font dalla vecchia cartella
   const oldFontDir = path.join(oldBase, 'font');
-  if (fs.existsSync(oldFontDir) && oldFontDir !== newFontDir) {
-    try {
-      const files = fs.readdirSync(oldFontDir);
-      const EXTS = ['.ttf', '.otf', '.woff', '.woff2'];
-      let migrated = 0;
-      
-      files.forEach(file => {
-        const ext = path.extname(file).toLowerCase();
-        if (!EXTS.includes(ext)) return;
-        
-        const src = path.join(oldFontDir, file);
-        const dest = path.join(newFontDir, file);
-        
-        // Copia solo se non esiste già nella destinazione
-        if (!fs.existsSync(dest)) {
-          try {
-            fs.copyFileSync(src, dest);
-            migrated++;
-          } catch (e) {
-            console.warn(`Errore nel copiare font ${file}:`, e.message);
-          }
-        }
-      });
-      
-      if (migrated > 0) {
-        // Fonts migrated successfully
-      }
-    } catch (e) {
-      console.warn('Errore nel migrare font:', e.message);
-    }
-  }
+  migrateFiles(oldFontDir, newFontDir, ['.ttf', '.otf', '.woff', '.woff2']);
 
   // Migra SVG dalla vecchia cartella
   const oldSvgDir = path.join(oldBase, 'svg');
-  if (fs.existsSync(oldSvgDir) && oldSvgDir !== newSvgDir) {
+  migrateFiles(oldSvgDir, newSvgDir, ['.svg']);
+
+  // Migra Salvataggi dalla vecchia cartella (salvataggio o saved)
+  const oldSalvataggioDir = path.join(oldBase, 'salvataggio');
+  const oldSavedDir = path.join(oldBase, 'saved');
+  migrateFiles(oldSalvataggioDir, newSaveDir, ['.json']);
+  migrateFiles(oldSavedDir, newSaveDir, ['.json']);
+
+  // Migra anche dal vecchio percorso in userData se esisteva come "salvataggio"
+  const oldUserDataSaveDir = path.join(userData, 'salvataggio');
+  if (fs.existsSync(oldUserDataSaveDir) && oldUserDataSaveDir !== newSaveDir) {
+    migrateFiles(oldUserDataSaveDir, newSaveDir, ['.json']);
+  }
+}
+
+function migrateFiles(srcDir, destDir, extensions) {
+  if (fs.existsSync(srcDir) && srcDir !== destDir) {
     try {
-      const files = fs.readdirSync(oldSvgDir);
-      let migrated = 0;
-      
+      const files = fs.readdirSync(srcDir);
       files.forEach(file => {
         const ext = path.extname(file).toLowerCase();
-        if (ext !== '.svg') return;
+        if (extensions && !extensions.includes(ext)) return;
         
-        const src = path.join(oldSvgDir, file);
-        const dest = path.join(newSvgDir, file);
-        
-        // Copia solo se non esiste già nella destinazione
+        const src = path.join(srcDir, file);
+        const dest = path.join(destDir, file);
         if (!fs.existsSync(dest)) {
           try {
             fs.copyFileSync(src, dest);
-            migrated++;
           } catch (e) {
-            console.warn(`Errore nel copiare SVG ${file}:`, e.message);
+            console.warn(`Errore nel copiare ${file}:`, e.message);
           }
         }
       });
-      
-      if (migrated > 0) {
-        // SVGs migrated successfully
-      }
     } catch (e) {
-      console.warn('Errore nel migrare SVG:', e.message);
+      console.warn(`Errore nella migrazione da ${srcDir}:`, e.message);
     }
   }
 }
@@ -185,7 +166,7 @@ function loadFontsFromDir(dir) {
   return results;
 }
 
-// ── AGGIUNTO: Leggi tutti gli SVG dalla cartella come testo puro ──────────
+// ── Leggi tutti gli SVG dalla cartella come testo puro ──────────
 function loadSvgsFromDir(dir) {
   if (!fs.existsSync(dir)) {
     try { fs.mkdirSync(dir, { recursive: true }); } catch(e) {}
@@ -249,10 +230,7 @@ function createWindow() {
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
 
-    // Log update events (useful for debugging)
-    autoUpdater.logger = null; // Disable built-in logger, use console
-
-    // Set feed URL for GitHub releases (required for electron-updater)
+    // Set feed URL for GitHub releases
     autoUpdater.setFeedURL({
       provider: 'github',
       owner: 'S1mone01',
@@ -288,10 +266,7 @@ function createWindow() {
       if (win && !win.isDestroyed()) {
         win.webContents.send('update-status', {
           status: 'downloading',
-          percent: progressObj.percent,
-          bytesPerSecond: progressObj.bytesPerSecond,
-          transferred: progressObj.transferred,
-          total: progressObj.total
+          percent: progressObj.percent
         });
       }
     });
@@ -306,9 +281,7 @@ function createWindow() {
     });
 
     autoUpdater.on('error', (err) => {
-      console.error('[AUTO-UPDATE] Error:', err);
-      console.error('[AUTO-UPDATE] Error message:', err.message);
-      console.error('[AUTO-UPDATE] Error stack:', err.stack);
+      console.error('[AUTO-UPDATE] Error:', err.message);
       if (win && !win.isDestroyed()) {
         win.webContents.send('update-status', {
           status: 'error',
@@ -317,75 +290,59 @@ function createWindow() {
       }
     });
 
-    // Check for updates after app is loaded (2 seconds delay)
+    // Initial check
     setTimeout(() => {
-      autoUpdater.checkForUpdates().catch(err => {
-        console.error('Auto-check failed:', err.message);
-      });
+      autoUpdater.checkForUpdates().catch(err => console.log('Auto-check skipped:', err.message));
     }, 2000);
   }
 
   // ── IPC handlers for auto-update ────────────────────────────────────────
   ipcMain.handle('check-for-updates', async () => {
     if (!autoUpdater) {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('update-status', { status: 'not-available', version: pkg.version });
+      }
       return { available: false, reason: 'dev-mode' };
     }
     try {
       const result = await autoUpdater.checkForUpdates();
       return { available: result?.updateInfo != null };
     } catch (error) {
-      console.error('Error checking for updates:', error);
       return { available: false, error: error.message };
     }
   });
 
   ipcMain.handle('download-update', async () => {
-    if (!autoUpdater) {
-      return { success: false, reason: 'dev-mode' };
-    }
+    if (!autoUpdater) return { success: false, reason: 'dev-mode' };
     try {
       await autoUpdater.downloadUpdate();
       return { success: true };
     } catch (error) {
-      console.error('Error downloading update:', error);
       return { success: false, error: error.message };
     }
   });
 
   ipcMain.handle('quit-and-install', async () => {
-    if (!autoUpdater) {
-      return { success: false, reason: 'dev-mode' };
-    }
+    if (!autoUpdater) return { success: false, reason: 'dev-mode' };
     autoUpdater.quitAndInstall();
     return { success: true };
   });
 
-  // Quando la pagina è pronta, invia i font E GLI SVG
+  // Quando la pagina è pronta
   win.webContents.once('did-finish-load', () => {
-    // Invia la versione dell'app dal package.json
     win.webContents.send('app-version', pkg.version);
 
     updateSplashProgress(20, 'Caricamento font...');
-
-    // 1. CARICAMENTO FONT
-    const fontDir  = getFontDir();
-    const fonts    = loadFontsFromDir(fontDir);
-    if (fonts.length > 0) {
-      win.webContents.send('fonts-loaded', fonts);
-    }
+    const fontDir = getFontDir();
+    const fonts = loadFontsFromDir(fontDir);
+    if (fonts.length > 0) win.webContents.send('fonts-loaded', fonts);
 
     updateSplashProgress(50, 'Caricamento SVG...');
-
-    // 2. CARICAMENTO SVG
     const svgDir = getSvgDir();
-    const svgs   = loadSvgsFromDir(svgDir);
-    if (svgs.length > 0) {
-      win.webContents.send('svgs-loaded', svgs);
-    }
+    const svgs = loadSvgsFromDir(svgDir);
+    if (svgs.length > 0) win.webContents.send('svgs-loaded', svgs);
     
     updateSplashProgress(100, 'Pronto!');
-    
-    // Mostra la finestra principale e nascondi splash
     setTimeout(() => {
       win.show();
       hideSplashWindow();
@@ -394,221 +351,143 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Migra file utente prima di creare la finestra (prima esecuzione dopo update)
   migrateUserFiles();
-  
   createWindow();
 
-  // ── Gestione salvataggio SVG ────────────────────────────────────────────
   ipcMain.handle('save-svg', async (event, svgString) => {
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: 'Salva Lettera/Logo come SVG',
+      title: 'Salva SVG',
       defaultPath: 'letterforge.svg',
-      filters: [
-        { name: 'Immagini SVG', extensions: ['svg'] }
-      ]
+      filters: [{ name: 'SVG', extensions: ['svg'] }]
     });
-
-    if (canceled || !filePath) {
-      return false;
-    }
-
-    try {
-      fs.writeFileSync(filePath, svgString, 'utf-8');
-      return true;
-    } catch (error) {
-      console.error('Errore durante la scrittura del file:', error);
-      throw error;
-    }
+    if (canceled || !filePath) return false;
+    fs.writeFileSync(filePath, svgString, 'utf-8');
+    return true;
   });
   
-  // ── Gestione salvataggio progetto ───────────────────────────────────────
   ipcMain.handle('save-project', async (event, content) => {
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: 'Salva Progetto LetterForge',
-      defaultPath: 'progetto-letterforge.json',
-      filters: [
-        { name: 'Progetto LetterForge', extensions: ['json'] }
-      ]
+      title: 'Salva Progetto',
+      defaultPath: 'progetto.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }]
     });
+    if (canceled || !filePath) return false;
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return true;
+  });
 
-    if (canceled || !filePath) {
-      return false;
-    }
-
+  ipcMain.handle('save-project-internal', async (event, name, content) => {
     try {
-      fs.writeFileSync(filePath, content, 'utf-8');
+      const saveDir = getSalvataggioDir();
+      if (!fs.existsSync(saveDir)) {
+        fs.mkdirSync(saveDir, { recursive: true });
+      }
+      const filePath = path.join(saveDir, name);
+      
+      if (name.endsWith('.png') && content.startsWith('data:image/png;base64,')) {
+        const base64Data = content.replace(/^data:image\/png;base64,/, "");
+        fs.writeFileSync(filePath, base64Data, 'base64');
+      } else {
+        fs.writeFileSync(filePath, content, 'utf-8');
+      }
       return true;
     } catch (error) {
-      console.error('Errore durante il salvataggio del progetto:', error);
-      throw error;
+      console.error('Error saving internal project:', error);
+      return false;
     }
   });
 
-  // ── Gestione salvataggio 3MF e apertura in Bambu Studio ─────────────────
   ipcMain.handle('save-and-open-3mf-bambu', async (event, content) => {
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: 'Salva 3MF per Bambu Studio',
-      defaultPath: 'letterforge-design.3mf',
-      filters: [
-        { name: 'Modello 3MF', extensions: ['3mf'] }
-      ]
+      title: 'Salva 3MF',
+      defaultPath: 'modello.3mf',
+      filters: [{ name: '3MF', extensions: ['3mf'] }]
     });
-
-    if (canceled || !filePath) {
-      return { success: false };
-    }
-
+    if (canceled || !filePath) return { success: false };
     try {
-      // Salva il file 3MF
       fs.writeFileSync(filePath, content, 'binary');
-      
-      // Cerca Bambu Studio nei percorsi comuni di Windows
       const bambuPaths = [
         'C:\\Program Files\\Bambu Studio\\bin\\bambu-studio.exe',
-        'C:\\Program Files (x86)\\Bambu Studio\\bin\\bambu-studio.exe',
-        `${process.env.LOCALAPPDATA}\\Programs\\Bambu Studio\\bin\\bambu-studio.exe`
+        'C:\\Program Files (x86)\\Bambu Studio\\bin\\bambu-studio.exe'
       ];
-      
-      let bambuPath = null;
-      for (const path of bambuPaths) {
-        if (fs.existsSync(path)) {
-          bambuPath = path;
-          break;
-        }
-      }
-      
+      let bambuPath = bambuPaths.find(p => fs.existsSync(p));
       if (bambuPath) {
-        // Apri direttamente con Bambu Studio
-        shell.openPath(bambuPath).then(() => {
-          // Passa il file come argomento (Bambu Studio lo aprirà)
-          const { spawn } = require('child_process');
-          spawn(bambuPath, [filePath], { detached: true }).unref();
-        });
+        const { spawn } = require('child_process');
+        spawn(bambuPath, [filePath], { detached: true }).unref();
         return { success: true, method: 'bambu' };
-      } else {
-        // Se Bambu Studio non è trovato, apri con l'app predefinita
-        shell.openPath(filePath);
-        return { success: true, method: 'default' };
       }
+      shell.openPath(filePath);
+      return { success: true, method: 'default' };
     } catch (error) {
-      console.error('Errore durante il salvataggio/apertura 3MF:', error);
       return { success: false, error: error.message };
     }
   });
   
-  // ── Gestione caricamento progetto ───────────────────────────────────────
-  ipcMain.handle('load-project', async (event) => {
+  ipcMain.handle('load-project', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
-      title: 'Carica Progetto LetterForge',
-      filters: [
-        { name: 'Progetto LetterForge', extensions: ['json'] }
-      ],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
       properties: ['openFile']
     });
-
-    if (canceled || !filePaths || !filePaths.length) {
-      return null;
-    }
-
-    try {
-      const content = fs.readFileSync(filePaths[0], 'utf-8');
-      return JSON.parse(content);
-    } catch (error) {
-      console.error('Errore durante il caricamento del progetto:', error);
-      throw error;
-    }
+    if (canceled || !filePaths.length) return null;
+    return JSON.parse(fs.readFileSync(filePaths[0], 'utf-8'));
   });
 
-  // ── Apri cartella font utente ───────────────────────────────────────
+  ipcMain.handle('list-saved-projects', async () => {
+    const saveDir = getSalvataggioDir();
+    if (!fs.existsSync(saveDir)) return [];
+    try {
+      return fs.readdirSync(saveDir)
+        .filter(f => f.endsWith('.json'))
+        .map(f => {
+          const name = f;
+          const fullPath = path.join(saveDir, f);
+          const previewPath = fullPath.replace('.json', '.png');
+          const hasPreview = fs.existsSync(previewPath);
+          return {
+            name: f,
+            path: fullPath,
+            preview: hasPreview ? previewPath : null,
+            mtime: fs.statSync(fullPath).mtime
+          };
+        })
+        .sort((a, b) => b.mtime - a.mtime);
+    } catch (e) { return []; }
+  });
+
+  ipcMain.handle('load-saved-project-by-path', async (event, filePath) => {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  });
+
   ipcMain.handle('open-font-folder', async () => {
-    const fontDir = getFontDir();
-    try {
-      // Crea la cartella se non esiste
-      if (!fs.existsSync(fontDir)) {
-        fs.mkdirSync(fontDir, { recursive: true });
-      }
-      await shell.openPath(fontDir);
-      return { success: true };
-    } catch (error) {
-      console.error('Errore nell\'apertura della cartella font:', error);
-      return { success: false, error: error.message };
-    }
+    const dir = getFontDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    shell.openPath(dir);
+    return { success: true };
   });
 
-  // ── Apri cartella SVG utente ───────────────────────────────────────
   ipcMain.handle('open-svg-folder', async () => {
-    const svgDir = getSvgDir();
-    try {
-      // Crea la cartella se non esiste
-      if (!fs.existsSync(svgDir)) {
-        fs.mkdirSync(svgDir, { recursive: true });
-      }
-      await shell.openPath(svgDir);
-      return { success: true };
-    } catch (error) {
-      console.error('Errore nell\'apertura della cartella SVG:', error);
-      return { success: false, error: error.message };
-    }
+    const dir = getSvgDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    shell.openPath(dir);
+    return { success: true };
   });
 
-  // ── MCP Server Integration handlers ─────────────────────────────────
   ipcMain.handle('mcp-start-server', async (event, port) => {
-    try {
-      const result = await mcpServer.start(port);
-      
-      // Set up operation handler
-      mcpServer.on('execute-operation', async (operation, resolve) => {
-        // Send operation to renderer for execution
-        const win = BrowserWindow.getAllWindows()[0];
-        if (win) {
-          win.webContents.send('mcp-execute-operation', operation);
-          
-          // Wait for renderer to respond (with timeout)
-          const timeout = setTimeout(() => {
-            resolve({ success: false, error: 'Operation timeout' });
-          }, 10000);
-          
-          ipcMain.once('mcp-operation-result', (event, result) => {
-            clearTimeout(timeout);
-            resolve(result);
-          });
-        } else {
-          resolve({ success: false, error: 'No window available' });
-        }
-      });
-
-      return result;
-    } catch (error) {
-      console.error('MCP server start error:', error);
-      return { success: false, error: error.message };
-    }
+    const result = await mcpServer.start(port);
+    mcpServer.on('execute-operation', (operation, resolve) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win) {
+        win.webContents.send('mcp-execute-operation', operation);
+        ipcMain.once('mcp-operation-result', (e, res) => resolve(res));
+      } else resolve({ success: false });
+    });
+    return result;
   });
 
-  ipcMain.handle('mcp-stop-server', async (event) => {
-    try {
-      return await mcpServer.stop();
-    } catch (error) {
-      console.error('MCP server stop error:', error);
-      return { success: false, error: error.message };
-    }
-  });
+  ipcMain.handle('mcp-stop-server', () => mcpServer.stop());
+  ipcMain.handle('mcp-update-canvas-state', (e, state) => mcpServer.updateCanvasState(state));
 
-  ipcMain.handle('mcp-update-canvas-state', async (event, canvasState) => {
-    try {
-      mcpServer.updateCanvasState(canvasState);
-      return { success: true };
-    } catch (error) {
-      console.error('MCP update canvas state error:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

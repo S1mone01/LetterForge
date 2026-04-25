@@ -2633,49 +2633,161 @@ function setSelectedLayer(layer){
   toast(`${S.sel.size} oggetto/i → ${layerNames[layer]} ✓`);
 }
 
-// ── SALVA PROGETTO ─────────────────────────────────────────────────────────
-async function saveProject() {
-  // Prepara i dati del progetto
-  const projectData = {
-    version: '1.0',
-    canvas: {
-      width: S.canvasW,
-      height: S.canvasH,
-      zoom: S.zoom,
-      gridOn: S.gridOn,
-      canvasBg: S.canvasBg
-    },
-    letters: S.letters,
-    svgs: S.svgs,
-    // Salviamo solo i nomi dei font caricati (i file font devono essere presenti)
-    fontNames: Object.keys(S.fonts),
-    savedAt: new Date().toISOString()
-  };
-  
-  try {
-    const content = JSON.stringify(projectData, null, 2);
-    
-    if (window.electronAPI && window.electronAPI.saveProjectFile) {
-      const success = await window.electronAPI.saveProjectFile(content);
-      if (success) {
-        toast('Progetto salvato ✓');
-      }
-    } else {
-      // Fallback per browser: download diretto
-      const blob = new Blob([content], {type: 'application/json'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'progetto-letterforge.json';
-      a.click();
-      toast('Progetto scaricato ✓');
-    }
-  } catch (error) {
-    console.error('Errore salvataggio progetto:', error);
-    toast('Errore salvataggio progetto!');
+// ── CUSTOM PROMPT (per inserimento testo con stile custom) ───────────────────
+function customPrompt(msg, onOk) {
+  const overlay = document.getElementById('custom-prompt');
+  const input = document.getElementById('custom-prompt-input');
+  document.getElementById('custom-prompt-msg').textContent = msg;
+  overlay.classList.add('show');
+  input.value = '';
+  input.focus();
+
+  const btnOk     = document.getElementById('custom-prompt-ok');
+  const btnCancel = document.getElementById('custom-prompt-cancel');
+
+  function close(confirmed) {
+    overlay.classList.remove('show');
+    btnOk.removeEventListener('click', handleOk);
+    btnCancel.removeEventListener('click', handleCancel);
+    input.removeEventListener('keydown', handleKey);
+    requestAnimationFrame(() => {
+      const ti = document.getElementById('ti');
+      if (ti) ti.focus();
+    });
+    if (confirmed) onOk(input.value.trim());
   }
+
+  function handleOk() { close(true); }
+  function handleCancel() { close(false); }
+  function handleKey(e) { if (e.key === 'Enter') handleOk(); if (e.key === 'Escape') handleCancel(); }
+
+  btnOk.addEventListener('click', handleOk);
+  btnCancel.addEventListener('click', handleCancel);
+  input.addEventListener('keydown', handleKey);
 }
 
-// ── CARICA PROGETTO ────────────────────────────────────────────────────────
+// Helper per catturare la preview dell'SVG come dataURL PNG
+async function capturePreview() {
+  return new Promise((resolve) => {
+    const svg = document.getElementById('svg');
+    if (!svg) return resolve(null);
+
+    // Calcola il bounding box di tutti gli elementi presenti
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasElements = false;
+
+    S.letters.forEach((_, idx) => {
+      const bbox = getLetterBBoxTransformed(idx);
+      if (bbox) {
+        minX = Math.min(minX, bbox.x);
+        minY = Math.min(minY, bbox.y);
+        maxX = Math.max(maxX, bbox.x2);
+        maxY = Math.max(maxY, bbox.y2);
+        hasElements = true;
+      }
+    });
+
+    let viewBox;
+    if (hasElements) {
+      // Aggiungi un po' di padding (10%)
+      const w = maxX - minX;
+      const h = maxY - minY;
+      const padding = Math.max(w, h) * 0.1;
+      viewBox = `${minX - padding} ${minY - padding} ${w + padding * 2} ${h + padding * 2}`;
+    } else {
+      // Fallback al viewBox originale se non ci sono elementi
+      viewBox = `0 0 ${S.canvasW} ${S.canvasH}`;
+    }
+
+    // Crea un clone dell'SVG per non sporcare l'originale
+    const svgClone = svg.cloneNode(true);
+    svgClone.setAttribute('viewBox', viewBox);
+    svgClone.setAttribute('width', '400');
+    svgClone.setAttribute('height', '400');
+    
+    // Rimuovi elementi di servizio dal clone (snap lines, handles, etc.)
+    const snapLine = svgClone.querySelector('#snap-line');
+    if (snapLine) snapLine.remove();
+    const handles = svgClone.querySelector('#gg');
+    if (handles) handles.innerHTML = '';
+    const selBox = svgClone.querySelector('#sb');
+    if (selBox) selBox.style.display = 'none';
+
+    const svgData = new XMLSerializer().serializeToString(svgClone);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    canvas.width = 400; 
+    canvas.height = 400;
+
+    img.onload = () => {
+      ctx.fillStyle = S.canvasBg || '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+
+    img.onerror = () => resolve(null);
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+  });
+}
+
+// ── SALVA PROGETTO ─────────────────────────────────────────────────────────
+async function saveProject() {
+  customPrompt('Nome del progetto:', async (name) => {
+    if (!name) return;
+    if (!name.endsWith('.json')) name += '.json';
+
+    // Cattura la preview prima di salvare
+    const previewData = await capturePreview();
+
+    // Prepara i dati del progetto
+    const projectData = {
+      version: '1.0',
+      canvas: {
+        width: S.canvasW,
+        height: S.canvasH,
+        zoom: S.zoom,
+        gridOn: S.gridOn,
+        canvasBg: S.canvasBg
+      },
+      letters: S.letters,
+      svgs: S.svgs,
+      fontNames: Object.keys(S.fonts),
+      savedAt: new Date().toISOString()
+    };
+
+    try {
+      const content = JSON.stringify(projectData, null, 2);
+
+      if (window.electronAPI && window.electronAPI.saveProjectInternal) {
+        const success = await window.electronAPI.saveProjectInternal(name, content);
+        if (success) {
+          // Se abbiamo la preview, salviamola pure (stesso nome ma .png)
+          if (previewData && window.electronAPI.saveProjectInternal) {
+            const previewName = name.replace('.json', '.png');
+            // Nota: saveProjectInternal accetta testo, per il base64 serve un altro handler o conversione
+            // Per ora lo passiamo come stringa, ma in main.js dovremo gestire il buffer
+            await window.electronAPI.saveProjectInternal(previewName, previewData);
+          }
+          toast('Progetto salvato ✓');
+        }
+      } else {
+        // Fallback per browser
+        const blob = new Blob([content], {type: 'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        toast('Progetto scaricato ✓');
+      }
+    } catch (error) {
+      console.error('Errore salvataggio progetto:', error);
+      toast('Errore salvataggio progetto!');
+    }
+  });
+}// ── CARICA PROGETTO ────────────────────────────────────────────────────────
 async function loadProject() {
   try {
     let projectData;
@@ -2754,7 +2866,8 @@ function applyProjectData(data) {
   // Aggiorna vista
   render();
   renderHandles();
-  renderSVGs();
+  if (S.viewMode === 'fonts') renderFonts();
+  else renderSVGs();
   upd();
   saveState();
   
@@ -3246,16 +3359,39 @@ function handleUpdateStatus(data) {
   const restartBtn = document.getElementById('un-restart-btn');
   const infoEl = document.getElementById('un-info');
 
+  // Home screen elements
+  const homeSpinner = document.getElementById('home-update-spinner');
+  const homeIcon = document.getElementById('home-update-icon');
+
   switch(data.status) {
     case 'checking':
+      if (homeSpinner) homeSpinner.style.display = 'block';
+      if (homeIcon) homeIcon.style.display = 'none';
       break;
 
     case 'available':
       showUpdateNotify({ version: data.version });
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'block';
+        homeIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:var(--accent2);cursor:pointer" title="Aggiornamento disponibile! Clicca per scaricare."><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+        homeIcon.onclick = downloadUpdate;
+      }
       break;
 
     case 'not-available':
       hideUpdateNotify();
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'flex';
+        homeIcon.style.alignItems = 'center';
+        homeIcon.style.gap = '8px';
+        homeIcon.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" title="L'app è aggiornata."><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span style="color:var(--muted); font-size:11px; font-weight:500; white-space:nowrap;">Nessun aggiornamento trovato</span>
+        `;
+        homeIcon.onclick = null;
+      }
       break;
 
     case 'downloading':
@@ -3263,6 +3399,9 @@ function handleUpdateStatus(data) {
       const pct = Math.round(data.percent);
       fillEl.style.width = pct + '%';
       pctEl.textContent = pct + '% - Download in corso...';
+      if (homeIcon) {
+        homeIcon.innerHTML = `<span style="font-size:9px;font-weight:bold;color:var(--accent)">${pct}%</span>`;
+      }
       break;
 
     case 'downloaded':
@@ -3276,6 +3415,11 @@ function handleUpdateStatus(data) {
       infoEl.style.display = 'block';
       infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
       toast('Download completato! Riavvia per installare.');
+      
+      if (homeIcon) {
+        homeIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:var(--accent);cursor:pointer" title="Aggiornamento pronto! Clicca per installare."><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>`;
+        homeIcon.onclick = quitAndInstall;
+      }
       break;
 
     case 'error':
@@ -3283,6 +3427,11 @@ function handleUpdateStatus(data) {
       console.error('[RENDERER] Update error:', data.error);
       toast('Errore aggiornamento: ' + (data.error || 'sconosciuto'));
       hideUpdateNotify();
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'block';
+        homeIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:#ff4444" title="Errore controllo aggiornamenti."><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+      }
       break;
   }
 }
@@ -8349,3 +8498,132 @@ function aiExecuteRecolor(op) {
     }
   });
 })();
+
+/* ── Home Screen Logic ─────────────────────────────────────────── */
+async function initHome() {
+  console.log('Home initialization...');
+  
+  // Request version and check for updates
+  if (window.electronAPI && window.electronAPI.checkForUpdates) {
+     window.electronAPI.checkForUpdates();
+  }
+
+  // Handle Recent Projects
+  renderRecentProjects();
+}
+
+async function renderRecentProjects() {
+  const grid = document.getElementById('recent-grid');
+  if (!grid) return;
+
+  if (window.electronAPI && window.electronAPI.listSavedProjects) {
+    try {
+      // List projects from the "saved" folder
+      const projects = await window.electronAPI.listSavedProjects();
+      if (!projects || projects.length === 0) {
+        grid.innerHTML = `<div style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--muted); background: var(--panel); border-radius: 12px; border: 1px dashed var(--border); font-size: 13px;">Nessun progetto salvato nella cartella /saved</div>`;
+        return;
+      }
+
+      // Show ALL projects, not just 4
+      grid.innerHTML = projects.map(p => {
+        const date = new Date(p.mtime).toLocaleDateString();
+        const previewImg = p.preview 
+          ? `<img src="file://${p.preview.replace(/\\/g, '/')}" style="width:100%;height:100%;object-fit:contain;border-radius:4px">`
+          : `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`;
+        
+        return `
+          <div class="recent-item" onclick="loadRecentProject('${p.path.replace(/\\/g, '/')}')">
+            <div class="recent-preview">
+               ${previewImg}
+            </div>
+            <div class="recent-info">
+              <div class="recent-name" title="${p.name}">${p.name.replace('.json', '')}</div>
+              <div class="recent-date">${date}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      console.error('Error listing projects:', e);
+      grid.innerHTML = `<div style="grid-column: 1/-1; padding: 20px; color: #ff4444; font-size: 11px;">Errore nel recupero dei file</div>`;
+    }
+  }
+}
+
+// Ensure the version is also updated on the home screen when received
+if (window.electronAPI && window.electronAPI.onAppVersion) {
+  window.electronAPI.onAppVersion((version) => {
+    const homeVer = document.getElementById('home-version-display');
+    if (homeVer) homeVer.textContent = 'v' + version;
+  });
+}
+
+function newProject() {
+  const home = document.getElementById('home-screen');
+  if (home) {
+    home.classList.add('hidden');
+    setTimeout(() => home.style.display = 'none', 400);
+  }
+  // Clear canvas without confirmation since we're starting a new file
+  if (typeof S !== 'undefined') {
+    S.letters = [];
+    S.sel.clear();
+    if (typeof render === 'function') render();
+    if (typeof renderHandles === 'function') renderHandles();
+    if (typeof upd === 'function') upd();
+    
+    // Forza la modalità font all'inizio di un nuovo progetto
+    toggleViewMode('fonts');
+
+    if (typeof saveState === 'function') saveState();
+    toast('Nuovo progetto creato ✓');
+  }
+}
+
+async function openProjectFromFile() {
+  if (window.electronAPI && window.electronAPI.loadProjectFile) {
+    const projectData = await window.electronAPI.loadProjectFile();
+    if (projectData) {
+      applyProjectData(projectData);
+      const home = document.getElementById('home-screen');
+      if (home) {
+        home.classList.add('hidden');
+        setTimeout(() => home.style.display = 'none', 400);
+      }
+    }
+  }
+}
+
+async function loadRecentProject(path) {
+  if (window.electronAPI && window.electronAPI.loadSavedProjectByPath) {
+    try {
+      const projectData = await window.electronAPI.loadSavedProjectByPath(path);
+      if (projectData) {
+        applyProjectData(projectData);
+        const home = document.getElementById('home-screen');
+        if (home) {
+          home.classList.add('hidden');
+          setTimeout(() => home.style.display = 'none', 400);
+        }
+      }
+    } catch (e) {
+      toast('Errore nel caricamento del progetto');
+    }
+  }
+}
+
+function goHome() {
+  customConfirm('Tornare alla home? I progressi non salvati andranno persi.', () => {
+    const home = document.getElementById('home-screen');
+    if (home) {
+      home.style.display = 'flex';
+      setTimeout(() => home.classList.remove('hidden'), 10);
+    }
+  });
+}
+
+// Inizializza la lista sidebar (font o svg) al caricamento
+setTimeout(() => {
+  if (typeof handleSearch === 'function') handleSearch('');
+}, 100);
