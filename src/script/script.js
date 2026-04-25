@@ -2618,9 +2618,24 @@ function customConfirm(msg, onOk) {
 
 function clearCanvas(){
   customConfirm('Svuotare il canvas?', () => {
-    S.letters=[];S.sel.clear();render();renderHandles();upd();saveState();
+    S.letters=[];
+    S.sel.clear();
+    uid = 0; // Reset unique IDs for elements
+    
+    // Reset 3D state to avoid sync errors and stale data
+    threeMeshes = [];
+    threeExtrusionLevels = {};
+    threeVisibilityState = {};
+    threeSelectionOrder = [];
+    threeSelectedMesh = null;
+    if (S.history3D) S.history3D = [];
+    S.historyIndex3D = -1;
+
+    render(); renderHandles(); upd(); saveState();
+    toast('Canvas svuotato correttamente ✓');
   });
 }
+
 function applySize(){
   const w=+document.getElementById('cvW').value||800;
   const h=+document.getElementById('cvH').value||500;
@@ -3696,37 +3711,44 @@ let threeSelectionIndicator = []; // Visual indicators for selected objects
 let threeTransformControls = null; // Transform gizmo for moving objects
 
 function open3DPreview() {
-  if (S.letters.length === 0) {
-    toast('Canvas vuoto! Aggiungi elementi prima di aprire l\'anteprima 3D.');
-    return;
+  try {
+    // Show overlay
+    const overlay = document.getElementById('preview-3d-overlay');
+    overlay.style.display = 'block';
+
+    // Initialize Three.js scene
+    init3DScene();
+
+    // Setup keyboard handlers for 3D canvas
+    setup3DCanvasKeyboard();
+
+    // Build 3D objects from canvas elements
+    build3DObjects();
+
+    // Start animation loop
+    start3DAnimation();
+
+    // Initialize selection HUD
+    setTimeout(() => {
+      // Sync UI button state
+      const btn = document.getElementById('toggle-transform-btn');
+      if (btn) btn.style.color = threeTransformEnabled ? '#00ff88' : '#5a5a7a';
+      
+      update3DSelectionHUD();
+      initColorPresets();
+    }, 150);
+
+    // Initialize 3D history
+    S.history3D = [];
+    S.historyIndex3D = -1;
+    saveState3D();
+  } catch (e) {
+    console.error('Crash in open3DPreview:', e);
+    toast('Errore nell\'apertura dell\'anteprima 3D: ' + e.message);
+    // Hide overlay if it failed
+    const overlay = document.getElementById('preview-3d-overlay');
+    if (overlay) overlay.style.display = 'none';
   }
-
-  // Show overlay
-  const overlay = document.getElementById('preview-3d-overlay');
-  overlay.style.display = 'block';
-
-  // Initialize Three.js scene
-  init3DScene();
-
-  // Setup keyboard handlers for 3D canvas
-  setup3DCanvasKeyboard();
-
-  // Build 3D objects from canvas elements
-  build3DObjects();
-
-  // Start animation loop
-  start3DAnimation();
-
-  // Initialize selection HUD
-  setTimeout(() => {
-    update3DSelectionHUD();
-    initColorPresets();
-  }, 150);
-
-  // Initialize 3D history
-  S.history3D = [];
-  S.historyIndex3D = -1;
-  saveState3D();
 }
 
 function close3DPreview() {
@@ -5571,7 +5593,7 @@ function buildExtrusionControlsFromState() {
 }
 
 // Toggle transform controls visibility (show/hide gizmo arrows)
-let threeTransformEnabled = false;
+let threeTransformEnabled = true;
 
 function toggleTransformControls() {
   threeTransformEnabled = !threeTransformEnabled;
@@ -5915,7 +5937,347 @@ function updateSelectionIndicators() {
   update3DSelectionHUD();
 }
 
-// ── STL IMPORT ─────────────────────────────────────────────────────────────
+// ── SPLIT MESH INTO CONNECTED COMPONENTS ──────────────────────────────────
+function _splitGeometryComponents(geometry) {
+  const positions = geometry.attributes.position.array;
+  const normals = geometry.attributes.normal ? geometry.attributes.normal.array : null;
+  const nTris = positions.length / 9;
+
+  if (nTris === 0) return [];
+
+  const faceToVertices = [];
+  const vertexToFaces = new Map();
+
+  function getVertexKey(vIdx) {
+    const x = Math.round(positions[vIdx * 3] * 10000);
+    const y = Math.round(positions[vIdx * 3 + 1] * 10000);
+    const z = Math.round(positions[vIdx * 3 + 2] * 10000);
+    return `${x},${y},${z}`;
+  }
+
+  for (let i = 0; i < nTris; i++) {
+    const facesVertices = [];
+    for (let j = 0; j < 3; j++) {
+      const vIdx = i * 3 + j;
+      const key = getVertexKey(vIdx);
+      facesVertices.push(key);
+      if (!vertexToFaces.has(key)) vertexToFaces.set(key, []);
+      vertexToFaces.get(key).push(i);
+    }
+    faceToVertices.push(facesVertices);
+  }
+
+  const visited = new Uint8Array(nTris);
+  const groups = [];
+
+  for (let i = 0; i < nTris; i++) {
+    if (visited[i]) continue;
+
+    const group = [];
+    const stack = [i];
+    visited[i] = 1;
+
+    while (stack.length > 0) {
+      const faceIdx = stack.pop();
+      group.push(faceIdx);
+
+      for (const vertexKey of faceToVertices[faceIdx]) {
+        const neighbors = vertexToFaces.get(vertexKey);
+        for (let k = 0; k < neighbors.length; k++) {
+          const neighborFaceIdx = neighbors[k];
+          if (!visited[neighborFaceIdx]) {
+            visited[neighborFaceIdx] = 1;
+            stack.push(neighborFaceIdx);
+          }
+        }
+      }
+    }
+    groups.push(group);
+  }
+
+  return groups.map(group => {
+    const groupPos = new Float32Array(group.length * 9);
+    const groupNorm = normals ? new Float32Array(group.length * 9) : null;
+    for (let i = 0; i < group.length; i++) {
+      const faceIdx = group[i];
+      for (let j = 0; j < 9; j++) {
+        groupPos[i * 9 + j] = positions[faceIdx * 9 + j];
+        if (groupNorm) groupNorm[i * 9 + j] = normals[faceIdx * 9 + j];
+      }
+    }
+    const newGeom = new THREE.BufferGeometry();
+    newGeom.setAttribute('position', new THREE.BufferAttribute(groupPos, 3));
+    if (groupNorm) {
+      newGeom.setAttribute('normal', new THREE.BufferAttribute(groupNorm, 3));
+    } else {
+      newGeom.computeVertexNormals();
+    }
+    
+    // Center the component geometry and return the offset
+    newGeom.computeBoundingBox();
+    const center = new THREE.Vector3();
+    newGeom.boundingBox.getCenter(center);
+    newGeom.translate(-center.x, -center.y, -center.z);
+    
+    return { geometry: newGeom, center: center };
+  });
+}
+
+function _exportGeometryToSTLData(geometry) {
+  // Always export the geometry as it is (local coordinates)
+  const pos = geometry.attributes.position.array;
+  const n = pos.length / 9;
+  const buf = new ArrayBuffer(84 + n * 50);
+  const view = new DataView(buf);
+
+  const header = `LetterForge component`.padEnd(80, ' ');
+  for (let i = 0; i < 80; i++) view.setUint8(i, header.charCodeAt(i) & 0xff);
+  view.setUint32(80, n, true);
+
+  let offset = 84;
+  for (let i = 0; i < n; i++) {
+    const i9 = i * 9;
+    const a = [pos[i9], pos[i9+1], pos[i9+2]];
+    const b = [pos[i9+3], pos[i9+4], pos[i9+5]];
+    const c = [pos[i9+6], pos[i9+7], pos[i9+8]];
+    const [nx, ny, nz] = _triNormal(a, b, c);
+
+    view.setFloat32(offset, nx, true); offset += 4;
+    view.setFloat32(offset, ny, true); offset += 4;
+    view.setFloat32(offset, nz, true); offset += 4;
+
+    for (let j = 0; j < 9; j++) {
+      view.setFloat32(offset, pos[i9 + j], true);
+      offset += 4;
+    }
+    view.setUint16(offset, 0, true); offset += 2;
+  }
+
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+const IMPORT_PALETTE = ['#3498db', '#e74c3c', '#2ecc71', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22', '#27ae60', '#2980b9', '#8e44ad'];
+
+/**
+ * Shared logic to process imported STL geometry.
+ * Splits into components, centers them, and saves as STL data.
+ */
+function _processImportedGeometry(name, geometryInput) {
+  const geometries = Array.isArray(geometryInput) ? geometryInput : [geometryInput];
+  
+  // 1. Initial cleanup and collective bounding box
+  const collectiveBox = new THREE.Box3();
+  geometries.forEach(g => {
+    _fixWinding(g);
+    g.computeBoundingBox();
+    collectiveBox.union(g.boundingBox);
+  });
+  
+  // 2. Calculate global center for initial placement
+  const globalCenter = new THREE.Vector3();
+  collectiveBox.getCenter(globalCenter);
+  const targetPos = (threeControls && threeControls.target) ? threeControls.target.clone() : new THREE.Vector3(0,0,0);
+  const globalOffset = new THREE.Vector3().subVectors(targetPos, globalCenter);
+
+  let componentIdx = 0;
+  let allComponents = [];
+  
+  geometries.forEach(geometry => {
+    const components = _splitGeometryComponents(geometry);
+    allComponents = allComponents.concat(components);
+  });
+
+  if (allComponents.length > 1) {
+    toast(`Identificati ${allComponents.length} oggetti separati`);
+  }
+
+  allComponents.forEach((comp, idx) => {
+    const compGeom = comp.geometry;
+    const compCenter = comp.center; // Local offset from original file center
+    
+    // Ensure component winding is correct after splitting
+    _fixWinding(compGeom);
+    
+    // 4. Convert to standardized STL data (centered)
+    const compData = _exportGeometryToSTLData(compGeom);
+    
+    const baseName = name.replace(/\.(stl|obj)$/i, '');
+    const compName = allComponents.length > 1 ? `${baseName}_${idx+1}` : name;
+    
+    const colorHex = allComponents.length > 1 ? 
+      IMPORT_PALETTE[idx % IMPORT_PALETTE.length] : '#111111';
+
+    const material = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(colorHex),
+      specular: 0x333333,
+      shininess: 30,
+      side: THREE.DoubleSide
+    });
+
+    const mesh = new THREE.Mesh(compGeom, material);
+    
+    // 5. Position: Global file offset + local component offset
+    mesh.position.copy(globalOffset).add(compCenter);
+    mesh.updateMatrixWorld(true);
+
+    mesh.userData.colorHex = colorHex;
+    mesh.userData.isSTL = true;
+    mesh.userData.stlName = compName;
+    mesh.userData.stlData = compData;
+
+    threeScene.add(mesh);
+    threeMeshes.push(mesh);
+
+    if (!threeExtrusionLevels[colorHex]) {
+      threeExtrusionLevels[colorHex] = { extrusion: 20, meshes: [] };
+      if (threeVisibilityState[colorHex] === undefined) threeVisibilityState[colorHex] = true;
+    }
+    mesh.visible = threeVisibilityState[colorHex];
+    threeExtrusionLevels[colorHex].meshes.push(mesh);
+
+    const newEl = {
+      id: uid++,
+      type: 'stl',
+      isSTL: true,
+      stlData: compData,
+      stlName: compName,
+      x: S.canvasW / 2,
+      y: S.canvasH / 2,
+      fill: colorHex,
+      op: 1,
+      layer: 2,
+      pos3d: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+      rot3d: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
+      sca3d: { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z }
+    };
+    S.letters.push(newEl);
+    mesh.userData.letterId = newEl.id;
+  });
+
+  initColorPresets();
+  buildExtrusionControlsFromState();
+  update3DSelectionHUD();
+  saveState3D();
+  saveState();
+  
+  toast(`Importati ${allComponents.length} oggetti da "${name}" ✓`);
+}
+
+function _fixWinding(geometry) {
+  if (!geometry.attributes.position) return false;
+  const pos = geometry.attributes.position.array;
+  if (pos.length < 9) return false;
+
+  let volume = 0;
+  for (let i = 0; i < pos.length; i += 9) {
+    const x1 = pos[i], y1 = pos[i+1], z1 = pos[i+2];
+    const x2 = pos[i+3], y2 = pos[i+4], z2 = pos[i+5];
+    const x3 = pos[i+6], y3 = pos[i+7], z3 = pos[i+8];
+    volume += (x1*y2*z3 - x1*y3*z2 - x2*y1*z3 + x2*y3*z1 + x3*y1*z2 - x3*y2*z1);
+  }
+  
+  if (volume < -1e-7) {
+    console.log(`Flipping winding for geometry (vol: ${volume})`);
+    for (let i = 0; i < pos.length; i += 9) {
+      const x2 = pos[i+3], y2 = pos[i+4], z2 = pos[i+5];
+      const x3 = pos[i+6], y3 = pos[i+7], z3 = pos[i+8];
+      pos[i+3] = x3; pos[i+4] = y3; pos[i+5] = z3;
+      pos[i+6] = x2; pos[i+7] = y2; pos[i+8] = z2;
+    }
+    geometry.attributes.position.needsUpdate = true;
+    geometry.computeVertexNormals();
+    return true;
+  }
+  return false;
+}
+
+function _parseOBJ(text) {
+  const lines = text.split('\n');
+  const allVertices = [];
+  const objects = [];
+  let currentObject = { name: 'default', faces: [] };
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (line.startsWith('v ')) {
+      const parts = line.split(/\s+/);
+      allVertices.push(parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3]));
+    } else if (line.startsWith('o ') || line.startsWith('g ')) {
+      if (currentObject.faces.length > 0) {
+        objects.push(currentObject);
+      }
+      currentObject = { name: line.substring(2).trim(), faces: [] };
+    } else if (line.startsWith('f ')) {
+      const parts = line.split(/\s+/);
+      const vIndices = [];
+      for (let j = 1; j < parts.length; j++) {
+        if (!parts[j]) continue;
+        let vIndex = parseInt(parts[j].split('/')[0]);
+        if (vIndex < 0) {
+           vIndex = (allVertices.length / 3) + vIndex;
+        } else {
+           vIndex = vIndex - 1;
+        }
+        vIndices.push(vIndex);
+      }
+      // Triangolazione semplice (fan)
+      for (let j = 1; j < vIndices.length - 1; j++) {
+        currentObject.faces.push(vIndices[0], vIndices[j], vIndices[j+1]);
+      }
+    }
+  }
+  if (currentObject.faces.length > 0) {
+    objects.push(currentObject);
+  }
+
+  return objects.map(obj => {
+    // Vertex merging to ensure watertightness for CSG
+    const uniqueVertices = [];
+    const vertexMap = new Map();
+    const indices = [];
+
+    for (let i = 0; i < obj.faces.length; i++) {
+      const vIdx = obj.faces[i];
+      // 3ds Max (Z-up, Left-handed/Mixed) to Three.js (Y-up, Right-handed)
+      // Per evitare l'effetto specchio e mantenere il sopra corretto:
+      const vx = allVertices[vIdx * 3];     // Invertiamo X per correggere il mirroring
+      const vy = -allVertices[vIdx * 3 + 2];  // Max Z -> Three Y (Sopra)
+      const vz = allVertices[vIdx * 3 + 1];  // Max Y -> Three Z (Profondità)
+      const key = `${vx.toFixed(6)},${vy.toFixed(6)},${vz.toFixed(6)}`;
+
+      if (vertexMap.has(key)) {
+        indices.push(vertexMap.get(key));
+      } else {
+        const newIdx = uniqueVertices.length / 3;
+        uniqueVertices.push(vx, vy, vz);
+        vertexMap.set(key, newIdx);
+        indices.push(newIdx);
+      }
+    }
+
+    const positions = new Float32Array(indices.length * 3);
+    for (let i = 0; i < indices.length; i++) {
+      const idx = indices[i];
+      positions[i * 3] = uniqueVertices[idx * 3];
+      positions[i * 3 + 1] = uniqueVertices[idx * 3 + 1];
+      positions[i * 3 + 2] = uniqueVertices[idx * 3 + 2];
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    // Ensure correct orientation (CCW) for CSG
+    _fixWinding(geometry);
+    
+    geometry.computeVertexNormals();
+    return geometry;
+  });
+}
 
 function _parseSTLBinary(arrayBuffer) {
   const view = new DataView(arrayBuffer);
@@ -5924,7 +6286,6 @@ function _parseSTLBinary(arrayBuffer) {
   const nTris = view.getUint32(80, true);
   
   // Check if file size matches triangle count (84 + nTris * 50)
-  // Some files might have extra data at the end, but shouldn't be smaller
   if (arrayBuffer.byteLength < 84 + nTris * 50) {
      console.warn('File STL troncato o non valido, provo a leggere comunque');
   }
@@ -5966,86 +6327,29 @@ async function importSTL3D() {
   try {
     const result = await window.electronAPI.importSTLFile();
     if (!result) return;
-
     const { name, data } = result;
-    // Decode base64 to ArrayBuffer
+    const isOBJ = name.toLowerCase().endsWith('.obj');
+
     const binaryString = atob(data);
     const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
 
-    toast('Importazione STL in corso...');
-
-    const geometry = _parseSTLBinary(bytes.buffer);
-    const colorHex = '#111111'; // Nero predefinito (quasi nero per visibilità)
-    const material = new THREE.MeshPhongMaterial({
-      color: new THREE.Color(colorHex),
-      specular: 0x333333,
-      shininess: 30,
-      side: THREE.DoubleSide
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
+    toast(`Importazione ${isOBJ ? 'OBJ' : 'STL'} in corso...`);
     
-    // Posiziona al centro o sopra il piano
-    if (threeControls && threeControls.target) {
-      mesh.position.copy(threeControls.target);
+    let geometry;
+    if (isOBJ) {
+      const text = new TextDecoder().decode(bytes);
+      geometry = _parseOBJ(text);
     } else {
-      mesh.position.set(0, 0, 0);
+      geometry = _parseSTLBinary(bytes.buffer);
     }
-
-    // Tag per identificazione
-    mesh.userData.colorHex = colorHex;
-    mesh.userData.isSTL = true;
-    mesh.userData.stlName = name;
-    mesh.userData.stlData = data;
-
-    threeScene.add(mesh);
-    threeMeshes.push(mesh);
-
-    // Aggiungi ai livelli di estrusione per gestire visibilità
-    if (!threeExtrusionLevels[colorHex]) {
-      threeExtrusionLevels[colorHex] = { extrusion: 20, meshes: [] };
-      if (threeVisibilityState[colorHex] === undefined) threeVisibilityState[colorHex] = true;
-    }
-    mesh.visible = threeVisibilityState[colorHex];
-    threeExtrusionLevels[colorHex].meshes.push(mesh);
-
-    // Persisti in S.letters per rebuild e salvataggio progetto
-    const newEl = {
-      id: uid++,
-      type: 'stl',
-      isSTL: true,
-      stlData: data,
-      stlName: name,
-      x: S.canvasW / 2,
-      y: S.canvasH / 2,
-      fill: colorHex,
-      op: 1,
-      layer: 2,
-      pos3d: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
-      rot3d: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
-      sca3d: { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z }
-    };
-    S.letters.push(newEl);
-    mesh.userData.letterId = newEl.id;
-
-    toast(`STL "${name}" importato correttamente ✓`);
     
-    // Aggiorna UI
-    initColorPresets();
-    update3DSelectionHUD();
-    saveState3D();
-    saveState(); // Salva anche stato 2D
-
+    _processImportedGeometry(name, geometry);
   } catch (e) {
-    console.error('Errore importazione STL:', e);
-    toast('Errore durante l\'importazione: ' + e.message);
+    console.error('Errore importazione:', e);
+    toast('Errore: ' + e.message);
   }
 }
-
-// ── 3D BOOLEAN OPERATIONS ─────────────────────────────────────────────────
 
 function union3DObjects() {
   if (threeSelectionOrder.length !== 2) {
@@ -6197,97 +6501,143 @@ function subtract3DObjects() {
     toast('Sottrazione in corso...');
     const colorTarget = target.material.color.getHex();
 
-    if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) {
-      toast('Errore: OpenJSCAD non disponibile per le operazioni booleane');
+    if (window.OpenJSCADBridge && window.OpenJSCADBridge.initialized) {
+      // =====================================================================
+      // FIX DEFINITIVO CSG (Manifold & Z-Fighting)
+      // =====================================================================
+      const origScale = cutter.scale.clone();
+      const origPos = cutter.position.clone();
+      
+      // 1. Z-Overkill: Scaliamo il cutter sull'asse Z in modo che sia 
+      // esageratamente più alto, assicurandoci che buchi da parte a parte.
+      cutter.scale.z = origScale.z * 1.5; 
+      
+      // 2. Centratura Z: Abbassiamo il cutter per distribuire l'extra altezza
+      cutter.geometry.computeBoundingBox();
+      const cutterZHeight = (cutter.geometry.boundingBox.max.z - cutter.geometry.boundingBox.min.z) * cutter.scale.z;
+      cutter.position.z -= (cutterZHeight * 0.15); // Lo abbassiamo del 15%
+
+      // 3. Micro-Jitter X/Y: Sfalsamento infinitesimale per rompere la coplanarità
+      // dei bordi laterali. Previene "Self-intersections" e "CSG Artifacts".
+      cutter.position.x += 0.001;
+      cutter.position.y += 0.001;
+
+      cutter.updateMatrixWorld(true);
+      // =====================================================================
+
+      // Perform boolean subtraction using OpenJSCAD
+      const resultMesh = window.OpenJSCADBridge.booleanOperation('subtract', target, cutter, colorTarget);
+
+      // Ripristino immediato del cutter originale per non rovinare la scena
+      cutter.scale.copy(origScale);
+      cutter.position.copy(origPos);
+      cutter.updateMatrixWorld(true);
+
+      if (!resultMesh) {
+        toast('Errore: sottrazione ha rimosso tutto o generato geometria invalida');
+        return;
+      }
+
+      console.log(`Result mesh: ${resultMesh.geometry.attributes.position.count} vertices`);
+
+      const targetMaterialClone = new THREE.MeshPhongMaterial({
+        color: target.material.color.clone(),
+        specular: target.material.specular ? target.material.specular.clone() : new THREE.Color(0x444444),
+        shininess: target.material.shininess || 30,
+        side: THREE.DoubleSide,
+        transparent: target.material.transparent,
+        opacity: target.material.opacity
+      });
+      resultMesh.material.dispose();
+      resultMesh.material = targetMaterialClone;
+
+      target.visible = false;
+      target.userData.hiddenByBoolean = true;
+
+      const colorTargetHex = '#' + colorTarget.toString(16).padStart(6, '0');
+      if (threeExtrusionLevels[colorTargetHex]) {
+        const targetIdx = threeExtrusionLevels[colorTargetHex].meshes.indexOf(target);
+        if (targetIdx !== -1) {
+          threeExtrusionLevels[colorTargetHex].meshes.splice(targetIdx, 1);
+        }
+      }
+
+      resultMesh.position.set(0, 0, 0);
+      resultMesh.userData.isBooleanResult = true;
+      resultMesh.userData.isSubtractResult = true;
+      resultMesh.userData._hiddenTarget = target; 
+      resultMesh.userData.colorHex = colorTargetHex;
+
+      threeScene.add(resultMesh);
+      threeMeshes.push(resultMesh);
+
+      if (!threeExtrusionLevels[colorTargetHex]) {
+        threeExtrusionLevels[colorTargetHex] = { extrusion: 10, meshes: [] };
+        if (threeVisibilityState[colorTargetHex] === undefined) threeVisibilityState[colorTargetHex] = true;
+      }
+      resultMesh.visible = threeVisibilityState[colorTargetHex];
+      threeExtrusionLevels[colorTargetHex].meshes.push(resultMesh);
+
+      if (threeControls) threeControls.update();
+      if (threeRenderer && threeScene && threeCamera) {
+        threeRenderer.render(threeScene, threeCamera);
+      }
+
+      clear3DSelection();
+      saveState3D();
+
+      const triCount = resultMesh.geometry.attributes.position.count / 3;
+      toast(`✓ Sottrazione completata! ${triCount} triangoli (OpenJSCAD)`);
       return;
     }
 
-    // =====================================================================
-    // FIX DEFINITIVO CSG (Manifold & Z-Fighting)
-    // =====================================================================
-    const origScale = cutter.scale.clone();
-    const origPos = cutter.position.clone();
-    
-    // 1. Z-Overkill: Scaliamo il cutter sull'asse Z in modo che sia 
-    // esageratamente più alto, assicurandoci che buchi da parte a parte.
-    cutter.scale.z = origScale.z * 1.5; 
-    
-    // 2. Centratura Z: Abbassiamo il cutter per distribuire l'extra altezza
-    cutter.geometry.computeBoundingBox();
-    const cutterZHeight = (cutter.geometry.boundingBox.max.z - cutter.geometry.boundingBox.min.z) * cutter.scale.z;
-    cutter.position.z -= (cutterZHeight * 0.15); // Lo abbassiamo del 15%
+    // Fallback to legacy CSG
+    toast('⚠ OpenJSCAD non disponibile, uso CSG legacy');
 
-    // 3. Micro-Jitter X/Y: Sfalsamento infinitesimale per rompere la coplanarità
-    // dei bordi laterali. Previene "Self-intersections" e "CSG Artifacts".
-    cutter.position.x += 0.001;
-    cutter.position.y += 0.001;
+    const csgCutter = CSG.fromMesh(cutter);
+    const csgTarget = CSG.fromMesh(target);
 
-    cutter.updateMatrixWorld(true);
-    // =====================================================================
+    const csgResult = csgTarget.subtract(csgCutter);
 
-    // Perform boolean subtraction using OpenJSCAD
-    const resultMesh = window.OpenJSCADBridge.booleanOperation('subtract', target, cutter, colorTarget);
+    if (csgResult.polygons.length === 0) {
+      toast('Errore: la sottrazione ha rimosso tutto');
+      return;
+    }
 
-    // Ripristino immediato del cutter originale per non rovinare la scena
-    cutter.scale.copy(origScale);
-    cutter.position.copy(origPos);
-    cutter.updateMatrixWorld(true);
-
+    const resultMesh = csgResult.toMesh(colorTarget);
     if (!resultMesh) {
-      toast('Errore: sottrazione ha rimosso tutto o generato geometria invalida');
+      toast('Errore: mesh risultante vuota');
       return;
     }
-
-    console.log(`Result mesh: ${resultMesh.geometry.attributes.position.count} vertices`);
-
-    const targetMaterialClone = new THREE.MeshPhongMaterial({
-      color: target.material.color.clone(),
-      specular: target.material.specular ? target.material.specular.clone() : new THREE.Color(0x444444),
-      shininess: target.material.shininess || 30,
-      side: THREE.DoubleSide,
-      transparent: target.material.transparent,
-      opacity: target.material.opacity
-    });
-    resultMesh.material.dispose();
-    resultMesh.material = targetMaterialClone;
 
     target.visible = false;
     target.userData.hiddenByBoolean = true;
 
-    const colorTargetHex = '#' + colorTarget.toString(16).padStart(6, '0');
-    if (threeExtrusionLevels[colorTargetHex]) {
-      const targetIdx = threeExtrusionLevels[colorTargetHex].meshes.indexOf(target);
-      if (targetIdx !== -1) {
-        threeExtrusionLevels[colorTargetHex].meshes.splice(targetIdx, 1);
-      }
+    const colorTargetHexLegacy = '#' + colorTarget.toString(16).padStart(6, '0');
+    if (threeExtrusionLevels[colorTargetHexLegacy]) {
+      const targetIdx = threeExtrusionLevels[colorTargetHexLegacy].meshes.indexOf(target);
+      if (targetIdx !== -1) threeExtrusionLevels[colorTargetHexLegacy].meshes.splice(targetIdx, 1);
     }
 
-    resultMesh.position.set(0, 0, 0);
     resultMesh.userData.isBooleanResult = true;
     resultMesh.userData.isSubtractResult = true;
-    resultMesh.userData._hiddenTarget = target; 
-    resultMesh.userData.colorHex = colorTargetHex;
+    resultMesh.userData._hiddenTarget = target;
+    resultMesh.userData.colorHex = colorTargetHexLegacy;
 
     threeScene.add(resultMesh);
     threeMeshes.push(resultMesh);
 
-    if (!threeExtrusionLevels[colorTargetHex]) {
-      threeExtrusionLevels[colorTargetHex] = { extrusion: 10, meshes: [] };
-      if (threeVisibilityState[colorTargetHex] === undefined) threeVisibilityState[colorTargetHex] = true;
+    if (!threeExtrusionLevels[colorTargetHexLegacy]) {
+      threeExtrusionLevels[colorTargetHexLegacy] = { extrusion: 10, meshes: [] };
+      if (threeVisibilityState[colorTargetHexLegacy] === undefined) threeVisibilityState[colorTargetHexLegacy] = true;
     }
-    resultMesh.visible = threeVisibilityState[colorTargetHex];
-    threeExtrusionLevels[colorTargetHex].meshes.push(resultMesh);
-
-    if (threeControls) threeControls.update();
-    if (threeRenderer && threeScene && threeCamera) {
-      threeRenderer.render(threeScene, threeCamera);
-    }
+    resultMesh.visible = threeVisibilityState[colorTargetHexLegacy];
+    threeExtrusionLevels[colorTargetHexLegacy].meshes.push(resultMesh);
 
     clear3DSelection();
     saveState3D();
-
-    const triCount = resultMesh.geometry.attributes.position.count / 3;
-    toast(`✓ Sottrazione completata! ${triCount} triangoli (Watertight)`);
+    const triCountLeg = resultMesh.geometry.attributes.position ? resultMesh.geometry.attributes.position.count / 3 : '?';
+    toast(`✓ Sottrazione completata! (${triCountLeg} triangoli, CSG legacy)`);
 
   } catch (e) {
     console.error('❌ Errore sottrazione:', e);

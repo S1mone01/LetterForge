@@ -460,8 +460,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('import-stl', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
-      title: 'Importa STL',
-      filters: [{ name: 'STL', extensions: ['stl'] }],
+      title: 'Importa Modello 3D',
+      filters: [{ name: 'Modelli 3D', extensions: ['stl', 'obj'] }],
       properties: ['openFile']
     });
     if (canceled || !filePaths.length) return null;
@@ -472,7 +472,7 @@ app.whenReady().then(() => {
         data: content.toString('base64')
       };
     } catch (e) {
-      console.error('Errore lettura STL:', e);
+      console.error('Errore lettura file:', e);
       return null;
     }
   });

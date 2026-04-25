@@ -396,9 +396,9 @@ window.OpenJSCADBridge = {
           const absNz = Math.abs(nz);
           
           const points = vertices.map(v => {
-            if (absNx > absNy && absNx > absNz) return { x: v[1], y: v[2] };
-            if (absNy > absNx && absNy > absNz) return { x: v[0], y: v[2] };
-            return { x: v[0], y: v[1] };
+            if (absNx > absNy && absNx > absNz) return new THREE.Vector2(v[1], v[2]);
+            if (absNy > absNx && absNy > absNz) return new THREE.Vector2(v[0], v[2]);
+            return new THREE.Vector2(v[0], v[1]);
           });
           
           const triIndices = THREE.ShapeUtils.triangulateShape(points, []);
