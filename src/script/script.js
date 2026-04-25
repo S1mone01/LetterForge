@@ -1259,6 +1259,7 @@ function render(){
   // PASSATA 1: tutti i bordi (layer sotto tutte le lettere)
   sortedIndices.forEach(i => {
     const l = S.letters[i];
+    if (l.isSTL) return;
     if(!l.borderWidth || l.borderWidth <= 0) return;
 
     ctx.font=`${l.fontSize}px ${l.fontFamily}`;
@@ -1331,6 +1332,37 @@ function render(){
   // PASSATA 2: tutte le lettere (sopra tutti i bordi)
   sortedIndices.forEach(i => {
     const l = S.letters[i];
+
+    if (l.isSTL) {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('transform', `translate(${l.x},${l.y})`);
+      g.setAttribute('class', 'lg');
+      g.setAttribute('data-i', i);
+      g.addEventListener('mousedown', e => gmd(e, i));
+      
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', -25); rect.setAttribute('y', -25);
+      rect.setAttribute('width', 50); rect.setAttribute('height', 50);
+      rect.setAttribute('rx', 8);
+      rect.setAttribute('fill', S.sel.has(i) ? '#c8ff00' : (l.fill || '#111111'));
+      rect.setAttribute('stroke', '#ffffff');
+      rect.setAttribute('stroke-width', 2);
+      g.appendChild(rect);
+      
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'central');
+      text.setAttribute('fill', '#ffffff');
+      text.setAttribute('font-size', '10px');
+      text.setAttribute('font-weight', 'bold');
+      text.setAttribute('pointer-events', 'none');
+      text.textContent = 'STL';
+      g.appendChild(text);
+      
+      ll.appendChild(g);
+      return;
+    }
+
     ctx.font=`${l.fontSize}px ${l.fontFamily}`;
     const mw = l.isGroup ? l.groupW : ctx.measureText(l.ch).width;
 
@@ -3910,6 +3942,18 @@ function init3DScene() {
   // Drag ended — clean up
   threeTransformControls.addEventListener('mouseUp', function () {
     if (threeTransformControls._pivot) {
+      const mesh = threeTransformControls._pivot.userData.targetMesh;
+      if (mesh && mesh.userData.letterId !== undefined) {
+        const l = S.letters.find(x => x.id === mesh.userData.letterId);
+        if (l && l.isSTL) {
+          l.pos3d = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
+          l.rot3d = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
+          l.sca3d = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
+          // Aggiorna posizione 2D (approssimativa per icona)
+          l.x = (S.canvasW / 2) + mesh.position.x;
+          l.y = (S.canvasH / 2) + mesh.position.z;
+        }
+      }
       saveState3D();
       // Update position inputs after drag ends
       update3DPositionInputs();
@@ -4152,6 +4196,47 @@ function build3DObjects() {
 
   sortedIndices.forEach((i, renderOrder) => {
     const l = S.letters[i];
+
+    if (l.isSTL) {
+      try {
+        const binaryString = atob(l.stlData);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let j = 0; j < binaryString.length; j++) bytes[j] = binaryString.charCodeAt(j);
+        const geometry = _parseSTLBinary(bytes.buffer);
+        const material = new THREE.MeshPhongMaterial({
+          color: new THREE.Color(l.fill || '#111111'),
+          specular: 0x444444,
+          shininess: 30,
+          side: THREE.DoubleSide,
+          transparent: (l.op != null ? l.op : 1) < 1,
+          opacity: l.op != null ? l.op : 1
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        if (l.pos3d) {
+          mesh.position.set(l.pos3d.x, l.pos3d.y, l.pos3d.z);
+          mesh.rotation.set(l.rot3d.x, l.rot3d.y, l.rot3d.z);
+          mesh.scale.set(l.sca3d.x, l.sca3d.y, l.sca3d.z);
+        }
+        mesh.userData.letterId = l.id;
+        mesh.userData.isSTL = true;
+        mesh.userData.colorHex = l.fill || '#111111';
+
+        threeScene.add(mesh);
+        threeMeshes.push(mesh);
+
+        const cHex = mesh.userData.colorHex;
+        if (!threeExtrusionLevels[cHex]) {
+          threeExtrusionLevels[cHex] = { extrusion: 20, meshes: [] };
+          if (threeVisibilityState[cHex] === undefined) threeVisibilityState[cHex] = true;
+        }
+        mesh.visible = threeVisibilityState[cHex];
+        threeExtrusionLevels[cHex].meshes.push(mesh);
+      } catch (e) {
+        console.error("Error building STL in 3D rebuild:", e);
+      }
+      return;
+    }
+
     const color = l.fill || '#000000';
     const opacity = (l.op != null) ? l.op : 1;
     const bw = l.borderWidth || 0;
@@ -5812,6 +5897,136 @@ function updateSelectionIndicators() {
   }
 
   update3DSelectionHUD();
+}
+
+// ── STL IMPORT ─────────────────────────────────────────────────────────────
+
+function _parseSTLBinary(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  // STL binary has 80 bytes header, then 4 bytes for triangle count
+  if (arrayBuffer.byteLength < 84) throw new Error('File STL troppo corto');
+  const nTris = view.getUint32(80, true);
+  
+  // Check if file size matches triangle count (84 + nTris * 50)
+  // Some files might have extra data at the end, but shouldn't be smaller
+  if (arrayBuffer.byteLength < 84 + nTris * 50) {
+     console.warn('File STL troncato o non valido, provo a leggere comunque');
+  }
+
+  const positions = new Float32Array(nTris * 9);
+  const normals = new Float32Array(nTris * 9);
+
+  for (let i = 0; i < nTris; i++) {
+    const start = 84 + i * 50;
+    if (start + 50 > arrayBuffer.byteLength) break;
+
+    const nx = view.getFloat32(start, true);
+    const ny = view.getFloat32(start + 4, true);
+    const nz = view.getFloat32(start + 8, true);
+
+    for (let j = 0; j < 3; j++) {
+      const vStart = start + 12 + j * 12;
+      const x = view.getFloat32(vStart, true);
+      const y = view.getFloat32(vStart + 4, true);
+      const z = view.getFloat32(vStart + 8, true);
+
+      positions[i * 9 + j * 3] = x;
+      positions[i * 9 + j * 3 + 1] = y;
+      positions[i * 9 + j * 3 + 2] = z;
+
+      normals[i * 9 + j * 3] = nx;
+      normals[i * 9 + j * 3 + 1] = ny;
+      normals[i * 9 + j * 3 + 2] = nz;
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  return geometry;
+}
+
+async function importSTL3D() {
+  try {
+    const result = await window.electronAPI.importSTLFile();
+    if (!result) return;
+
+    const { name, data } = result;
+    // Decode base64 to ArrayBuffer
+    const binaryString = atob(data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    toast('Importazione STL in corso...');
+
+    const geometry = _parseSTLBinary(bytes.buffer);
+    const colorHex = '#111111'; // Nero predefinito (quasi nero per visibilità)
+    const material = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(colorHex),
+      specular: 0x333333,
+      shininess: 30,
+      side: THREE.DoubleSide
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    // Posiziona al centro o sopra il piano
+    if (threeControls && threeControls.target) {
+      mesh.position.copy(threeControls.target);
+    } else {
+      mesh.position.set(0, 0, 0);
+    }
+
+    // Tag per identificazione
+    mesh.userData.colorHex = colorHex;
+    mesh.userData.isSTL = true;
+    mesh.userData.stlName = name;
+    mesh.userData.stlData = data;
+
+    threeScene.add(mesh);
+    threeMeshes.push(mesh);
+
+    // Aggiungi ai livelli di estrusione per gestire visibilità
+    if (!threeExtrusionLevels[colorHex]) {
+      threeExtrusionLevels[colorHex] = { extrusion: 20, meshes: [] };
+      if (threeVisibilityState[colorHex] === undefined) threeVisibilityState[colorHex] = true;
+    }
+    mesh.visible = threeVisibilityState[colorHex];
+    threeExtrusionLevels[colorHex].meshes.push(mesh);
+
+    // Persisti in S.letters per rebuild e salvataggio progetto
+    const newEl = {
+      id: uid++,
+      type: 'stl',
+      isSTL: true,
+      stlData: data,
+      stlName: name,
+      x: S.canvasW / 2,
+      y: S.canvasH / 2,
+      fill: colorHex,
+      op: 1,
+      layer: 2,
+      pos3d: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
+      rot3d: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
+      sca3d: { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z }
+    };
+    S.letters.push(newEl);
+    mesh.userData.letterId = newEl.id;
+
+    toast(`STL "${name}" importato correttamente ✓`);
+    
+    // Aggiorna UI
+    initColorPresets();
+    update3DSelectionHUD();
+    saveState3D();
+    saveState(); // Salva anche stato 2D
+
+  } catch (e) {
+    console.error('Errore importazione STL:', e);
+    toast('Errore durante l\'importazione: ' + e.message);
+  }
 }
 
 // ── 3D BOOLEAN OPERATIONS ─────────────────────────────────────────────────

@@ -33,6 +33,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Salva 3MF e apri in Bambu Studio
     saveAndOpen3MFInBambu: (content) => ipcRenderer.invoke('save-and-open-3mf-bambu', content),
 
+    // Importa STL
+    importSTLFile: () => ipcRenderer.invoke('import-stl'),
+
     // Apri cartelle utente
     openFontFolder: () => ipcRenderer.invoke('open-font-folder'),
     openSVGFolder: () => ipcRenderer.invoke('open-svg-folder'),

@@ -458,6 +458,25 @@ app.whenReady().then(() => {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   });
 
+  ipcMain.handle('import-stl', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: 'Importa STL',
+      filters: [{ name: 'STL', extensions: ['stl'] }],
+      properties: ['openFile']
+    });
+    if (canceled || !filePaths.length) return null;
+    try {
+      const content = fs.readFileSync(filePaths[0]);
+      return {
+        name: path.basename(filePaths[0]),
+        data: content.toString('base64')
+      };
+    } catch (e) {
+      console.error('Errore lettura STL:', e);
+      return null;
+    }
+  });
+
   ipcMain.handle('open-font-folder', async () => {
     const dir = getFontDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
