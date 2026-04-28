@@ -1,24 +1,35 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- Librerie -->
-<script src="librerie/opentype.min.js"></script>
-<script src="librerie/three.min.js"></script>
-<script src="librerie/OrbitControls.js"></script>
-<script src="librerie/TransformControls.js"></script>
-<script src="librerie/jscad-modeling.min.js"></script>
-<script>const { primitives, booleans, transforms, extrusions } = jscadModeling;</script>
-<script>if (typeof jscadModeling !== 'undefined') {window.OpenJSCAD = jscadModeling;} </script>
-<!-- OpenJSCAD CSG Engine -->
-<script src="script/OpenJSCAD.js"></script>
-<title>LetterForge Pro</title>
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LetterForge Pro</title>
+
+  <!-- ── Librerie Esterne ────────────────────────────────────────── -->
+  <script src="librerie/opentype.min.js"></script>
+  <script src="librerie/three.min.js"></script>
+  <script src="librerie/OrbitControls.js"></script>
+  <script src="librerie/TransformControls.js"></script>
+  <script src="librerie/three-viewport-gizmo.js"></script>
+  <script src="librerie/jscad-modeling.min.js"></script>
+  
+  <!-- Setup OpenJSCAD -->
+  <script>const { primitives, booleans, transforms, extrusions } = jscadModeling;</script>
+  <script>if (typeof jscadModeling !== 'undefined') {window.OpenJSCAD = jscadModeling;} </script>
+  
+  <!-- 3D CSG Engine Core -->
+  <script src="script/3d/OpenJSCAD.js"></script>
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
 </head>
+
 <!-- Electron: auto-load fonts and svgs from folder -->
 <script src="script/autoload.js"></script>
+
 <body onload="initHome()">
+
+<!-- ── HOME SCREEN ──────────────────────────────────────────────── -->
 <div id="home-screen" class="home-screen">
   <div class="home-content">
     <div class="home-header">
@@ -57,14 +68,18 @@
     <div class="home-recent">
       <div class="sec-title" style="margin-bottom:20px;text-align:left;font-size:18px;font-weight:800;color:var(--text)">Recenti</div>
       <div id="recent-grid" class="recent-grid">
-        <!-- Injected by JS -->
+        <!-- Injected by JS (home.js) -->
       </div>
     </div>
   </div>
 </div>
 
+
+<!-- ── TOP HEADER (Toolbar) ─────────────────────────────────────── -->
 <header>
   <div class="logo">Letter<span>Forge</span></div>
+  
+  <!-- History Controls -->
   <div style="display:flex;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
     <button class="btn btn-icon" onclick="undo()" title="Annulla (Ctrl+Z)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
@@ -73,13 +88,14 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path></svg>
     </button>
   </div>
+  
+  <!-- Canvas Size -->
   <div class="cvsize">
     <span>W</span><input id="cvW" type="number" value="800" min="100" max="4000" onchange="applySize()" onmousedown="event.stopPropagation(); this.focus();">
     <span>H</span><input id="cvH" type="number" value="500" min="100" max="4000" onchange="applySize()" onmousedown="event.stopPropagation(); this.focus();">
-    <button class="btn btn-icon" onclick="applySize()" onmousedown="event.stopPropagation()" title="Applica dimensioni">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M21 3l-7 7"></path><path d="M3 21l7-7"></path></svg>
-    </button>
   </div>
+  
+  <!-- Zoom Controls -->
   <div class="zoom-ctrl">
     <button onclick="zoomOut()" onmousedown="event.stopPropagation()" title="Zoom out">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -89,14 +105,20 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
     </button>
   </div>
+  
   <button class="btn" onclick="zoomReset()" title="Reset zoom" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
   </button>
+  
+  <!-- Snap System -->
   <button class="btn snap-on" id="snap-btn" onclick="toggleSnap()" title="Attiva/Disattiva snap allineamento (Y)" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M8 3H3v5"></path><path d="M21 3l-7 7"></path><path d="M3 3l7 7"></path><path d="M16 21h5v-5"></path><path d="M8 21H3v-5"></path><path d="M21 21l-7-7"></path><path d="M3 21l7-7"></path></svg>
     Snap
   </button>
+  
   <div class="spacer"></div>
+  
+  <!-- Global Actions -->
   <button class="btn" onclick="deleteUnselected()" onmousedown="event.stopPropagation()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
     Elimina non sel.
@@ -119,7 +141,11 @@
   </button>
 </header>
 
+
+<!-- ── MAIN APP LAYOUT ──────────────────────────────────────────── -->
 <div class="app">
+  
+  <!-- ── LEFT PANEL (Assets & Resources) ───────────────────────── -->
   <div class="left-panel">
     <div class="sec">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -137,7 +163,8 @@
         </button>
       </div>
     </div>
-    <!-- Toggle Slider Section -->
+    
+    <!-- View Mode Switch (Fonts / SVGs) -->
     <div class="sec sec-toggle" style="border-bottom:none">
       <div class="segmented-control">
         <input type="radio" id="mode-font" name="view_mode" value="fonts" checked onchange="toggleViewMode('fonts')">
@@ -147,6 +174,8 @@
         <label for="mode-svg">⬡ SVG</label>
       </div>
     </div>
+    
+    <!-- Asset Import Section -->
     <div class="sec sec-import">
       <div class="sec-title">Importa Risorse</div>
       
@@ -187,6 +216,7 @@
       </div>
     </div>
 
+    <!-- Sidebar Search -->
     <div class="search-w">
       <input type="text" id="sidebar-search" placeholder="Cerca font…" oninput="handleSearch(this.value)" onmousedown="event.stopPropagation(); this.focus();">
     </div>
@@ -196,14 +226,19 @@
         <button class="btn font-action-btn" onclick="clearFontSelection()">✕ Nessuno</button>
       </div>
     </div>
+    
+    <!-- Asset List Container -->
     <div class="left-panel-scroll">
-    <div id="font-list">
-      <!-- Content injected by JS -->
-    </div>
+      <div id="font-list">
+        <!-- Content injected by JS (renderer.js) -->
+      </div>
     </div>
   </div>
 
+  <!-- ── CANVAS AREA (2D Editor) ────────────────────────────────── -->
   <div class="canvas-area">
+    
+    <!-- Canvas Tools Toolbar -->
     <div class="tbar2" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()">
       <div class="cp-wrap" onmousedown="event.stopPropagation()">
         <div class="cp-swatch" onclick="openCP('canvas-bg-picker',this)" title="Colore sfondo foglio">
@@ -215,8 +250,12 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
       </button>
       <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px;"></div>
+      
+      <!-- Text Inputs -->
       <label>Testo</label>
       <input type="text" id="ti" placeholder="Scrivi qui…" value="Ciao" onkeydown="if(event.key==='Enter')addText()" onmousedown="event.stopPropagation(); this.focus();">
+      
+      <!-- Font Size & Color -->
       <label>pt</label>
       <div style="position:relative;display:inline-block">
         <input class="ni" type="text" id="fsize" value="80" onkeydown="if(event.key==='Enter'){event.preventDefault();if(S.sel.size>0){apFS(+this.value)} this.blur()}" onmousedown="event.stopPropagation(); this.focus();" onblur="if(S.sel.size>0){apFS(+this.value)}" style="padding-right:20px;cursor:text">
@@ -237,17 +276,21 @@
           <div onclick="setFontSize(200)" class="fsize-opt">200</div>
         </div>
       </div>
+      
       <div class="cp-wrap" onmousedown="event.stopPropagation()">
         <div class="cp-swatch" onclick="openCP('fcol',this)" title="Colore testo">
           <div class="cp-dot" id="fcol-dot" style="background:#111111;"></div>
           <span>Colore</span>
         </div>
       </div>
+      
       <button class="btn primary" onclick="addText()" onmousedown="event.stopPropagation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         Aggiungi
       </button>
     </div>
+    
+    <!-- SVG Canvas Viewport -->
     <div id="cw">
       <div id="snap-line"></div>
       <div id="svg-wrap">
@@ -268,7 +311,8 @@
         </svg>
       </div>
     </div>
-    <!-- 3D Preview Panel -->
+    
+    <!-- 3D Sidebar Panel (Preview) -->
     <div id="preview-3d-panel" style="display:none;position:fixed;top:46px;right:0;width:420px;height:calc(100vh - 46px);background:var(--panel);border-left:1px solid var(--border);z-index:100;flex-direction:column;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div class="sec-title" style="margin:0;font-size:11px;">ANTEPRIMA 3D</div>
@@ -290,12 +334,18 @@
     </div>
   </div>
 
+
+  <!-- ── RIGHT PANEL (Properties Editor) ────────────────────────── -->
   <div class="rp">
+    
+    <!-- Selection List -->
     <div class="sec">
       <div class="sec-title">Selezionati</div>
       <div id="gg" class="gg"></div>
       <div id="nsel" class="nsel">Nessuna selezione</div>
     </div>
+    
+    <!-- Position Controls -->
     <div class="sec">
       <div class="sec-title">Posizione</div>
       <div class="pr">
@@ -303,6 +353,8 @@
         <label style="margin-left:6px">Y</label><input type="number" id="py" class="prop-input" value="0" step="1" oninput="apY(+this.value)" onmousedown="event.stopPropagation(); this.focus();">
       </div>
     </div>
+    
+    <!-- Layer Management -->
     <div class="sec">
       <div class="sec-title">Layer</div>
       <div style="display:flex;gap:6px">
@@ -320,6 +372,8 @@
         </button>
       </div>
     </div>
+    
+    <!-- Transformations -->
     <div class="sec">
       <div class="sec-title">Rotazione</div>
       <div class="pr"><label>↻</label>
@@ -327,6 +381,7 @@
         <input type="number" id="vrot" class="prop-input" value="0" oninput="apRot(+this.value)" onmousedown="event.stopPropagation(); this.focus();">
       </div>
     </div>
+    
     <div class="sec">
       <div class="toggle-row">
         <div class="sec-title" style="margin:0">Scala</div>
@@ -344,12 +399,15 @@
         <input type="number" id="vsy" class="scale-input" min="0.05" max="20" step="0.01" value="1.00" oninput="apScaleFromInput('y',+this.value)" onmousedown="event.stopPropagation()">
       </div>
     </div>
+    
     <div class="sec">
       <div class="sec-title">Inclinazione</div>
       <div class="pr"><label>↗</label>
         <input type="range" id="psk" min="-70" max="70" value="0" oninput="apSkew(+this.value)" onmousedown="event.stopPropagation()">
         <span class="val" id="vsk">0°</span></div>
     </div>
+    
+    <!-- Visual Style -->
     <div class="sec">
       <div class="sec-title">Stile</div>
       <div class="pr"><label>Op.</label>
@@ -367,6 +425,8 @@
         </div>
       </div>
     </div>
+    
+    <!-- Distribution & Tools -->
     <div class="sec">
       <div class="sec-title">Spaziatura (selezionati)</div>
       <div class="pr"><label>Gap</label>
@@ -377,6 +437,7 @@
         Distribuisci
       </button>
     </div>
+    
     <div class="sec">
       <div class="sec-title">Ordine</div>
       <div style="display:flex;gap:6px;margin-top:6px">
@@ -399,9 +460,8 @@
       </button>
     </div>
 
-    <!-- AI Section - Moved above Info -->
+    <!-- AI Assistant Section -->
     <div class="sec ai-section" style="border-top:1px solid var(--border);padding:0">
-      <!-- Collapsible Header -->
       <div onclick="toggleAIPanel()" style="cursor:pointer;padding:10px 12px 8px;display:flex;align-items:center;justify-content:space-between;user-select:none" title="Clicca per espandere/comprimere AI">
         <div class="sec-title" style="margin:0;display:flex;align-items:center;gap:6px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93"></path><path d="M8.56 6.44A4 4 0 0 1 12 2"></path><path d="M12 10a6 6 0 0 0-6 6c0 3.5 3 6 6 6s6-2.5 6-6a6 6 0 0 0-6-6z"></path><circle cx="12" cy="16" r="2"></circle><path d="M12 18v4"></path><path d="M9 22h6"></path></svg>
@@ -410,9 +470,7 @@
         <svg id="ai-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.3s"><polyline points="6 9 12 15 18 9"></polyline></svg>
       </div>
 
-      <!-- AI Panel Content -->
       <div id="ai-panel" style="display:none;padding:0 12px 10px">
-        <!-- MCP Server Host Control -->
         <div id="ai-mcp-control" style="padding:10px 0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
@@ -423,20 +481,17 @@
             <div style="font-size:11px;color:var(--text);font-weight:700">MCP Server (Host)</div>
           </div>
           
-          <!-- Server Port Input -->
           <div style="margin-bottom:8px">
             <input type="text" id="mcp-server-port" placeholder="3100" 
                    style="width:100%;padding:8px 10px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:6px;outline:none"
                    value="3100">
           </div>
           
-          <!-- Server Status & Controls -->
           <div id="mcp-status" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
             <div id="mcp-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
             <div id="mcp-status-text" style="font-size:10px;color:var(--muted)">Server non avviato</div>
           </div>
           
-          <!-- Start/Stop Button -->
           <button id="mcp-start-btn" class="btn primary" onclick="toggleMCPServer()" style="width:100%;justify-content:center;margin-bottom:6px" title="Avvia/Arresta MCP Server">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -445,47 +500,32 @@
           </button>
           
           <div id="mcp-server-info" style="font-size:9px;color:var(--muted);line-height:1.5">
-            ℹ️ LetterForge ospita un server MCP - Collega la tua IA esterna per modificare il canvas
-          </div>
-        </div>
-
-        <!-- Chat Interface (hidden until connected) -->
-        <div id="ai-chat-interface" style="display:none">
-          <div id="ai-chat-container" style="max-height:250px;overflow-y:auto;margin-bottom:8px;padding:6px;background:var(--panel2);border-radius:6px;border:1px solid var(--border)">
-            <div id="ai-messages"></div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:flex-end">
-            <textarea id="ai-input" placeholder="Chiedi all'AI di modificare il canvas..." 
-                      style="flex:1;padding:7px 10px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;border-radius:6px;outline:none;resize:none;min-height:32px;max-height:120px;line-height:1.4"
-                      onkeydown="handleAIInputKeydown(event)"
-                      oninput="autoExpandAIInput()"
-                      onmousedown="event.stopPropagation(); this.focus();"></textarea>
-            <button class="btn primary" onclick="sendAIPrompt()" style="padding:7px 12px;align-self:flex-end" title="Invia richiesta AI">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            </button>
-          </div>
-          <div style="display:flex;gap:4px;margin-top:6px">
-            <button class="btn" style="flex:1;font-size:9px;padding:4px 6px" onclick="clearAIHistory()">
-              🗑️ Clear
-            </button>
+            
           </div>
         </div>
       </div>
     </div>
+    
+    <!-- Info & Help -->
     <div class="sec">
       <div class="sec-title">Info</div>
       <div id="info" class="hint">
-  <b>Tasto destro + Trascina</b> = Pan del foglio<br>
-  <b>Rotella</b> = Zoom | <b>Ctrl+Rotella</b> = Scorri<br>
-  Shift+Click = Selezione multipla<br>
-  Ctrl+Z / Ctrl+Y = Annulla / Ripristina<br>
-  Snap Y attivo su trascinamento.
-</div>
+        <b>Tasto destro + Trascina</b> = Pan del foglio<br>
+        <b>Rotella</b> = Zoom | <b>Ctrl+Rotella</b> = Scorri<br>
+        Shift+Click = Selezione multipla<br>
+        Ctrl+Z / Ctrl+Y = Annulla / Ripristina<br>
+        Snap Y attivo su trascinamento.
+      </div>
     </div>
   </div>
 </div>
+
+
+<!-- ── OVERLAYS & MODALS ────────────────────────────────────────── -->
+
 <canvas id="dc" style="display:none"></canvas>
-<!-- Custom confirm dialog (evita confirm() nativo che rompe il focus in Electron) -->
+
+<!-- Custom confirm dialog -->
 <div id="custom-confirm">
   <div class="dlg">
     <div class="dlg-msg" id="custom-confirm-msg">Sei sicuro?</div>
@@ -499,6 +539,7 @@
   </div>
 </div>
 
+<!-- Custom prompt dialog -->
 <div id="custom-prompt">
   <div class="dlg">
     <div class="dlg-msg" id="custom-prompt-msg">Inserisci il nome del progetto:</div>
@@ -513,6 +554,7 @@
   </div>
 </div>
 
+<!-- Save Options Dialog -->
 <div id="save-options-dialog">
   <div class="dlg">
     <div class="dlg-msg" style="margin-bottom: 15px;">Opzioni di Salvataggio</div>
@@ -533,42 +575,8 @@
   </div>
 </div>
 
-<style>
-  #save-options-dialog {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 100000;
-    background: rgba(0, 0, 0, .6);
-    backdrop-filter: blur(4px);
-    align-items: center;
-    justify-content: center;
-  }
-  #save-options-dialog.show {
-    display: flex;
-  }
-  #save-options-dialog .dlg {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 24px 28px;
-    min-width: 380px;
-    text-align: center;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .7);
-  }
-  #save-opt-save:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    border-color: var(--muted) !important;
-    color: var(--muted) !important;
-    background: transparent !important;
-  }
-</style>
-
-<!-- Overlay for updates -->
-<div id="update-overlay" class="update-overlay" onclick="hideUpdateNotify()"></div>
-
 <!-- Auto-update notification panel -->
+<div id="update-overlay" class="update-overlay" onclick="hideUpdateNotify()"></div>
 <div id="update-notify">
   <button class="un-close" onclick="hideUpdateNotify()" title="Chiudi">×</button>
   <div class="un-icon">
@@ -595,10 +603,13 @@
   <div id="un-info" style="display:none;margin-top:12px;font-size:10px;color:var(--muted);line-height:1.6"></div>
 </div>
 
-<!-- 3D Preview Overlay -->
+<!-- ── 3D FULLSCREEN OVERLAY ────────────────────────────────────── -->
 <div id="preview-3d-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#0d0d0f;">
+  <!-- Overlay Header -->
   <div style="position:absolute;top:0;left:0;right:0;height:56px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;z-index:10;">
     <div class="logo" style="margin-right:16px">Letter<span>Forge</span> 3D</div>
+    
+    <!-- 3D History -->
     <div style="display:flex;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
       <button class="btn btn-icon" onclick="undo3D()" title="Annulla (Ctrl+Z)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
@@ -607,6 +618,8 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path></svg>
       </button>
     </div>
+    
+    <!-- CSG Operations -->
     <div style="display:flex;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
       <button class="btn" onclick="union3DObjects()" onmousedown="event.stopPropagation()" style="border-color:#00ff88;color:#00ff88;padding:4px 10px;font-size:11px;" title="Unisci due oggetti 3D: seleziona due oggetti con Shift+click, poi premi Unisci">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="16" cy="12" r="10"/></svg>
@@ -621,49 +634,54 @@
         Fai Spazio
       </button>
     </div>
+    
     <button class="btn" onclick="importSTL3D()" onmousedown="event.stopPropagation()" style="border-color:#3498db;color:#3498db;padding:4px 10px;font-size:11px;" title="Importa file STL esterno come oggetto 3D">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"></line></svg>
       Importa 3D
     </button>
+    
     <div style="flex:1"></div>
+    
+    <!-- 3D Exports -->
     <button class="btn btn-accent" onclick="exportTo3MF()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta 3MF — ogni colore = un oggetto separato in PrusaSlicer/Bambu">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-  <polyline points="7 14 12 9 17 14"/>
-  <line x1="12" y1="9" x2="12" y2="21"/>
-</svg>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 14 12 9 17 14"/>
+        <line x1="12" y1="9" x2="12" y2="21"/>
+      </svg>
       3MF
     </button>
-    <button class="btn" onclick="exportToSTL()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta STL — un file per colore">
+    <button class="btn" onclick="exportToSTL()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta STL — un file singolo con tutti gli oggetti">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-  <polyline points="7 14 12 9 17 14"/>
-  <line x1="12" y1="9" x2="12" y2="21"/>
-</svg>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 14 12 9 17 14"/>
+        <line x1="12" y1="9" x2="12" y2="21"/>
+      </svg>
       STL
     </button>
+    
     <button class="btn" onclick="close3DPreview()" onmousedown="event.stopPropagation()" style="background:#ff4444;color:#fff;border-color:#ff4444;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
       Indietro
     </button>
   </div>
+  
+  <!-- 3D Scene Viewport -->
   <div id="preview-3d-canvas" style="position:absolute;top:56px;left:0;right:280px;bottom:0;"></div>
+  
+  <!-- 3D Property Panel -->
   <div id="preview-3d-controls" style="position:absolute;top:56px;right:0;width:280px;bottom:0;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;padding:12px;">
-    <!-- Grafica -->
+    
+    <!-- Render Settings -->
     <div class="sec-title" style="margin-bottom:8px">Grafica</div>
-
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;">
-
-      <!-- Riga 1: Griglia + Sfondo -->
       <div style="display:flex;align-items:stretch;border-bottom:1px solid var(--border);">
-        <!-- Griglia toggle -->
         <button id="grid-toggle-btn" onclick="toggle3DGrid()" onmousedown="event.stopPropagation()" title="Mostra/Nascondi griglia"
           style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;background:transparent;border:none;border-right:1px solid var(--border);cursor:pointer;color:var(--accent);transition:background 0.15s;"
           onmouseover="this.style.background='rgba(200,255,0,0.06)'" onmouseout="this.style.background='transparent'">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
           <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.06em;color:inherit;">Griglia</span>
         </button>
-        <!-- Sfondo colore -->
         <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;cursor:pointer;"
           onclick="openCP('bg-color-picker',this)"
           onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'"
@@ -673,10 +691,8 @@
         </div>
       </div>
 
-      <!-- Riga 2: Sliders -->
       <div style="display:flex;flex-direction:column;gap:0;">
-
-        <!-- Luce -->
+        <!-- Lights & Material -->
         <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a5a7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
           <span style="color:#5a5a7a;font-size:9px;font-family:'DM Mono',monospace;min-width:58px;">Luce</span>
@@ -684,7 +700,6 @@
           <span id="ambient-light-value" style="color:#5a5a7a;font-size:9px;min-width:24px;text-align:right;font-family:'DM Mono',monospace;">60%</span>
         </div>
 
-        <!-- Riflessi -->
         <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a5a7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 1 0 18"/><path d="M12 3C8 7 8 17 12 21"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
           <span style="color:#5a5a7a;font-size:9px;font-family:'DM Mono',monospace;min-width:58px;">Riflessi</span>
@@ -692,28 +707,28 @@
           <span id="specular-value" style="color:#5a5a7a;font-size:9px;min-width:24px;text-align:right;font-family:'DM Mono',monospace;">30%</span>
         </div>
 
-        <!-- Lucentezza -->
         <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5a5a7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           <span style="color:#5a5a7a;font-size:9px;font-family:'DM Mono',monospace;min-width:58px;">Lucentezza</span>
           <input type="range" id="shininess-slider" min="0" max="100" value="30" style="flex:1;accent-color:var(--accent);height:3px;" oninput="change3DShininess(this.value)">
           <span id="shininess-value" style="color:#5a5a7a;font-size:9px;min-width:24px;text-align:right;font-family:'DM Mono',monospace;">30%</span>
         </div>
-
       </div>
     </div>
-    <!-- Seleziona tutto -->
+    
+    <!-- 3D Scene Controls -->
     <div style="margin-bottom:16px;margin-top:12px;">
       <button onclick="selectAll3D()" onmousedown="event.stopPropagation()" style="width:100%;padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text)'" title="Seleziona tutti gli oggetti nella scena 3D">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Seleziona tutto
       </button>
     </div>
-    <!-- Estrusione compatta -->
+    
+    <!-- Extrusion Controls -->
     <div class="sec-title" style="margin:12px 0 8px 0">Estrusione</div>
     <div id="extrusion-controls"></div>
 
-    <!-- Posizione compatta -->
+    <!-- Position 3D -->
     <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px 0;">
       <div class="sec-title" style="margin:0">Posizione</div>
       <button id="toggle-transform-btn" onclick="toggleTransformControls()" title="Abilita/Disabilita frecce di trascinamento" style="width:24px;height:20px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:3px;cursor:pointer;color:#5a5a7a;font-size:11px;padding:0;flex-shrink:0;">
@@ -731,7 +746,7 @@
       </div>
     </div>
 
-    <!-- Duplicate & Delete Buttons -->
+    <!-- 3D Actions -->
     <div id="action-3d-buttons" style="margin-bottom:12px;display:flex;gap:8px;">
       <button onclick="duplicate3DSelection()" style="flex:1;padding:6px 12px;background:var(--accent);border:none;border-radius:5px;color:#000;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#d4ff1a'" onmouseout="this.style.background='var(--accent)'">
         Duplica
@@ -741,7 +756,7 @@
       </button>
     </div>
 
-    <!-- Fai Spazio compatta -->
+    <!-- Pocket Tool -->
     <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px 0;">
       <div class="sec-title" style="margin:0">Fai Spazio</div>
     </div>
@@ -752,23 +767,20 @@
       <input type="text" id="pocket-offset-input" value="2" style="width:48px;padding:3px 4px;background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:3px;outline:none;text-align:center;" onmousedown="event.stopPropagation(); this.focus();" oninput="this.value=this.value.replace(/[^0-9.]/g,'')" title="Offset di espansione in px">
     </div>
 
-    <!-- Colore compatta -->
+    <!-- Color Selection -->
     <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px 0;">
       <div class="sec-title" style="margin:0">Colore</div>
     </div>
     <div id="color-3d-controls" style="margin-bottom:12px;padding:8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);">
-      <!-- Input colore e pulsante mostra palette -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <button id="color-palette-btn" onclick="toggleColorPalette()" style="width:36px;height:28px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:#ffffff;transition:all 0.2s;" title="Clicca per aprire la tavolozza colori">
         </button>
         <input type="text" id="color3d-text" value="Bianco" readonly style="flex:1;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;cursor:pointer;user-select:none;" onclick="toggleColorPalette()" title="Clicca per aprire la tavolozza colori">
       </div>
-      <!-- Color Presets Grid (hidden by default) -->
-      <div id="color-presets" style="display:none;grid-template-columns:repeat(5,1fr);gap:6px;">
-      </div>
+      <div id="color-presets" style="display:none;grid-template-columns:repeat(5,1fr);gap:6px;"></div>
     </div>
     
-    <!-- Info -->
+    <!-- Help Text -->
     <div style="margin-top:16px;padding:8px;background:rgba(255,107,53,0.08);border-radius:6px;border:1px solid var(--border);">
       <div style="color:var(--muted);font-size:10px;line-height:1.6">
         <b style="color:var(--accent2)">Controlli Vista 3D:</b><br>
@@ -788,7 +800,8 @@
   </div>
 </div>
 
-<!-- ── Custom Color Picker ─────────────────────────────────────────── -->
+
+<!-- ── CUSTOM COLOR PICKER POPUP ───────────────────────────────── -->
 <div id="cp-popup" class="cp-popup">
   <div class="cp-gradient" id="cp-gradient">
     <canvas id="cp-canvas" width="196" height="130"></canvas>
@@ -800,11 +813,37 @@
   <div class="cp-hex-row">
     <div class="cp-preview" id="cp-preview"></div>
     <input class="cp-hex" id="cp-hex" type="text" maxlength="7" spellcheck="false">
-    <button onclick="closeCP()" style="padding:4px 8px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">OK</button>
   </div>
   <div class="cp-swatches" id="cp-swatches"></div>
 </div>
 
-<script src="script/script.js"></script>
+
+<!-- ── APPLICATION LOGIC MODULES ────────────────────────────────── -->
+<!-- Core State -->
+<script src="script/state.js"></script>
+
+<!-- 2D Engine -->
+<script src="script/2d/geometry.js"></script>
+<script src="script/2d/canvas.js"></script>
+<script src="script/2d/assets.js"></script>
+<script src="script/2d/renderer.js"></script>
+<script src="script/2d/elements.js"></script>
+<script src="script/2d/interaction.js"></script>
+<script src="script/2d/export.js"></script>
+
+<!-- 3D Engine -->
+<script src="script/3d/3d-preview.js"></script>
+<script src="script/3d/3d-geometry.js"></script>
+<script src="script/3d/3d-interaction.js"></script>
+<script src="script/3d/3d-ui.js"></script>
+<script src="script/3d/3d-ops.js"></script>
+
+<!-- Global Features -->
+<script src="script/ui.js"></script>
+<script src="script/transform.js"></script>
+<script src="script/mcp.js"></script>
+<script src="script/color-picker.js"></script>
+<script src="script/home.js"></script>
+
 </body>
 </html>

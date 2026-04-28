@@ -1,0 +1,266 @@
+function toast(msg){
+  const el=document.createElement('div');
+  el.textContent=msg;
+  Object.assign(el.style,{position:'fixed',bottom:'22px',right:'22px',background:'#c8ff00',color:'#000',padding:'7px 14px',borderRadius:'3px',fontFamily:'DM Mono,monospace',fontSize:'12px',zIndex:9999,boxShadow:'0 4px 20px rgba(0,0,0,.5)',transition:'opacity .3s'});
+  document.body.appendChild(el);
+  setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),300);},2200);
+}
+
+// ── CUSTOM CONFIRM (evita dialog nativo che causa perdita focus in Electron) ──
+function customConfirm(msg, onOk) {
+  const overlay = document.getElementById('custom-confirm');
+  document.getElementById('custom-confirm-msg').textContent = msg;
+  overlay.classList.add('show');
+
+  const btnOk     = document.getElementById('custom-confirm-ok');
+  const btnCancel = document.getElementById('custom-confirm-cancel');
+
+  function close(confirmed) {
+    overlay.classList.remove('show');
+    btnOk.removeEventListener('click', handleOk);
+    btnCancel.removeEventListener('click', handleCancel);
+    // Ripristina immediatamente il focus sul documento
+    requestAnimationFrame(() => {
+      const ti = document.getElementById('ti');
+      if (ti) ti.focus();
+    });
+    if (confirmed) onOk();
+  }
+
+  function handleOk()     { close(true);  }
+  function handleCancel() { close(false); }
+
+  btnOk.addEventListener('click', handleOk);
+  btnCancel.addEventListener('click', handleCancel);
+}
+
+// ── CUSTOM PROMPT (per inserimento testo con stile custom) ───────────────────
+function customPrompt(msg, onOk) {
+  const overlay = document.getElementById('custom-prompt');
+  const input = document.getElementById('custom-prompt-input');
+  document.getElementById('custom-prompt-msg').textContent = msg;
+  overlay.classList.add('show');
+  input.value = '';
+  input.focus();
+
+  const btnOk     = document.getElementById('custom-prompt-ok');
+  const btnCancel = document.getElementById('custom-prompt-cancel');
+
+  function close(confirmed) {
+    overlay.classList.remove('show');
+    btnOk.removeEventListener('click', handleOk);
+    btnCancel.removeEventListener('click', handleCancel);
+    input.removeEventListener('keydown', handleKey);
+    requestAnimationFrame(() => {
+      const ti = document.getElementById('ti');
+      if (ti) ti.focus();
+    });
+    if (confirmed) onOk(input.value.trim());
+  }
+
+  function handleOk() { close(true); }
+  function handleCancel() { close(false); }
+  function handleKey(e) { if (e.key === 'Enter') handleOk(); if (e.key === 'Escape') handleCancel(); }
+
+  btnOk.addEventListener('click', handleOk);
+  btnCancel.addEventListener('click', handleCancel);
+  input.addEventListener('keydown', handleKey);
+}
+
+// ── AUTO-UPDATE NOTIFICATION FUNCTIONS ───────────────────────────────────
+let updateState = { available: false, version: '', downloading: false, downloaded: false };
+
+function showUpdateNotify(info) {
+  const panel = document.getElementById('update-notify');
+  const overlay = document.getElementById('update-overlay');
+  const verEl = document.getElementById('un-version');
+  const fillEl = document.getElementById('un-fill');
+  const pctEl = document.getElementById('un-pct');
+  const downloadBtn = document.getElementById('un-download-btn');
+  const restartBtn = document.getElementById('un-restart-btn');
+  const infoEl = document.getElementById('un-info');
+
+  updateState.available = true;
+  if (info && info.version) updateState.version = info.version;
+
+  verEl.textContent = 'Versione ' + updateState.version;
+  fillEl.style.width = updateState.downloaded ? '100%' : '0%';
+  pctEl.textContent = updateState.downloaded ? '100%' : '0%';
+  downloadBtn.style.display = (updateState.downloaded || updateState.downloading) ? 'none' : 'block';
+  restartBtn.style.display = updateState.downloaded ? 'block' : 'none';
+  infoEl.style.display = updateState.downloaded ? 'block' : 'none';
+  if (updateState.downloaded) infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
+
+  if (overlay) overlay.classList.add('show');
+  panel.classList.add('show');
+}
+
+function hideUpdateNotify() {
+  const panel = document.getElementById('update-notify');
+  const overlay = document.getElementById('update-overlay');
+  if (panel) panel.classList.remove('show');
+  if (overlay) overlay.classList.remove('show');
+}
+
+function downloadUpdate() {
+  if (updateState.downloading) return;
+  updateState.downloading = true;
+
+  const downloadBtn = document.getElementById('un-download-btn');
+  const fillEl = document.getElementById('un-fill');
+  const pctEl = document.getElementById('un-pct');
+
+  if (downloadBtn) downloadBtn.style.display = 'none';
+  if (fillEl) fillEl.style.width = '10%';
+  if (pctEl) pctEl.textContent = 'Inizio download...';
+
+  window.electronAPI.downloadUpdate().then(result => {
+    if (!result.success) {
+      toast('Errore download: ' + (result.error || 'sconosciuto'));
+      updateState.downloading = false;
+      if (downloadBtn) downloadBtn.style.display = 'block';
+      if (fillEl) fillEl.style.width = '0%';
+      if (pctEl) pctEl.textContent = '0%';
+    }
+  }).catch(err => {
+    toast('Errore download: ' + err.message);
+    updateState.downloading = false;
+    if (downloadBtn) downloadBtn.style.display = 'block';
+    if (fillEl) fillEl.style.width = '0%';
+    if (pctEl) pctEl.textContent = '0%';
+  });
+}
+
+function quitAndInstall() {
+  window.electronAPI.quitAndInstall();
+}
+
+function handleUpdateStatus(data) {
+  const panel = document.getElementById('update-notify');
+  const verEl = document.getElementById('un-version');
+  const fillEl = document.getElementById('un-fill');
+  const pctEl = document.getElementById('un-pct');
+  const downloadBtn = document.getElementById('un-download-btn');
+  const restartBtn = document.getElementById('un-restart-btn');
+  const infoEl = document.getElementById('un-info');
+
+  // Home screen elements
+  const homeVer = document.getElementById('home-version-display');
+  const homeStatus = document.getElementById('home-update-status');
+  const homeSpinner = document.getElementById('home-update-spinner');
+  const homeIcon = document.getElementById('home-update-icon');
+
+  switch(data.status) {
+    case 'checking':
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'block';
+      if (homeIcon) homeIcon.style.display = 'none';
+      break;
+
+    case 'available':
+      updateState.version = data.version;
+      updateState.available = true;
+      if (homeVer) homeVer.style.display = 'block'; 
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'flex';
+        homeIcon.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:var(--accent2);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span style="color:var(--accent2); font-size:13px; font-weight:700; white-space:nowrap;">Download</span>
+        `;
+        homeIcon.onclick = () => showUpdateNotify({ version: data.version });
+      }
+      break;
+
+    case 'not-available':
+      if (homeVer) homeVer.style.display = 'block';
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'flex';
+        homeIcon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" title="Software aggiornato"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+        homeIcon.onclick = null;
+      }
+      break;
+
+    case 'downloading':
+      updateState.downloading = true;
+      const pct = Math.round(data.percent);
+      if (fillEl) fillEl.style.width = pct + '%';
+      if (pctEl) pctEl.textContent = pct + '% - Download in corso...';
+      if (homeVer) homeVer.style.display = 'block';
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'flex';
+        homeIcon.innerHTML = `
+          <div class="spinner" style="width:12px; height:12px; border-width:2px; margin-right:5px"></div>
+          <span style="font-size:13px; font-weight:700; color:var(--accent2)">Download ${pct}%</span>
+        `;
+      }
+      break;
+
+    case 'downloaded':
+      updateState.downloading = false;
+      updateState.downloaded = true;
+      updateState.version = data.version;
+
+      if (verEl) verEl.textContent = 'Versione ' + data.version + ' pronta!';
+      if (fillEl) fillEl.style.width = '100%';
+      if (pctEl) pctEl.textContent = '100%';
+      if (downloadBtn) downloadBtn.style.display = 'none';
+      if (restartBtn) restartBtn.style.display = 'block';
+      if (infoEl) {
+        infoEl.style.display = 'block';
+        infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
+      }
+
+      if (homeVer) homeVer.style.display = 'block';
+      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'flex';
+        homeIcon.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span style="color:#4caf50; font-size:13px; font-weight:700; white-space:nowrap;">Riavvia per installare</span>
+        `;
+        homeIcon.onclick = () => showUpdateNotify();
+      }
+
+      // Se il pannello è già aperto, lo aggiorniamo, altrimenti lo mostriamo
+      if (panel && panel.classList.contains('show')) {
+        // Già mostrato
+      } else {
+        toast('Download completato! Riavvia per installare.');
+      }
+      break;
+
+    case 'error':
+      updateState.downloading = false;
+      console.error('[RENDERER] Update error:', data.error);
+      if (homeSpinner) homeSpinner.style.display = 'none';
+      if (homeIcon) {
+        homeIcon.style.display = 'flex';
+        homeIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:#ff4444" title="Errore aggiornamento."><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+      }
+      break;
+  }
+}
+
+// ELECTRON AUTO-UPDATE INTEGRATION
+if (window.electronAPI && window.electronAPI.onUpdateStatus) {
+  window.electronAPI.onUpdateStatus(handleUpdateStatus);
+}
+
+// Auto-update version display from package.json
+if (window.electronAPI && window.electronAPI.onAppVersion) {
+  window.electronAPI.onAppVersion((version) => {
+    const verEl = document.getElementById('app-version');
+    const unVerEl = document.getElementById('un-version');
+    const homeVerEl = document.getElementById('home-version-display');
+    if (verEl) verEl.textContent = 'v' + version;
+    if (unVerEl) unVerEl.textContent = 'Versione ' + version;
+    if (homeVerEl) homeVerEl.textContent = 'v' + version;
+  });
+}

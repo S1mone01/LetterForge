@@ -1,107 +1,58 @@
-# LetterForge Pro - Gemini Project Context
+# LetterForge Pro - Context & Guidelines
 
-## Project Overview
-**LetterForge Pro** is a high-performance, desktop-based typography and SVG editor built with **Electron**. It enables users to create, manipulate, and export 2D vector typography and 3D printable models (STL/3MF).
+LetterForge Pro is a specialized desktop application for SVG and 3D typography editing, built with Electron. It enables users to create, manipulate, and export letters and SVG assets for graphic design and 3D printing.
 
-### Key Features
-- **2D Canvas Editor:** Advanced typography manipulation with support for `.ttf`, `.otf`, `.woff`, and `.woff2` fonts.
-- **SVG Library:** Import and manage custom SVG assets.
-- **3D Preview Engine:** Real-time 3D rendering with Boolean operations (Union, Subtract) for creating watertight meshes.
-- **Model Context Protocol (MCP) Integration:** Built-in MCP server that exposes canvas manipulation tools to external AI clients.
-- **Exports:** High-quality SVG for 2D and STL/3MF for 3D printing (optimized for Bambu Studio).
+## 🏗 Architecture Overview
 
-### Core Technologies
-- **Runtime:** Electron 29.x
-- **3D Rendering:** Three.js
-- **3D/CSG Engine:** OpenJSCAD (@jscad/modeling)
-- **Font Parsing:** opentype.js
-- **MCP Server:** Custom Node.js implementation on port 3100.
-- **State Management:** Centralized global state object `S` in the renderer process.
+The project follows a standard Electron architecture with a clear separation between processes:
 
----
-
-## Project Structure
-- `main.js`: Electron main process. Handles application lifecycle, IPC communication, auto-updates, and user data migration.
-- `preload.js`: Security layer bridging the main and renderer processes using `contextBridge`.
-- `mcp-server.js`: Implements the MCP server, exposing tools like `add_text`, `modify_element`, and `get_canvas_state`.
-- `src/`:
-  - `index.html`: Main UI layout and entry point for the renderer.
-  - `script/script.js`: Core application logic, canvas management, and state handling (8,000+ lines).
-  - `script/OpenJSCAD.js`: Integration logic for the 3D CSG engine.
-  - `librerie/`: Local copies of critical dependencies (Three.js, OrbitControls, etc.).
-- `assets/`: App icons and static resources.
-
----
-
-## Building and Running
-
-### Development
-```bash
-# Install dependencies
-npm install
-
-# Start the application in development mode
-npm start
-```
-
-### Production Builds
-```bash
-# Build for Windows (.exe)
-npm run build:win
-
-# Build for macOS (.dmg)
-npm run build:mac
-
-# Build for Linux (.AppImage)
-npm run build:linux
-```
-
-### Build & Publish (GitHub Release)
-To create a release and publish it to GitHub (triggering auto-updates for users), use the following script. **A `GITHUB_TOKEN` is required.**
-
-```bash
-# Windows (PowerShell)
-$env:GITHUB_TOKEN="your_ghp_token"
-npm run release
-
-# Windows (CMD)
-set GITHUB_TOKEN=your_ghp_token
-npm run release
-
-# macOS / Linux
-export GITHUB_TOKEN=your_ghp_token
-npm run release
-```
-The `release` script (runs `build-and-publish.js`) performs:
-1. Cleans the `dist/` directory.
-2. Uses `electron-builder` to build the Windows installer (`--win`).
-3. Publishes the assets and metadata (`latest.yml`) to the configured GitHub repository.
-
----
-
-## Development Conventions
+- **Main Process (`main.js`):** Handles application lifecycle, native window management, file system operations (loading fonts/SVGs, saving projects), auto-updates, and hosts the MCP server.
+- **Preload Script (`preload.js`):** Exposes safe IPC channels to the renderer via `contextBridge`.
+- **Renderer Process (`src/index.html` + `src/script/`):** A vanilla JavaScript application that manages the UI, 2D canvas editor, and 3D preview.
+- **MCP Server (`mcp-server.js`):** A Model Context Protocol server that allows external AI clients to inspect and manipulate the canvas state programmatically.
 
 ### State Management
-The renderer process uses a global object `S` (defined in `src/script/script.js`) to track the application state, including:
-- `letters`: Array of elements currently on the canvas.
-- `sel`: A `Set` of selected element IDs.
-- `zoom`, `canvasW`, `canvasH`: Viewport and canvas dimensions.
-- `history`: Undo/Redo stack.
+The application uses a central global state object `S` defined in `src/script/state.js`. 
+- `S.letters`: Array of elements (text or SVG) currently on the canvas.
+- `S.sel`: A `Set` of currently selected element IDs.
+- `S.history`: Stores snapshots for Undo/Redo functionality.
+- `saveState()`: Call this before any mutation to enable undo.
+- `render()` and `upd()`: Trigger UI and canvas refreshes after state changes.
 
-### Communication (IPC)
-Communication between the main and renderer processes is strictly handled via `ipcMain` and `ipcRenderer`, exposed through `window.electronAPI` in the preload script.
+## 🛠 Technology Stack
 
-### Data Storage
-User fonts and SVGs are stored in the application's `userData` directory to persist across updates:
-- Windows: `%APPDATA%/LetterForge Pro/`
-- macOS: `~/Library/Application Support/LetterForge Pro/`
+- **Runtime:** Electron 29.x
+- **2D Rendering:** HTML5 Canvas (Vanilla JS)
+- **3D Rendering:** Three.js + `three-bvh-csg` for real-time preview.
+- **3D Operations (CSG):** `@jscad/modeling` (OpenJSCAD) for generating watertight meshes.
+- **Typography:** `opentype.js` for font parsing and path extraction.
+- **AI Integration:** custom MCP implementation (Port 3100 by default).
 
-### MCP Integration
-The MCP server allows for "AI-driven design." It receives JSON-RPC commands and emits events that the main process forwards to the renderer via IPC to perform actions on the canvas.
+## 📂 Directory Structure
 
----
+- `src/script/2d/`: Canvas rendering, interaction, and geometry logic.
+- `src/script/3d/`: 3D viewport, CSG operations (Union/Subtract), and export logic (STL/3MF).
+- `src/script/mcp.js`: Handles incoming operations from the AI via the MCP server.
+- `src/librerie/`: Local copies of major dependencies (Three.js, OpenJSCAD, etc.).
+- `assets/`: App icons and static resources.
 
-## Roadmap & TODOs
-- [ ] Refactor `src/script/script.js` into smaller, modular components.
-- [ ] Implement advanced 3D textures and materials.
-- [ ] Expand the MCP toolset for complex multi-step design tasks.
+## 🚀 Key Commands
+
+- `npm start`: Runs the app in development mode.
+- `npm run build:win`: Packages the app for Windows.
+- `npm run release`: Builds and publishes to GitHub (requires `GITHUB_TOKEN`).
+
+## 🤖 AI Integration (MCP)
+
+LetterForge Pro exposes tools to AI clients via MCP. The renderer syncs state to the MCP server every 500ms. AI agents can use tools like:
+- `add_text`, `add_svg`: Create new elements.
+- `modify_element`, `move_element`: Change properties or position.
+- `get_canvas_state`: Inspect all elements and their bounding boxes.
+
+## 📝 Development Conventions
+
+1. **Global State Mutation:** Always wrap significant state changes with `saveState()` to preserve undo history.
+2. **Vanilla JS:** The renderer is intentionally built without heavy frameworks (React/Vue). Keep logic modular in the `src/script/` directory.
+3. **IPC Communication:** Use `window.electronAPI` for any operation requiring file system or native OS access.
+4. **Coordinate System:** The canvas uses a standard 2D coordinate system where (0,0) is the top-left, but many operations center elements based on their bounding box (`bbox`).
+5. **3D Export:** Ensure models are watertight (using OpenJSCAD logic) before exporting to STL or 3MF.

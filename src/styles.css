@@ -1842,3 +1842,39 @@ input[type=range]::-webkit-slider-thumb {
     font-size: 11px;
     color: var(--muted);
 }
+/* --- Save Options Dialog --- */
+#save-options-dialog {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(0, 0, 0, .6);
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+}
+#save-options-dialog.show {
+  display: flex;
+}
+#save-options-dialog .dlg {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px 28px;
+  min-width: 380px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .7);
+}
+#save-opt-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--muted) !important;
+  color: var(--muted) !important;
+  background: transparent !important;
+}
+
+/* --- MCP Server Status --- */
+#mcp-status-dot.active {
+  background: var(--accent) !important;
+  box-shadow: 0 0 8px var(--accent);
+}
