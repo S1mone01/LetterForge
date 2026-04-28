@@ -259,7 +259,11 @@ function setFontSize(val){
 }
 
 function apOp(val){t('vop',Math.round(val*100)+'%');aps(l=>l.op=val);}
-function apBorder(val){t('vborder',val.toFixed(1)+'px');aps(l=>l.borderWidth=val);}
+function apBorder(val){
+  v('pborder', val);
+  v('vborder', val);
+  aps(l=>l.borderWidth=val);
+}
 function apBorderCol(val){aps(l=>l.borderColor=val);}
 
 // ─── Larghezza visiva effettiva di una lettera (tiene conto della scala sx) ───

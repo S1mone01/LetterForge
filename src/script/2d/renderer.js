@@ -302,8 +302,8 @@ function upd(){
   
   v('pop', avgOp); t('vop', Math.round(avgOp * 100) + '%');
 
-  if(allSameBorder) { v('pborder', first.borderWidth || 0); t('vborder', (first.borderWidth || 0).toFixed(1) + 'px'); }
-  else { v('pborder', avgBorder); t('vborder', avgBorder.toFixed(1) + 'px'); }
+  if(allSameBorder) { v('pborder', first.borderWidth || 0); v('vborder', (first.borderWidth || 0).toFixed(1)); }
+  else { v('pborder', avgBorder); v('vborder', avgBorder.toFixed(1)); }
 
   if(allSameBorderCol) { v('pbordercol', first.borderColor); }
   else { v('pbordercol', '#000000'); }
@@ -332,7 +332,7 @@ function resetPropertyFields(){
   v('px', 0); v('py', 0); v('prot', 0); v('vrot', 0); t('vrot', '0°');
   v('psx', 1); v('vsx', '1.00'); v('psy', 1); v('vsy', '1.00');
   v('psk', 0); t('vsk', '0°'); v('pop', 1); t('vop', '100%');
-  v('pborder', 0); t('vborder', '0px'); v('pbordercol', '#000000');
+  v('pborder', 0); v('vborder', 0); v('pbordercol', '#000000');
   v('pgap', 4); t('vgap', '4px'); v('fsize', 80);
   const layerBtn1 = document.getElementById('layer-btn-1'), layerBtn2 = document.getElementById('layer-btn-2'), layerBtn3 = document.getElementById('layer-btn-3');
   if(layerBtn1) layerBtn1.classList.remove('active'); if(layerBtn2) layerBtn2.classList.remove('active'); if(layerBtn3) layerBtn3.classList.remove('active');
