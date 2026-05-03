@@ -56,38 +56,209 @@ function subtract3DObjects() {
   } catch (e) { console.error(e); toast('Errore sottrazione: ' + e.message); }
 }
 
+/**
+ * createPocket3D — versione ibrida (SVG + STL/OBJ)
+ *
+ * Gestisce 4 combinazioni:
+ *   A) sorgente SVG  + target SVG  → pipeline originale invariata
+ *   B) sorgente 3D   + target SVG  → utensile da threeMeshToGeom3 + scale offset
+ *   C) sorgente SVG  + target 3D   → utensile estrusione SVG traslato in world-space
+ *   D) sorgente 3D   + target 3D   → entrambi in world-space, sottrazione diretta
+ */
 function createPocket3D() {
-  if (threeSelectionOrder.length !== 2) { toast('Seleziona 2 oggetti: primo = utensile, secondo = target'); return; }
-  const sourceMesh = threeSelectionOrder[0], targetMesh = threeSelectionOrder[1];
+  if (threeSelectionOrder.length !== 2) {
+    toast('Seleziona 2 oggetti: primo = utensile, secondo = target');
+    return;
+  }
+  const sourceMesh = threeSelectionOrder[0];
+  const targetMesh = threeSelectionOrder[1];
+
   try {
     toast('Creazione tasca in corso...');
+
+    if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) return;
+    const jscad = window.OpenJSCADBridge.jscad;
+
+    // ── Helper: risale la catena boolean per trovare originalPathD ────────────
     function getRootOriginalPathD(mesh) {
-      if (mesh.geometry && mesh.geometry.userData && mesh.geometry.userData.originalPathD) return mesh.geometry.userData.originalPathD;
-      if (mesh.userData && mesh.userData._hiddenTarget) return getRootOriginalPathD(mesh.userData._hiddenTarget);
-      if (mesh.userData && mesh.userData._hiddenTargetA) return getRootOriginalPathD(mesh.userData._hiddenTargetA);
+      if (mesh.geometry?.userData?.originalPathD)
+        return mesh.geometry.userData.originalPathD;
+      if (mesh.userData?._hiddenTarget)
+        return getRootOriginalPathD(mesh.userData._hiddenTarget);
+      if (mesh.userData?._hiddenTargetA)
+        return getRootOriginalPathD(mesh.userData._hiddenTargetA);
       return null;
     }
-    const originalPathD = getRootOriginalPathD(sourceMesh); if (!originalPathD) { toast('Errore: path SVG non trovato'); return; }
-    if (!window.OpenJSCADBridge || !window.OpenJSCADBridge.initialized) return;
-    const jscad = window.OpenJSCADBridge.jscad, geom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(originalPathD);
-    const offsetValue = parseFloat(document.getElementById('pocket-offset-input').value) || 2;
-    const expandedGeom2 = jscad.expansions.expand({ delta: offsetValue, corners: 'round', segments: 32 }, geom2);
-    const pocketDepth = parseFloat(document.getElementById('pocket-depth-input').value) || 5;
-    const cutterGeom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(expandedGeom2, pocketDepth + 15);
-    const targetPathD = getRootOriginalPathD(targetMesh), targetGeom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(targetPathD);
-    const targetColorHex = targetMesh.userData.colorHex || '#' + targetMesh.material.color.getHexString();
-    const targetExtrusion = threeExtrusionLevels[targetColorHex]?.extrusion || 20;
-    const targetGeom3 = window.OpenJSCADBridge.extrudeGeom2ToGeom3(targetGeom2, targetExtrusion);
-    const cutterPos = jscad.transforms.translate([sourceMesh.position.x - targetMesh.position.x + 0.001, sourceMesh.position.y - targetMesh.position.y + 0.001, targetExtrusion - pocketDepth], cutterGeom3);
-    const resultGeom3 = jscad.booleans.subtract(targetGeom3, cutterPos);
-    const resultMesh = new THREE.Mesh(window.OpenJSCADBridge.geom3ToThreeGeometry(resultGeom3), targetMesh.material.clone());
-    resultMesh.position.copy(targetMesh.position); resultMesh.userData = { isBooleanResult: true, isPocketResult: true, colorHex: targetColorHex, _hiddenTarget: targetMesh };
-    targetMesh.visible = false; targetMesh.userData.hiddenByBoolean = true;
-    if (threeExtrusionLevels[targetColorHex]) { const idx = threeExtrusionLevels[targetColorHex].meshes.indexOf(targetMesh); if (idx !== -1) threeExtrusionLevels[targetColorHex].meshes.splice(idx, 1); }
-    threeScene.add(resultMesh); threeMeshes.push(resultMesh);
+
+    // ── Parametri UI ─────────────────────────────────────────────────────────
+    const offsetValue   = parseFloat(document.getElementById('pocket-offset-input').value) || 2;
+    const pocketDepth   = parseFloat(document.getElementById('pocket-depth-input').value)  || 5;
+    const targetColorHex = targetMesh.userData.colorHex
+                        || '#' + targetMesh.material.color.getHexString();
+    
+    // Calcoliamo il Bounding Box del target in world space per determinare il top
+    const targetBB = new THREE.Box3().setFromObject(targetMesh);
+    const targetTop = targetBB.max.z;
+    const targetHeight = targetBB.max.z - targetBB.min.z;
+
+    const sourcePathD = getRootOriginalPathD(sourceMesh);
+    const targetPathD = getRootOriginalPathD(targetMesh);
+
+    // ── BUILD CUTTER geom3 ────────────────────────────────────────────────────
+    let cutterGeom3;
+    let cutterIsWorldSpace;
+
+    if (sourcePathD) {
+      // ── Caso SVG: expand 2D → estrusione ──────────────
+      const geom2    = window.OpenJSCADBridge.parseSVGPathToGeom2(sourcePathD);
+      const expanded = jscad.expansions.expand(
+        { delta: offsetValue, corners: 'round', segments: 32 },
+        geom2
+      );
+      // Lo facciamo alto abbastanza da sporgere sopra il target
+      cutterGeom3        = window.OpenJSCADBridge.extrudeGeom2ToGeom3(expanded, pocketDepth + 10);
+      cutterIsWorldSpace = false;
+
+    } else {
+      // ── Caso STL/OBJ: conversione diretta + scale XY centrato ────────
+      cutterGeom3 = window.OpenJSCADBridge.threeMeshToGeom3(sourceMesh);
+      
+      const sourceBB = new THREE.Box3().setFromObject(sourceMesh);
+      const center = new THREE.Vector3();
+      sourceBB.getCenter(center);
+      
+      const sizeX = sourceBB.max.x - sourceBB.min.x;
+      const sizeY = sourceBB.max.y - sourceBB.min.y;
+      const sizeZ = sourceBB.max.z - sourceBB.min.z;
+
+      const scaleX = sizeX > 0 ? (sizeX + 2 * offsetValue) / sizeX : 1;
+      const scaleY = sizeY > 0 ? (sizeY + 2 * offsetValue) / sizeY : 1;
+      const scaleZ = sizeZ > 0 ? (pocketDepth + 10) / sizeZ : 1;
+      
+      // Scaliamo centrato rispetto al suo centro world
+      cutterGeom3 = jscad.transforms.translate([-center.x, -center.y, -center.z], cutterGeom3);
+      cutterGeom3 = jscad.transforms.scale([scaleX, scaleY, scaleZ], cutterGeom3);
+      cutterGeom3 = jscad.transforms.translate([center.x, center.y, center.z], cutterGeom3);
+      
+      cutterIsWorldSpace = true;
+    }
+
+    // ── BUILD TARGET geom3 ────────────────────────────────────────────────────
+    let targetGeom3;
+    let targetIsWorldSpace;
+
+    if (targetPathD) {
+      const geom2 = window.OpenJSCADBridge.parseSVGPathToGeom2(targetPathD);
+      const targetExtrusion = threeExtrusionLevels[targetColorHex]?.extrusion || 20;
+      targetGeom3        = window.OpenJSCADBridge.extrudeGeom2ToGeom3(geom2, targetExtrusion);
+      targetIsWorldSpace = false;
+    } else {
+      targetGeom3        = window.OpenJSCADBridge.threeMeshToGeom3(targetMesh);
+      targetIsWorldSpace = true;
+    }
+
+    // ── ALLINEAMENTO del cutter ───────────────────────────────────────────────
+    let cutterAligned;
+
+    if (!cutterIsWorldSpace && !targetIsWorldSpace) {
+      // A) SVG + SVG
+      cutterAligned = jscad.transforms.translate(
+        [
+          sourceMesh.position.x - targetMesh.position.x + 0.001,
+          sourceMesh.position.y - targetMesh.position.y + 0.001,
+          targetHeight - pocketDepth
+        ],
+        cutterGeom3
+      );
+    } else if (cutterIsWorldSpace && !targetIsWorldSpace) {
+      // B) STL + SVG
+      // Il cutter è già in world space, il target è in local space SVG.
+      const sourceBB = new THREE.Box3().setFromObject(sourceMesh);
+      const center = new THREE.Vector3();
+      sourceBB.getCenter(center);
+      
+      cutterAligned = jscad.transforms.translate(
+        [
+          -targetMesh.position.x + 0.001,
+          -targetMesh.position.y + 0.001,
+          0
+        ],
+        cutterGeom3
+      );
+      
+      const newCutterHeight = pocketDepth + 10;
+      const currentWorldBottom = center.z - (newCutterHeight / 2);
+      const targetLocalTop = targetHeight; 
+      const zShift = targetLocalTop - pocketDepth - currentWorldBottom;
+      cutterAligned = jscad.transforms.translate([0, 0, zShift], cutterAligned);
+
+    } else if (!cutterIsWorldSpace && targetIsWorldSpace) {
+      // C) SVG + STL
+      cutterAligned = jscad.transforms.translate(
+        [
+          sourceMesh.position.x + 0.001,
+          sourceMesh.position.y + 0.001,
+          targetTop - pocketDepth
+        ],
+        cutterGeom3
+      );
+    } else {
+      // D) STL + STL
+      const sourceBB = new THREE.Box3().setFromObject(sourceMesh);
+      const center = new THREE.Vector3();
+      sourceBB.getCenter(center);
+      const newCutterHeight = pocketDepth + 10;
+      const currentWorldBottom = center.z - (newCutterHeight / 2);
+      const zShift = (targetTop - pocketDepth) - currentWorldBottom;
+      cutterAligned = jscad.transforms.translate([0.001, 0.001, zShift], cutterGeom3);
+    }
+
+    // ── SOTTRAZIONE BOOLEANA ──────────────────────────────────────────────────
+    const resultGeom3 = jscad.booleans.subtract(targetGeom3, cutterAligned);
+    const resultGeo   = window.OpenJSCADBridge.geom3ToThreeGeometry(resultGeom3);
+    const resultMesh  = new THREE.Mesh(resultGeo, targetMesh.material.clone());
+
+    if (targetIsWorldSpace) {
+      resultMesh.position.set(0, 0, 0);
+    } else {
+      resultMesh.position.copy(targetMesh.position);
+    }
+
+    resultMesh.userData = {
+      isBooleanResult: true,
+      isPocketResult:  true,
+      colorHex:        targetColorHex,
+      _hiddenTarget:   targetMesh
+    };
+
+    targetMesh.visible = false;
+    targetMesh.userData.hiddenByBoolean = true;
+
+    if (threeExtrusionLevels[targetColorHex]) {
+      const idx = threeExtrusionLevels[targetColorHex].meshes.indexOf(targetMesh);
+      if (idx !== -1) threeExtrusionLevels[targetColorHex].meshes.splice(idx, 1);
+    }
+
+    threeScene.add(resultMesh);
+    threeMeshes.push(resultMesh);
+
+    if (!threeExtrusionLevels[targetColorHex]) {
+      const targetExtrusion = threeExtrusionLevels[targetColorHex]?.extrusion || 20;
+      threeExtrusionLevels[targetColorHex] = { extrusion: targetExtrusion, meshes: [] };
+      if (threeVisibilityState[targetColorHex] === undefined)
+        threeVisibilityState[targetColorHex] = true;
+    }
+    resultMesh.visible = threeVisibilityState[targetColorHex] ?? true;
     threeExtrusionLevels[targetColorHex].meshes.push(resultMesh);
-    clear3DSelection(); saveState3D(); toast(`✓ Tasca creata!`);
-  } catch (e) { console.error(e); toast('Errore tasca: ' + e.message); }
+
+    clear3DSelection();
+    saveState3D();
+    toast('✓ Tasca creata!');
+
+  } catch (e) {
+    console.error(e);
+    toast('Errore tasca: ' + e.message);
+  }
 }
 
 function duplicate3DSelection() {
