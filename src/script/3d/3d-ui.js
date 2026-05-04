@@ -3,6 +3,8 @@ let threeTransformEnabled = true;
 const COLOR_PRESETS = [
   { name: 'Bianco', hex: '#ffffff' }, { name: 'Nero', hex: '#111111' }, { name: 'Rosso', hex: '#ff0000' }, { name: 'Verde', hex: '#00cc00' }, { name: 'Blu', hex: '#0066ff' },
   { name: 'Giallo', hex: '#ffcc00' }, { name: 'Arancione', hex: '#ff6b35' }, { name: 'Viola', hex: '#8800ff' }, { name: 'Rosa', hex: '#ff66b2' }, { name: 'Ciano', hex: '#00cccc' },
+  { name: 'Blu Chiaro', hex: '#3498db' }, { name: 'Rosso Fuoco', hex: '#e74c3c' }, { name: 'Verde Smeraldo', hex: '#2ecc71' }, { name: 'Giallo Sole', hex: '#f1c40f' },
+  { name: 'Ametista', hex: '#9b59b6' }, { name: 'Turchese', hex: '#1abc9c' }, { name: 'Carota', hex: '#e67e22' }, { name: 'Verde Scuro', hex: '#27ae60' }, { name: 'Oceano', hex: '#2980b9' }, { name: 'Prugna', hex: '#8e44ad' }
 ];
 
 function toggleColorPalette() {
@@ -23,11 +25,16 @@ function initColorPresets() {
   });
 }
 
+let customColorCounter = 1;
 function getColorName(hex) {
   if (!hex) return 'Bianco';
   const normalized = hex.toLowerCase();
   for (const preset of COLOR_PRESETS) if (preset.hex.toLowerCase() === normalized) return preset.name;
-  return hex;
+  
+  const newName = 'Personalizzato ' + customColorCounter++;
+  COLOR_PRESETS.push({ name: newName, hex: normalized });
+  setTimeout(() => initColorPresets(), 10);
+  return newName;
 }
 
 function update3DObjectColor(color) {

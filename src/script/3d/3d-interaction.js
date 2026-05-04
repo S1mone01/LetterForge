@@ -99,7 +99,7 @@ function update3DSelectionHUD() {
   }
   if (threeSelectionOrder.length === 0) {
     hud.innerHTML = '<div style="background:rgba(0,0,0,.6);color:#5a5a7a;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #2a2a3a;">Click oggetto per selezionare · Trascina le frecce per muovere</div>';
-    update3DPositionInputs(); return;
+    update3DPositionInputs(); update3DColorInputs(); return;
   }
   let html = `<div style="background:rgba(200,255,0,.1);color:#c8ff00;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #c8ff00;">${threeSelectionOrder.length} oggetti selezionati</div>`;
   if (threeSelectionOrder.length === 2) html += '<div style="background:rgba(0,255,136,.12);color:#00ff88;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #00ff88;">Unisci/Sottrai disponibile</div>';
@@ -152,9 +152,28 @@ function update3DPositionInputs() {
 
 function update3DColorInputs() {
   const colorBtn = document.getElementById('color-palette-btn'), textInput = document.getElementById('color3d-text');
+  const extrusionContainer = document.getElementById('extrusion-controls');
+  if (extrusionContainer) {
+    const cards = extrusionContainer.querySelectorAll('div[data-color]');
+    cards.forEach(c => { c.style.borderColor = 'var(--border)'; c.style.boxShadow = 'none'; });
+  }
+
   if (threeSelectionOrder.length > 0) {
     const mesh = threeSelectionOrder[0]; if (mesh && mesh.material && mesh.material.color) {
-      const color = '#' + mesh.material.color.getHexString(); if (colorBtn) colorBtn.style.background = color; if (textInput) textInput.value = getColorName(color);
+      const color = '#' + mesh.material.color.getHexString();
+      if (colorBtn) colorBtn.style.background = color;
+      if (textInput) textInput.value = getColorName(color);
+      
+      if (extrusionContainer) {
+        const selectedCard = extrusionContainer.querySelector(`div[data-color="${color}"]`);
+        if (selectedCard) {
+          selectedCard.style.borderColor = 'var(--accent)';
+          selectedCard.style.boxShadow = '0 0 0 1px var(--accent)';
+        }
+      }
     }
-  } else { if (colorBtn) colorBtn.style.background = '#ffffff'; if (textInput) textInput.value = 'Bianco'; }
+  } else {
+    if (colorBtn) colorBtn.style.background = '#ffffff';
+    if (textInput) textInput.value = 'Bianco';
+  }
 }
