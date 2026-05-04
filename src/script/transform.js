@@ -210,7 +210,8 @@ function apScaleFromInput(ax, val) {
 }
 
 function apSkew(val){
-  t('vsk',val+'°');
+  v('vsk', val);
+  v('psk', val);
   // Espandi selezione per includere interi gruppi
   const expandedSel = new Set();
   [...S.sel].forEach(idx => {

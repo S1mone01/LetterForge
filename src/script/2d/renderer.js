@@ -292,7 +292,7 @@ function upd(){
   v('prot', Math.round(avgRot)); v('vrot', Math.round(avgRot));
   v('psx', avgSx); v('vsx', avgSx.toFixed(2));
   v('psy', avgSy); v('vsy', avgSy.toFixed(2));
-  v('psk', Math.round(avgSkew)); t('vsk', Math.round(avgSkew) + '°');
+  v('psk', Math.round(avgSkew)); v('vsk', Math.round(avgSkew));
   
   if(allSameFill) { v('pfill', first.fill); v('fcol', first.fill); }
   else { v('pfill', '#ffffff'); v('fcol', '#ffffff'); }
@@ -329,9 +329,9 @@ function upd(){
 }
 
 function resetPropertyFields(){
-  v('px', 0); v('py', 0); v('prot', 0); v('vrot', 0); t('vrot', '0°');
+  v('px', 0); v('py', 0); v('prot', 0); v('vrot', 0);
   v('psx', 1); v('vsx', '1.00'); v('psy', 1); v('vsy', '1.00');
-  v('psk', 0); t('vsk', '0°'); v('pop', 1); t('vop', '100%');
+  v('psk', 0); v('vsk', 0); v('pop', 1); t('vop', '100%');
   v('pborder', 0); v('vborder', 0); v('pbordercol', '#000000');
   v('pgap', 4); t('vgap', '4px'); v('fsize', 80);
   const layerBtn1 = document.getElementById('layer-btn-1'), layerBtn2 = document.getElementById('layer-btn-2'), layerBtn3 = document.getElementById('layer-btn-3');
