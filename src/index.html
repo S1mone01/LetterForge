@@ -720,8 +720,11 @@
       <button id="toggle-transform-btn" onclick="toggleTransformControls()" title="Abilita/Disabilita frecce di trascinamento" style="width:24px;height:20px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:3px;cursor:pointer;color:#5a5a7a;font-size:11px;padding:0;flex-shrink:0;">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l-3 3-3-3"/><path d="M19 9l3 3-3 3"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
       </button>
+      <button id="switch-transform-mode-btn" onclick="switchTransformMode()" title="Cambia tra Muovi e Scala" style="width:24px;height:20px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--border);border-radius:3px;cursor:pointer;color:#5a5a7a;font-size:11px;padding:0;flex-shrink:0;">
+        <span id="transform-mode-icon">M</span>
+      </button>
     </div>
-    <div id="position-3d-controls" style="margin-bottom:12px;padding:6px 8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);">
+    <div id="position-3d-controls" style="margin-bottom:8px;padding:6px 8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);">
       <div style="display:flex;align-items:center;gap:8px;">
         <label style="color:var(--muted);font-size:10px;min-width:12px;">X</label>
         <input type="number" id="pos3d-x" value="0" step="1" style="width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectPosition('x', +this.value)" onmousedown="event.stopPropagation(); this.focus();">
@@ -731,7 +734,19 @@
         <input type="number" id="pos3d-z" value="0" step="1" style="width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectPosition('z', +this.value)" onmousedown="event.stopPropagation(); this.focus();">
       </div>
     </div>
-    <!-- 3D Actions -->
+
+    <!-- Scale 3D -->
+    <div class="sec-title" style="margin:8px 0 8px 0">Scala</div>
+    <div id="scale-3d-controls" style="margin-bottom:12px;padding:6px 8px;background:var(--panel2);border-radius:5px;border:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="color:var(--muted);font-size:10px;min-width:12px;">X</label>
+        <input type="number" id="sca3d-x" value="1" step="0.1" style="width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectScale('x', +this.value)" onmousedown="event.stopPropagation(); this.focus();">
+        <label style="color:var(--muted);font-size:10px;min-width:12px;">Y</label>
+        <input type="number" id="sca3d-y" value="1" step="0.1" style="width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectScale('y', +this.value)" onmousedown="event.stopPropagation(); this.focus();">
+        <label style="color:var(--muted);font-size:10px;min-width:12px;">Z</label>
+        <input type="number" id="sca3d-z" value="1" step="0.1" style="width:52px;padding:4px 6px;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:10px;border-radius:4px;outline:none;text-align:center;" oninput="update3DObjectScale('z', +this.value)" onmousedown="event.stopPropagation(); this.focus();">
+      </div>
+    </div>    <!-- 3D Actions -->
     <div id="action-3d-buttons" style="margin-bottom:12px;display:flex;gap:8px;">
       <button onclick="duplicate3DSelection()" style="flex:1;padding:6px 12px;background:var(--accent);border:none;border-radius:5px;color:#000;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#d4ff1a'" onmouseout="this.style.background='var(--accent)'">
         Duplica
@@ -780,14 +795,15 @@
         <b style="color:var(--text)">Rotazione:</b> Click sinistro + trascina<br>
         <b style="color:var(--text)">Zoom:</b> Rotella del mouse<br>
         <b style="color:var(--text)">Pan:</b> Click destro + trascina<br>
-        <b style="color:var(--text)">Reset Vista:</b> Premi <kbd style="background:var(--panel2);padding:1px 4px;border-radius:3px;font-size:9px;">Home</kbd>
+        <b style="color:var(--text)">Reset Vista:</b> <kbd>Home</kbd> | 
+        <b style="color:var(--text)">Sposta:</b> <kbd>W</kbd> | 
+        <b style="color:var(--text)">Scala:</b> <kbd>S</kbd>
       </div>
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--muted);font-size:10px;line-height:1.7">
-        <b style="color:#00ff88">Operazioni Booleane:</b><br>
-        <b style="color:#00ff88">①</b> Click → <b style="color:#00ff88">UTENSILE</b> (verde)<br>
-        <b style="color:#ff6b35">②</b> Shift+click → <b style="color:#ff6b35">DESTINATARIO</b> (arancio)<br>
-        <span style="color:var(--text)">• <b>Unisci</b>: fonde i due oggetti</span><br>
-        <span style="color:var(--text)">• <b>Sottrai</b>: ① buca ②, ① rimane</span>
+        <b style="color:#00ff88">Operazioni Booleane (2 oggetti):</b><br>
+        <b style="color:#00ff88">Unisci:</b> Premi <kbd>Z</kbd><br>
+        <b style="color:#ff6b35">Sottrai:</b> Premi <kbd>X</kbd><br>
+        <b style="color:var(--accent)">Fai Spazio:</b> Premi <kbd>C</kbd>
       </div>
     </div>
   </div>

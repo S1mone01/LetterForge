@@ -47,9 +47,15 @@ function addSelectionIndicator(mesh) {
 
   if (isFirst && threeTransformControls && threeTransformEnabled) {
     if (threeTransformControls._pivot) threeScene.remove(threeTransformControls._pivot);
-    const pivot = new THREE.Object3D(); pivot.position.copy(center); pivot.userData.targetMesh = mesh;
+    const pivot = new THREE.Object3D(); 
+    pivot.position.copy(center); 
+    pivot.scale.copy(mesh.scale); // FIX: Inherit current scale
+    pivot.userData.targetMesh = mesh;
     threeScene.add(pivot); threeTransformControls._pivot = pivot;
-    threeTransformControls._pivotStartPos = pivot.position.clone(); threeTransformControls._meshStartPos = mesh.position.clone();
+    threeTransformControls._pivotStartPos = pivot.position.clone(); 
+    threeTransformControls._pivotStartScale = pivot.scale.clone();
+    threeTransformControls._meshStartPos = mesh.position.clone();
+    threeTransformControls._meshStartScale = mesh.scale.clone();
     threeTransformControls.attach(pivot); threeTransformControls.visible = true;
   } else if (threeSelectionOrder.length > 1 && threeTransformControls && threeTransformControls._pivot) {
     const firstMesh = threeSelectionOrder[0];
@@ -99,13 +105,13 @@ function update3DSelectionHUD() {
   }
   if (threeSelectionOrder.length === 0) {
     hud.innerHTML = '<div style="background:rgba(0,0,0,.6);color:#5a5a7a;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #2a2a3a;">Click oggetto per selezionare · Trascina le frecce per muovere</div>';
-    update3DPositionInputs(); update3DColorInputs(); return;
+    update3DPositionInputs(); update3DScaleInputs(); update3DColorInputs(); return;
   }
   let html = `<div style="background:rgba(200,255,0,.1);color:#c8ff00;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #c8ff00;">${threeSelectionOrder.length} oggetti selezionati</div>`;
   if (threeSelectionOrder.length === 2) html += '<div style="background:rgba(0,255,136,.12);color:#00ff88;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px solid #00ff88;">Unisci/Sottrai disponibile</div>';
   if (threeSelectionOrder.length > 1) html += '<div style="background:rgba(0,0,0,.5);color:#8a8a9a;padding:6px 14px;border-radius:20px;font-size:11px;font-family:DM Mono,monospace;border:1px dashed #3a3a4a;">Cambia colore per tutti</div>';
   hud.innerHTML = html;
-  update3DPositionInputs(); update3DColorInputs();
+  update3DPositionInputs(); update3DScaleInputs(); update3DColorInputs();
 }
 
 function updateSelectionIndicators() {
@@ -120,9 +126,14 @@ function updateSelectionIndicators() {
     threeScene.add(wireframe); threeSelectionIndicator.push(wireframe);
     if (idx === 0 && threeTransformControls && threeTransformEnabled) {
       if (threeTransformControls._pivot) threeScene.remove(threeTransformControls._pivot);
-      const pivot = new THREE.Object3D(); pivot.position.copy(center); pivot.userData.targetMesh = mesh;
+      const pivot = new THREE.Object3D(); pivot.position.copy(center); 
+      pivot.scale.copy(mesh.scale); // Keep scale in sync
+      pivot.userData.targetMesh = mesh;
       threeScene.add(pivot); threeTransformControls._pivot = pivot;
-      threeTransformControls._pivotStartPos = pivot.position.clone(); threeTransformControls._meshStartPos = mesh.position.clone();
+      threeTransformControls._pivotStartPos = pivot.position.clone(); 
+      threeTransformControls._pivotStartScale = pivot.scale.clone();
+      threeTransformControls._meshStartPos = mesh.position.clone();
+      threeTransformControls._meshStartScale = mesh.scale.clone();
       threeTransformControls.attach(pivot); threeTransformControls.visible = true;
     }
   });
@@ -143,11 +154,34 @@ function update3DObjectPosition(axis, value) {
   updateSelectionIndicators(); saveState3D();
 }
 
+function update3DObjectScale(axis, value) {
+  if (threeSelectionOrder.length === 0) return;
+  const mesh = threeSelectionOrder[0]; if (!mesh) return;
+  switch(axis) { case 'x': mesh.scale.x = value; break; case 'y': mesh.scale.y = value; break; case 'z': mesh.scale.z = value; break; }
+  if (threeTransformControls && threeTransformControls._pivot) {
+    threeTransformControls._pivot.scale[axis] = value; 
+    threeTransformControls._pivotStartScale[axis] = value; 
+    threeTransformControls._meshStartScale[axis] = value;
+  }
+  updateSelectionIndicators(); saveState3D();
+}
+
 function update3DPositionInputs() {
   const xInput = document.getElementById('pos3d-x'), yInput = document.getElementById('pos3d-y'), zInput = document.getElementById('pos3d-z');
   if (threeSelectionOrder.length > 0) {
     const mesh = threeSelectionOrder[0]; if (mesh) { if (xInput) xInput.value = Math.round(mesh.position.x); if (yInput) yInput.value = Math.round(mesh.position.y); if (zInput) zInput.value = Math.round(mesh.position.z); }
   } else { if (xInput) xInput.value = 0; if (yInput) yInput.value = 0; if (zInput) zInput.value = 0; }
+}
+
+function update3DScaleInputs() {
+  const xInput = document.getElementById('sca3d-x'), yInput = document.getElementById('sca3d-y'), zInput = document.getElementById('sca3d-z');
+  if (threeSelectionOrder.length > 0) {
+    const mesh = threeSelectionOrder[0]; if (mesh) { 
+      if (xInput) xInput.value = mesh.scale.x.toFixed(2); 
+      if (yInput) yInput.value = mesh.scale.y.toFixed(2); 
+      if (zInput) zInput.value = mesh.scale.z.toFixed(2); 
+    }
+  } else { if (xInput) xInput.value = 1; if (yInput) yInput.value = 1; if (zInput) xInput.value = 1; }
 }
 
 function update3DColorInputs() {

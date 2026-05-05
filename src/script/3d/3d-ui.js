@@ -156,6 +156,21 @@ function toggleTransformControls() {
   } else { btn.style.color = '#5a5a7a'; if (threeTransformControls) threeTransformControls.visible = false; }
 }
 
+function switchTransformMode() {
+  if (!threeTransformControls) return;
+  const currentMode = threeTransformControls.getMode();
+  const nextMode = currentMode === 'translate' ? 'scale' : 'translate';
+  threeTransformControls.setMode(nextMode);
+  
+  const icon = document.getElementById('transform-mode-icon');
+  if (icon) icon.textContent = nextMode === 'translate' ? 'M' : 'S';
+  
+  const btn = document.getElementById('switch-transform-mode-btn');
+  if (btn) btn.style.color = nextMode === 'translate' ? '#5a5a7a' : 'var(--accent)';
+  
+  toast(`Modalità gizmo: ${nextMode === 'translate' ? 'Muovi' : 'Scala'}`);
+}
+
 function toggle3DGrid(visible) {
   threeGraphicsSettings.gridVisible = (typeof visible === 'boolean') ? visible : !threeGraphicsSettings.gridVisible;
   if (threeGridHelper) threeGridHelper.visible = threeGraphicsSettings.gridVisible;

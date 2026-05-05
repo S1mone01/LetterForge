@@ -24,6 +24,7 @@ const S = {
   groupCounter: 0, // contatore per generare ID gruppo univoci
   _gapBase: null,  // stato base per lo slider Gap (salvato su mousedown)
   currentProjectName: null, // nome del file progetto attualmente aperto
+  lastImportedName: null, // nome dell'ultimo file importato (STL/SVG)
 };
 let uid=0;
 

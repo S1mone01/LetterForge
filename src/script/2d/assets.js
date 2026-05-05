@@ -79,6 +79,7 @@ function renderSVGs(filter=''){
 function importFonts(files){
   Array.from(files).forEach(f=>{
     const url = URL.createObjectURL(f);
+    S.lastImportedName = f.name;
     const raw = f.name.replace(/\.(ttf|otf|woff2?)$/i,'');
     const cn  = `cf-${raw.replace(/\s+/g,'_')}`;
     new FontFace(cn,`url(${url})`).load().then(face=>{
@@ -303,6 +304,7 @@ function addSVGToCanvas(name){
 function importSVGs(files) {
   Array.from(files).forEach(f => {
     if (!f.name.toLowerCase().endsWith('.svg')) return;
+    S.lastImportedName = f.name;
     const reader = new FileReader();
     reader.onload = ev => {
       try {

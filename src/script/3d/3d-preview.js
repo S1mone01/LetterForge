@@ -169,13 +169,22 @@ function init3DScene() {
   threeTransformControls.addEventListener('objectChange', () => {
     const pivot = threeTransformControls._pivot; if (!pivot) return;
     const mesh = pivot.userData.targetMesh; if (!mesh) return;
+    const mode = threeTransformControls.getMode();
+
     if (!threeTransformControls._dragging) {
       threeTransformControls._pivotStartPos = pivot.position.clone();
+      threeTransformControls._pivotStartScale = pivot.scale.clone();
       threeTransformControls._meshStartPos = mesh.position.clone();
+      threeTransformControls._meshStartScale = mesh.scale.clone();
       threeTransformControls._dragging = true;
     }
-    const delta = new THREE.Vector3().subVectors(pivot.position, threeTransformControls._pivotStartPos);
-    mesh.position.copy(threeTransformControls._meshStartPos).add(delta);
+
+    if (mode === 'translate') {
+      const delta = new THREE.Vector3().subVectors(pivot.position, threeTransformControls._pivotStartPos);
+      mesh.position.copy(threeTransformControls._meshStartPos).add(delta);
+    } else if (mode === 'scale') {
+      mesh.scale.copy(pivot.scale);
+    }
   });
   threeTransformControls.addEventListener('mouseUp', () => {
     if (threeTransformControls._pivot) {
@@ -189,9 +198,13 @@ function init3DScene() {
           l.x = (S.canvasW / 2) + mesh.position.x; l.y = (S.canvasH / 2) + mesh.position.z;
         }
       }
-      saveState3D(); update3DPositionInputs();
+      saveState3D(); update3DPositionInputs(); update3DScaleInputs();
     }
-    threeTransformControls._dragging = false; threeTransformControls._pivotStartPos = null; threeTransformControls._meshStartPos = null;
+    threeTransformControls._dragging = false; 
+    threeTransformControls._pivotStartPos = null; 
+    threeTransformControls._pivotStartScale = null;
+    threeTransformControls._meshStartPos = null;
+    threeTransformControls._meshStartScale = null;
   });
   const resizeObserver = new ResizeObserver(() => {
     if (!threeCamera || !threeRenderer) return;
@@ -247,6 +260,7 @@ function setup3DCanvasKeyboard() {
   const canvas = document.getElementById('preview-3d-canvas'); if (!canvas) return;
   canvas.setAttribute('tabindex', '0');
   canvas.addEventListener('keydown', e => {
+    const key = e.key.toLowerCase();
     if (e.key === 'Escape') close3DPreview();
     else if (e.key === 'Home') {
       if (threeControls && threeMeshes.length > 0) {
@@ -258,6 +272,35 @@ function setup3DCanvasKeyboard() {
         let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.3;
         threeCamera.position.set(0, 0, cameraZ); threeControls.target.set(0, 0, 0); threeControls.update();
       }
+    }
+    else if (key === 'w') {
+      if (threeTransformControls) {
+        threeTransformControls.setMode('translate');
+        const icon = document.getElementById('transform-mode-icon');
+        if (icon) icon.textContent = 'M';
+        const btn = document.getElementById('switch-transform-mode-btn');
+        if (btn) btn.style.color = '#5a5a7a';
+        toast('Modalità: Muovi');
+      }
+    }
+    else if (key === 's') {
+      if (threeTransformControls) {
+        threeTransformControls.setMode('scale');
+        const icon = document.getElementById('transform-mode-icon');
+        if (icon) icon.textContent = 'S';
+        const btn = document.getElementById('switch-transform-mode-btn');
+        if (btn) btn.style.color = 'var(--accent)';
+        toast('Modalità: Scala');
+      }
+    }
+    else if (key === 'z') {
+      if (typeof union3DObjects === 'function') union3DObjects();
+    }
+    else if (key === 'x') {
+      if (typeof subtract3DObjects === 'function') subtract3DObjects();
+    }
+    else if (key === 'c') {
+      if (typeof createPocket3D === 'function') createPocket3D();
     }
   });
   canvas.focus();
@@ -274,7 +317,10 @@ function start3DAnimation() {
         ind.position.copy(bbox.getCenter(new THREE.Vector3()));
       }
     });
-    if (threeTransformControls && threeTransformControls._dragging) update3DPositionInputs();
+    if (threeTransformControls && threeTransformControls._dragging) {
+      update3DPositionInputs();
+      update3DScaleInputs();
+    }
     threeRenderer.render(threeScene, threeCamera);
     if (threeViewportGizmo) threeViewportGizmo.render();
     threeAnimationId = requestAnimationFrame(animate);

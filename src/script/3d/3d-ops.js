@@ -286,6 +286,7 @@ async function importSTL3D() {
   try {
     const result = await window.electronAPI.importSTLFile(); if (!result) return;
     const { name, data } = result, isOBJ = name.toLowerCase().endsWith('.obj');
+    S.lastImportedName = name;
     const binaryString = atob(data), bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
     let geometry = isOBJ ? _parseOBJ(new TextDecoder().decode(bytes)) : _parseSTLBinary(bytes.buffer);
@@ -359,7 +360,15 @@ function exportToSTL() {
   const blob = new Blob([buf], { type: 'application/octet-stream' }), 
         url = URL.createObjectURL(blob), 
         a = document.createElement('a');
-  a.href = url; a.download = `letterforge_design.stl`; 
+  
+  let filename = 'letterforge_design';
+  if (S.currentProjectName) {
+    filename = S.currentProjectName.replace(/\.json$/i, '');
+  } else if (S.lastImportedName) {
+    filename = S.lastImportedName.split('.').slice(0, -1).join('.') || S.lastImportedName;
+  }
+  
+  a.href = url; a.download = `${filename}.stl`; 
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   toast(`STL esportato!`);
 }
@@ -493,7 +502,15 @@ function exportTo3MF() {
 
   const blob = new Blob([zip], { type: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' });
   const url = URL.createObjectURL(blob), a = document.createElement('a');
-  a.href = url; a.download = 'design_multicolore.3mf';
+  
+  let filename = 'design_multicolore';
+  if (S.currentProjectName) {
+    filename = S.currentProjectName.replace(/\.json$/i, '');
+  } else if (S.lastImportedName) {
+    filename = S.lastImportedName.split('.').slice(0, -1).join('.') || S.lastImportedName;
+  }
+  
+  a.href = url; a.download = `${filename}.3mf`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   toast(`3MF multi-colore esportato correttamente!`);
 }
