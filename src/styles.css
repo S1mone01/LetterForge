@@ -1034,7 +1034,7 @@ input:checked+.slider:before {
     outline: none;
 }
 
-.pr .scale-input {
+.scale-input {
     width: 60px;
     padding: 5px 6px;
     background: var(--panel2);
@@ -1048,12 +1048,12 @@ input:checked+.slider:before {
     -moz-appearance: textfield;
 }
 
-.pr .scale-input::-webkit-outer-spin-button,.pr .scale-input::-webkit-inner-spin-button {
+.scale-input::-webkit-outer-spin-button,.scale-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
 
-.pr .prop-input {
+.prop-input {
     width: 52px;
     padding: 5px 6px;
     background: var(--panel2);
@@ -1066,12 +1066,12 @@ input:checked+.slider:before {
     -moz-appearance: textfield;
 }
 
-.pr .prop-input::-webkit-outer-spin-button,.pr .prop-input::-webkit-inner-spin-button {
+.prop-input::-webkit-outer-spin-button,.prop-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
 
-.pr input[type=number]:focus {
+.pr input[type=number]:focus, .prop-input:focus, .scale-input:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(200, 255, 0, .1);
 }
