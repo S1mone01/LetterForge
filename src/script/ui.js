@@ -135,6 +135,24 @@ function quitAndInstall() {
   window.electronAPI.quitAndInstall();
 }
 
+// ── EXIT CONFIRMATION ────────────────────────────────────────────────────
+function showExitModal() {
+  const modal = document.getElementById('exit-confirm');
+  if (modal) modal.classList.add('show');
+}
+function hideExitModal() {
+  const modal = document.getElementById('exit-confirm');
+  if (modal) modal.classList.remove('show');
+}
+function confirmExit() {
+  window.electronAPI.confirmClose();
+}
+
+// ELECTRON AUTO-UPDATE INTEGRATION
+if (window.electronAPI && window.electronAPI.onShowCloseModal) {
+  window.electronAPI.onShowCloseModal(() => showExitModal());
+}
+
 function handleUpdateStatus(data) {
   const panel = document.getElementById('update-notify');
   const verEl = document.getElementById('un-version');

@@ -168,43 +168,120 @@ function init3DScene() {
   threeTransformControls.addEventListener('dragging-changed', e => threeControls.enabled = !e.value);
   threeTransformControls.addEventListener('objectChange', () => {
     const pivot = threeTransformControls._pivot; if (!pivot) return;
-    const mesh = pivot.userData.targetMesh; if (!mesh) return;
     const mode = threeTransformControls.getMode();
 
     if (!threeTransformControls._dragging) {
       threeTransformControls._pivotStartPos = pivot.position.clone();
       threeTransformControls._pivotStartScale = pivot.scale.clone();
-      threeTransformControls._meshStartPos = mesh.position.clone();
-      threeTransformControls._meshStartScale = mesh.scale.clone();
+      
+      // Store initial state for all selected objects
+      threeTransformControls._initialStates = threeSelectionOrder.map(m => ({
+        mesh: m,
+        pos: m.position.clone(),
+        scale: m.scale.clone()
+      }));
+      
       threeTransformControls._dragging = true;
     }
 
     if (mode === 'translate') {
       const delta = new THREE.Vector3().subVectors(pivot.position, threeTransformControls._pivotStartPos);
-      mesh.position.copy(threeTransformControls._meshStartPos).add(delta);
+      threeTransformControls._initialStates.forEach(state => {
+        state.mesh.position.copy(state.pos).add(delta);
+      });
     } else if (mode === 'scale') {
-      mesh.scale.copy(pivot.scale);
+      let ratio = new THREE.Vector3(
+        pivot.scale.x / threeTransformControls._pivotStartScale.x,
+        pivot.scale.y / threeTransformControls._pivotStartScale.y,
+        pivot.scale.z / threeTransformControls._pivotStartScale.z
+      );
+      
+      // If locked, find the dominant axis change and apply it to all
+      if (typeof threeScaleLocked !== 'undefined' && threeScaleLocked) {
+        const dx = Math.abs(ratio.x - 1), dy = Math.abs(ratio.y - 1), dz = Math.abs(ratio.z - 1);
+        let unifiedRatio = 1;
+        if (dx >= dy && dx >= dz) unifiedRatio = ratio.x;
+        else if (dy >= dx && dy >= dz) unifiedRatio = ratio.y;
+        else unifiedRatio = ratio.z;
+        
+        ratio.set(unifiedRatio, unifiedRatio, unifiedRatio);
+        pivot.scale.set(
+          threeTransformControls._pivotStartScale.x * unifiedRatio,
+          threeTransformControls._pivotStartScale.y * unifiedRatio,
+          threeTransformControls._pivotStartScale.z * unifiedRatio
+        );
+      }
+      
+      threeTransformControls._initialStates.forEach(state => {
+        state.mesh.scale.set(
+          state.scale.x * ratio.x,
+          state.scale.y * ratio.y,
+          state.scale.z * ratio.z
+        );
+        
+        const offset = new THREE.Vector3().subVectors(state.pos, threeTransformControls._pivotStartPos);
+        offset.x *= ratio.x;
+        offset.y *= ratio.y;
+        offset.z *= ratio.z;
+        state.mesh.position.copy(threeTransformControls._pivotStartPos).add(offset);
+      });
     }
+
+    // DINAMICALLY update wireframes (selection indicators) during drag
+    threeSelectionIndicator.forEach(ind => {
+      const target = ind.userData.targetMesh;
+      if (target) {
+        // Position update
+        const bbox = new THREE.Box3().setFromObject(target);
+        ind.position.copy(bbox.getCenter(new THREE.Vector3()));
+        
+        // Scale update for wireframe to match mesh scaling in real-time
+        if (mode === 'scale') {
+            const size = bbox.getSize(new THREE.Vector3());
+            // Since BoxGeometry was created with size * 1.02, we need to adjust the ind.scale 
+            // relative to how the mesh scale changed from the start of the drag.
+            const meshStartScale = threeTransformControls._initialStates.find(s => s.mesh === target)?.scale;
+            if (meshStartScale) {
+                ind.scale.set(
+                    target.scale.x / meshStartScale.x,
+                    target.scale.y / meshStartScale.y,
+                    target.scale.z / meshStartScale.z
+                );
+            }
+        }
+      }
+    });
   });
   threeTransformControls.addEventListener('mouseUp', () => {
     if (threeTransformControls._pivot) {
-      const mesh = threeTransformControls._pivot.userData.targetMesh;
-      if (mesh && mesh.userData.letterId !== undefined) {
-        const l = S.letters.find(x => x.id === mesh.userData.letterId);
-        if (l && l.isSTL) {
-          l.pos3d = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
-          l.rot3d = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
-          l.sca3d = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
-          l.x = (S.canvasW / 2) + mesh.position.x; l.y = (S.canvasH / 2) + mesh.position.z;
+      threeSelectionOrder.forEach(mesh => {
+        if (mesh && mesh.userData.letterId !== undefined) {
+          const l = S.letters.find(x => x.id === mesh.userData.letterId);
+          if (l && l.isSTL) {
+            l.pos3d = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
+            l.rot3d = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
+            l.sca3d = { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z };
+            l.x = (S.canvasW / 2) + mesh.position.x; l.y = (S.canvasH / 2) + mesh.position.z;
+          }
         }
+      });
+      saveState3D(); 
+      update3DPositionInputs(); 
+      update3DScaleInputs();
+      
+      // Mark that we just finished dragging to prevent on3DObjectClick from changing selection
+      threeTransformControls._justFinishedDragging = true;
+      setTimeout(() => { if (threeTransformControls) threeTransformControls._justFinishedDragging = false; }, 100);
+
+      // REFRESH indicators (this recreates them with 1.0 scale and new geometry size)
+      if (typeof updateSelectionIndicators === 'function') {
+        updateSelectionIndicators();
       }
-      saveState3D(); update3DPositionInputs(); update3DScaleInputs();
     }
     threeTransformControls._dragging = false; 
     threeTransformControls._pivotStartPos = null; 
     threeTransformControls._pivotStartScale = null;
-    threeTransformControls._meshStartPos = null;
-    threeTransformControls._meshStartScale = null;
+    threeTransformControls._initialStates = null;
   });
   const resizeObserver = new ResizeObserver(() => {
     if (!threeCamera || !threeRenderer) return;

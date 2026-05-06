@@ -219,6 +219,20 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
 
+  // ── Conferma chiusura ──────────────────────────────────────────────────
+  let isQuitting = false;
+  win.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      win.webContents.send('show-close-modal');
+    }
+  });
+
+  ipcMain.on('confirm-close', () => {
+    isQuitting = true;
+    app.quit();
+  });
+
   // Rimuovi menu di default
   win.setMenuBarVisibility(false);
 

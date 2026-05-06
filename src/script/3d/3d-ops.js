@@ -308,7 +308,13 @@ function _collectTrisFromMesh(mesh) {
 
 function _groupMeshesConnected() {
   if (!threeScene || threeMeshes.length === 0) return null;
-  const active = threeMeshes.filter(m => threeScene.children.includes(m) && m.visible && !m.userData.isSubtracted);
+  let active = threeMeshes.filter(m => threeScene.children.includes(m) && m.visible && !m.userData.isSubtracted);
+  
+  // Se c'è una selezione attiva in 3D, esporta solo quella
+  if (typeof threeSelectionOrder !== 'undefined' && threeSelectionOrder.length > 0) {
+    active = active.filter(m => threeSelectionOrder.includes(m));
+  }
+  
   if (!active.length) return null;
   const n = active.length, bboxes = active.map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); });
   const parent = Array.from({ length: n }, (_, i) => i);
@@ -331,8 +337,17 @@ function _triNormal(a, b, c) {
 }
 
 function exportToSTL() {
-  const active = threeMeshes.filter(m => threeScene.children.includes(m) && m.visible && !m.userData.isSubtracted);
-  if (!active.length) { toast('Nessun elemento 3D visibile!'); return; }
+  let active = threeMeshes.filter(m => threeScene.children.includes(m) && m.visible && !m.userData.isSubtracted);
+  
+  // Se c'è una selezione attiva in 3D, esporta solo quella
+  if (typeof threeSelectionOrder !== 'undefined' && threeSelectionOrder.length > 0) {
+    active = active.filter(m => threeSelectionOrder.includes(m));
+  }
+  
+  if (!active.length) { 
+    toast(typeof threeSelectionOrder !== 'undefined' && threeSelectionOrder.length > 0 ? 'La selezione non contiene elementi esportabili!' : 'Nessun elemento 3D visibile!'); 
+    return; 
+  }
   
   const tris = [];
   active.forEach(m => tris.push(..._collectTrisFromMesh(m)));
@@ -375,7 +390,10 @@ function exportToSTL() {
 
 function exportTo3MF() {
   const groupsList = _groupMeshesConnected(); 
-  if (!groupsList) { toast('Nessun elemento 3D visibile!'); return; }
+  if (!groupsList) { 
+    toast(typeof threeSelectionOrder !== 'undefined' && threeSelectionOrder.length > 0 ? 'La selezione non contiene elementi esportabili!' : 'Nessun elemento 3D visibile!'); 
+    return; 
+  }
 
   const crcTable = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {

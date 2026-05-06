@@ -55,6 +55,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onMCPExecuteOperation: (callback) => ipcRenderer.on('mcp-execute-operation', (_event, operation) => callback(operation)),
     mcpOperationResult: (result) => ipcRenderer.send('mcp-operation-result', result),
 
+    // Close Confirmation
+    onShowCloseModal: (callback) => ipcRenderer.on('show-close-modal', () => callback()),
+    confirmClose: () => ipcRenderer.send('confirm-close'),
+
     // OpenJSCAD loader
     loadOpenJSCAD: async () => {
       if (jscadModeling) {

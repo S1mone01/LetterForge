@@ -1347,7 +1347,7 @@ input[type=range]::-webkit-slider-thumb {
 }
 
 /* Custom confirm dialog */
-#custom-confirm, #custom-prompt {
+#custom-confirm, #custom-prompt, #exit-confirm {
     display: none;
     position: fixed;
     inset: 0;
@@ -1358,11 +1358,11 @@ input[type=range]::-webkit-slider-thumb {
     justify-content: center;
 }
 
-#custom-confirm.show, #custom-prompt.show {
+#custom-confirm.show, #custom-prompt.show, #exit-confirm.show {
     display: flex;
 }
 
-#custom-confirm .dlg, #custom-prompt .dlg {
+#custom-confirm .dlg, #custom-prompt .dlg, #exit-confirm .dlg {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 6px;
