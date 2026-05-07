@@ -16,6 +16,12 @@ if (app.isPackaged) {
   autoUpdater = require('electron-updater').autoUpdater;
 }
 
+// Global flag to bypass close confirmation when quitting
+let isQuitting = false;
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 // ── Splash screen window ───────────────────────────────────────────────────
 let splashWindow = null;
 
@@ -220,7 +226,6 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
 
   // ── Conferma chiusura ──────────────────────────────────────────────────
-  let isQuitting = false;
   win.on('close', (e) => {
     if (!isQuitting) {
       e.preventDefault();
@@ -330,6 +335,7 @@ function createWindow() {
 
   ipcMain.handle('quit-and-install', async () => {
     if (!autoUpdater) return { success: false, reason: 'dev-mode' };
+    isQuitting = true;
     autoUpdater.quitAndInstall();
     return { success: true };
   });
