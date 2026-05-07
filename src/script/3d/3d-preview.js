@@ -97,6 +97,9 @@ function restoreState3D(state) {
 
 function open3DPreview() {
   try {
+    const titleLogo = document.getElementById('main-title-logo');
+    if (titleLogo) titleLogo.innerHTML = 'Letter<span>Forge</span> 3D';
+
     document.getElementById('preview-3d-overlay').style.display = 'block';
     init3DScene(); setup3DCanvasKeyboard(); build3DObjects(); start3DAnimation();
     setTimeout(() => {
@@ -140,6 +143,12 @@ function close3DPreview() {
     }
     const hudEl = document.getElementById('sel3d-hud'); if (hudEl) hudEl.remove();
     document.getElementById('preview-3d-overlay').style.display = 'none';
+
+    const actions3D = document.getElementById('title-bar-actions-3d');
+    if (actions3D) actions3D.style.display = 'none';
+
+    const titleLogo = document.getElementById('main-title-logo');
+    if (titleLogo) titleLogo.innerHTML = 'Letter<span>Forge</span>';
   });
 }
 

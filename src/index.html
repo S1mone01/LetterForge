@@ -29,6 +29,14 @@
 
 <body onload="initHome()">
 
+<!-- ── CUSTOM TITLE BAR ── -->
+<div class="title-bar">
+  <div class="logo" id="main-title-logo">Letter<span>Forge</span></div>
+  <div id="title-bar-filename" class="title-bar-filename">Nuovo file</div>
+  <div class="title-bar-content">
+  </div>
+</div>
+
 <!-- ── HOME SCREEN ──────────────────────────────────────────────── -->
 <div id="home-screen" class="home-screen">
   <div class="home-content">
@@ -77,7 +85,6 @@
 
 <!-- ── TOP HEADER (Toolbar) ─────────────────────────────────────── -->
 <header>
-  <div class="logo">Letter<span>Forge</span></div>
   
   <!-- History Controls -->
   <div style="display:flex;align-items:center;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
@@ -311,7 +318,7 @@
     </div>
     
     <!-- 3D Sidebar Panel (Preview) -->
-    <div id="preview-3d-panel" style="display:none;position:fixed;top:46px;right:0;width:420px;height:calc(100vh - 46px);background:var(--panel);border-left:1px solid var(--border);z-index:100;flex-direction:column;">
+    <div id="preview-3d-panel" style="display:none;position:fixed;top:78px;right:0;width:420px;height:calc(100vh - 78px);background:var(--panel);border-left:1px solid var(--border);z-index:100;flex-direction:column;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <div class="sec-title" style="margin:0;font-size:11px;">ANTEPRIMA 3D</div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
@@ -620,11 +627,9 @@
 </div>
 
 <!-- ── 3D FULLSCREEN OVERLAY ────────────────────────────────────── -->
-<div id="preview-3d-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#0d0d0f;">
+<div id="preview-3d-overlay" style="display:none;position:fixed;top:32px;left:0;right:0;bottom:0;z-index:99999;background:#0d0d0f;">
   <!-- Overlay Header -->
   <div style="position:absolute;top:0;left:0;right:0;height:56px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;z-index:10;">
-    <div class="logo" style="margin-right:16px">Letter<span>Forge</span> 3D</div>
-    
     <!-- 3D History -->
     <div style="display:flex;align-items:center;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
       <button class="btn btn-icon" onclick="undo3D()" title="Annulla (Ctrl+Z)">
@@ -637,21 +642,21 @@
     
     <!-- CSG Operations -->
     <div style="display:flex;align-items:center;gap:5px;margin-right:14px;border-right:1px solid var(--border);padding-right:14px">
-      <button class="btn" onclick="union3DObjects()" onmousedown="event.stopPropagation()" style="border-color:#00ff88;color:#00ff88;padding:4px 10px;font-size:11px;" title="Unisci due oggetti 3D: seleziona due oggetti con Shift+click, poi premi Unisci">
+      <button class="btn" onclick="union3DObjects()" onmousedown="event.stopPropagation()" style="border-color:#00ff88;color:#00ff88;padding:4px 10px;font-size:11px;" title="Unisci due oggetti 3D (Z)">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="16" cy="12" r="10"/></svg>
         Unisci - Z
       </button>
-      <button class="btn" onclick="subtract3DObjects()" onmousedown="event.stopPropagation()" style="border-color:#ff6b35;color:#ff6b35;padding:4px 10px;font-size:11px;" title="Sottrai: 1° click = UTENSILE (verde, taglia), Shift+click = DESTINATARIO (arancio, viene bucato)">
+      <button class="btn" onclick="subtract3DObjects()" onmousedown="event.stopPropagation()" style="border-color:#ff6b35;color:#ff6b35;padding:4px 10px;font-size:11px;" title="Sottrai oggetti (X)">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 12h6"/></svg>
         Sottrai - X
       </button>
-      <button class="btn" onclick="createPocket3D()" onmousedown="event.stopPropagation()" style="border-color:#9b59b6;color:#9b59b6;padding:4px 10px;font-size:11px;" title="Crea tasca: duplica il primo oggetto, lo riduce a 5px di altezza, applica offset 2px e lo sottrae dal secondo">
+      <button class="btn" onclick="createPocket3D()" onmousedown="event.stopPropagation()" style="border-color:#9b59b6;color:#9b59b6;padding:4px 10px;font-size:11px;" title="Crea tasca (C)">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
-        Fai Spazio - C
+        Tasca - C
       </button>
     </div>
     
-    <button class="btn" onclick="importSTL3D()" onmousedown="event.stopPropagation()" style="border-color:#3498db;color:#3498db;padding:4px 10px;font-size:11px;" title="Importa file STL esterno come oggetto 3D">
+    <button class="btn" onclick="importSTL3D()" onmousedown="event.stopPropagation()" style="border-color:#3498db;color:#3498db;padding:4px 10px;font-size:11px;" title="Importa STL">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"></line></svg>
       Importa 3D
     </button>
@@ -659,7 +664,7 @@
     <div style="flex:1"></div>
     
     <!-- 3D Exports -->
-    <button class="btn btn-accent" onclick="exportTo3MF()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta 3MF — ogni colore = un oggetto separato in PrusaSlicer/Bambu">
+    <button class="btn btn-accent" onclick="exportTo3MF()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta 3MF">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="7 14 12 9 17 14"/>
@@ -667,7 +672,7 @@
       </svg>
       3MF
     </button>
-    <button class="btn" onclick="exportToSTL()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta STL — un file singolo con tutti gli oggetti">
+    <button class="btn" onclick="exportToSTL()" onmousedown="event.stopPropagation()" style="margin-right:8px;" title="Esporta STL">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="7 14 12 9 17 14"/>
@@ -678,7 +683,7 @@
     
     <button class="btn" onclick="close3DPreview()" onmousedown="event.stopPropagation()" style="background:#ff4444;color:#fff;border-color:#ff4444;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
-      Indietro
+      Esci
     </button>
   </div>
   
@@ -687,7 +692,6 @@
   
   <!-- 3D Property Panel -->
   <div id="preview-3d-controls" style="position:absolute;top:56px;right:0;width:280px;bottom:0;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;padding:12px;">
-    
     <!-- Render Settings -->
     <div class="sec-title" style="margin-bottom:8px">Grafica</div>
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px;">

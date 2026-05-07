@@ -106,6 +106,7 @@ async function saveProjectAs() {
     if (!name) return;
     if (!name.endsWith('.json')) name += '.json';
     S.currentProjectName = name;
+    updateTitleBar();
     await saveProjectDirectly();
   });
 }
@@ -145,6 +146,7 @@ async function saveProjectDirectly() {
           await window.electronAPI.saveProjectInternal(previewName, previewData);
         }
         renderRecentProjects();
+        updateTitleBar();
         toast('Progetto salvato ✓');
       }
     } else {
@@ -175,6 +177,7 @@ async function loadProject() {
       }
       projectData = response.content;
       S.currentProjectName = response.name;
+      updateTitleBar();
     } else {
       // Fallback per browser: input file
       const input = document.createElement('input');
@@ -248,6 +251,7 @@ function applyProjectData(data) {
   else renderSVGs();
   upd();
   saveState();
+  updateTitleBar();
   
   toast(`Progetto caricato: ${S.letters.length} elementi ✓`);
 }

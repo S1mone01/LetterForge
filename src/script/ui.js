@@ -6,6 +6,29 @@ function toast(msg){
   setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),300);},2200);
 }
 
+// ── AGGIORNA TITOLO BARRA ──────────────────────────────────────────────────
+function updateTitleBar() {
+  const el = document.getElementById('title-bar-filename');
+  if (!el) return;
+  
+  const home = document.getElementById('home-screen');
+  const isHomeVisible = home && home.style.display !== 'none' && !home.classList.contains('hidden');
+
+  if (isHomeVisible) {
+    el.textContent = '';
+    return;
+  }
+  
+  if (S.currentProjectName) {
+    el.textContent = S.currentProjectName.replace('.json', '');
+  } else if (S.lastImportedName) {
+    // Se non c'è un progetto salvato, mostriamo l'ultimo file importato
+    el.textContent = S.lastImportedName;
+  } else {
+    el.textContent = 'Nuovo file';
+  }
+}
+
 // ── CUSTOM CONFIRM (evita dialog nativo che causa perdita focus in Electron) ──
 function customConfirm(msg, onOk) {
   const overlay = document.getElementById('custom-confirm');

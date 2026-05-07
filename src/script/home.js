@@ -10,6 +10,7 @@ async function initHome() {
 
   // Handle Recent Projects
   renderRecentProjects();
+  if (typeof updateTitleBar === 'function') updateTitleBar();
 }
 
 async function renderRecentProjects() {
@@ -88,6 +89,7 @@ function newProject() {
     S.letters = [];
     S.sel.clear();
     S.currentProjectName = null;
+    S.lastImportedName = null;
     if (typeof render === 'function') render();
     if (typeof renderHandles === 'function') renderHandles();
     if (typeof upd === 'function') upd();
@@ -96,6 +98,7 @@ function newProject() {
     toggleViewMode('fonts');
 
     if (typeof saveState === 'function') saveState();
+    if (typeof updateTitleBar === 'function') updateTitleBar();
     toast('Nuovo progetto creato ✓');
   }
 }
@@ -104,13 +107,14 @@ async function openProjectFromFile() {
   if (window.electronAPI && window.electronAPI.loadProjectFile) {
     const response = await window.electronAPI.loadProjectFile();
     if (response) {
-      applyProjectData(response.content);
-      S.currentProjectName = response.name;
       const home = document.getElementById('home-screen');
       if (home) {
         home.classList.add('hidden');
         setTimeout(() => home.style.display = 'none', 400);
       }
+      applyProjectData(response.content);
+      S.currentProjectName = response.name;
+      if (typeof updateTitleBar === 'function') updateTitleBar();
     }
   }
 }
@@ -120,13 +124,14 @@ async function loadRecentProject(path) {
     try {
       const response = await window.electronAPI.loadSavedProjectByPath(path);
       if (response) {
-        applyProjectData(response.content);
-        S.currentProjectName = response.name;
         const home = document.getElementById('home-screen');
         if (home) {
           home.classList.add('hidden');
           setTimeout(() => home.style.display = 'none', 400);
         }
+        applyProjectData(response.content);
+        S.currentProjectName = response.name;
+        if (typeof updateTitleBar === 'function') updateTitleBar();
       }
     } catch (e) {
       toast('Errore nel caricamento del progetto');
@@ -140,7 +145,10 @@ function goHome() {
     if (home) {
       renderRecentProjects();
       home.style.display = 'flex';
-      setTimeout(() => home.classList.remove('hidden'), 10);
+      setTimeout(() => {
+        home.classList.remove('hidden');
+        if (typeof updateTitleBar === 'function') updateTitleBar();
+      }, 10);
     }
   });
 }

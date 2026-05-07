@@ -287,6 +287,7 @@ async function importSTL3D() {
     const result = await window.electronAPI.importSTLFile(); if (!result) return;
     const { name, data } = result, isOBJ = name.toLowerCase().endsWith('.obj');
     S.lastImportedName = name;
+    updateTitleBar();
     const binaryString = atob(data), bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
     let geometry = isOBJ ? _parseOBJ(new TextDecoder().decode(bytes)) : _parseSTLBinary(bytes.buffer);

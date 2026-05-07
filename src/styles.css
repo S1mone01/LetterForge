@@ -55,7 +55,8 @@ header {
     border-bottom: 1px solid var(--border);
     background: var(--panel);
     flex-shrink: 0;
-    z-index: 50
+    z-index: 50;
+    margin-top: 32px; /* Accounting for fixed title-bar */
 }
 
 .logo {
@@ -64,7 +65,8 @@ header {
     font-size: 15px;
     letter-spacing: -.02em;
     color: var(--accent);
-    white-space: nowrap
+    white-space: nowrap;
+    user-select: none;
 }
 
 .logo span {
@@ -93,6 +95,46 @@ header {
     box-shadow: 0 1px 2px rgba(0, 0, 0, .2), inset 0 1px 0 rgba(255, 255, 255, .05);
     position: relative;
     overflow: hidden;
+}
+
+/* ── Custom Title Bar ── */
+.title-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background: #1e1e1e;
+    display: flex;
+    align-items: center;
+    -webkit-app-region: drag;
+    flex-shrink: 0;
+    padding-right: 140px; /* Space for window controls */
+    border-bottom: 1px solid var(--border);
+    z-index: 1000000;
+}
+
+.title-bar .logo {
+    font-size: 13px;
+    margin-left: 16px;
+    pointer-events: none;
+}
+
+.title-bar-content {
+    flex: 1;
+}
+
+.title-bar-filename {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    font-family: 'DM Mono', monospace;
+    pointer-events: none;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .btn::before {
@@ -219,6 +261,18 @@ header {
     flex-shrink: 0;
 }
 
+.btn-mini {
+    padding: 2px 8px !important;
+    height: 22px !important;
+    font-size: 10px !important;
+    border-radius: 4px !important;
+}
+
+.btn-mini svg {
+    width: 11px !important;
+    height: 11px !important;
+}
+
 .cvsize {
     display: flex;
     align-items: center;
@@ -302,7 +356,7 @@ header {
 
 .app {
     display: flex;
-    height: calc(100vh - 46px)
+    height: calc(100vh - 78px)
 }
 
 .left-panel {
@@ -1571,6 +1625,8 @@ input[type=range]::-webkit-slider-thumb {
 .home-screen {
     position: fixed;
     inset: 0;
+    top: 32px;
+    height: calc(100vh - 32px);
     background: var(--bg);
     z-index: 2000; /* Sopra a tutto */
     display: flex;

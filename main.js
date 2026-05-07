@@ -216,6 +216,12 @@ function createWindow() {
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     backgroundColor: '#0d0d0f',
     show: false, // Nascondi finché non è pronta
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#1e1e1e',
+      symbolColor: '#e8e8f0',
+      height: 32
+    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
