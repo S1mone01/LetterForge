@@ -4,6 +4,110 @@ let threeSelectionIndicator = [];
 let threeSelectedMesh = null;
 let threeSelectionOrder = [];
 let threeScaleLocked = false;
+let isMarqueeActive = false;
+let marqueeStart = { x: 0, y: 0 };
+let marqueeEl = null;
+let marqueeJustFinished = false;
+
+function on3DMousedown(event) {
+  if (event.altKey && event.button === 0) {
+    const container = document.getElementById('preview-3d-canvas');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    
+    isMarqueeActive = true;
+    marqueeStart.x = event.clientX - rect.left;
+    marqueeStart.y = event.clientY - rect.top;
+    
+    if (!marqueeEl) {
+      marqueeEl = document.createElement('div');
+      marqueeEl.style.cssText = 'position:absolute;border:1px solid var(--accent);background:rgba(200,255,0,0.1);pointer-events:none;z-index:10000;display:none;';
+      container.appendChild(marqueeEl);
+    }
+    
+    marqueeEl.style.left = marqueeStart.x + 'px';
+    marqueeEl.style.top = marqueeStart.y + 'px';
+    marqueeEl.style.width = '0px';
+    marqueeEl.style.height = '0px';
+    marqueeEl.style.display = 'block';
+    
+    if (threeControls) threeControls.enabled = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
+function on3DMousemove(event) {
+  if (isMarqueeActive) {
+    const container = document.getElementById('preview-3d-canvas');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const currentX = event.clientX - rect.left;
+    const currentY = event.clientY - rect.top;
+    
+    const x = Math.min(currentX, marqueeStart.x);
+    const y = Math.min(currentY, marqueeStart.y);
+    const w = Math.abs(currentX - marqueeStart.x);
+    const h = Math.abs(currentY - marqueeStart.y);
+    
+    marqueeEl.style.left = x + 'px';
+    marqueeEl.style.top = y + 'px';
+    marqueeEl.style.width = w + 'px';
+    marqueeEl.style.height = h + 'px';
+  }
+}
+
+function on3DMouseup(event) {
+  if (isMarqueeActive) {
+    isMarqueeActive = false;
+    const rect = marqueeEl ? marqueeEl.getBoundingClientRect() : { width: 0, height: 0 };
+    if (marqueeEl) marqueeEl.style.display = 'none';
+    if (threeControls) threeControls.enabled = true;
+    
+    if (rect.width > 2 || rect.height > 2) {
+      selectObjectsInRect(rect, event.shiftKey);
+      marqueeJustFinished = true;
+      setTimeout(() => marqueeJustFinished = false, 100);
+    }
+  }
+}
+
+function selectObjectsInRect(marqueeRect, shiftKey) {
+  if (!threeScene || !threeCamera || !threeRenderer) return;
+  
+  const canvasRect = threeRenderer.domElement.getBoundingClientRect();
+  if (!shiftKey) clear3DSelection();
+
+  threeMeshes.filter(m => m.visible).forEach(mesh => {
+    const bbox = new THREE.Box3().setFromObject(mesh);
+    const points = [
+      new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.min.z),
+      new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.max.z),
+      new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.min.z),
+      new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.max.z),
+      new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.min.z),
+      new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.max.z),
+      new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.min.z),
+      new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.max.z)
+    ];
+    
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    points.forEach(p => {
+      p.project(threeCamera);
+      const x = (p.x * 0.5 + 0.5) * canvasRect.width + canvasRect.left;
+      const y = (-(p.y * 0.5) + 0.5) * canvasRect.height + canvasRect.top;
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    });
+    
+    if (maxX >= marqueeRect.left && minX <= marqueeRect.right &&
+        maxY >= marqueeRect.top && minY <= marqueeRect.bottom) {
+      if (!threeSelectionOrder.includes(mesh)) threeSelectionOrder.push(mesh);
+    }
+  });
+  
+  updateSelectionIndicators();
+}
 
 function toggleScaleLock3D() {
   threeScaleLocked = !threeScaleLocked;
@@ -21,8 +125,8 @@ function toggleScaleLock3D() {
 function on3DObjectClick(event) {
   if (!threeScene || !threeCamera || !threeRenderer) return;
   
-  // Prevent selection change if we just finished dragging an object
-  if (threeTransformControls && threeTransformControls._justFinishedDragging) {
+  // Prevent selection change if we just finished dragging an object or marquee
+  if ((threeTransformControls && threeTransformControls._justFinishedDragging) || (typeof marqueeJustFinished !== 'undefined' && marqueeJustFinished)) {
     return;
   }
 

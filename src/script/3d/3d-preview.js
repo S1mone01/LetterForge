@@ -117,6 +117,9 @@ function close3DPreview() {
     if (threeRenderer && threeRenderer.domElement) {
       threeRenderer.domElement.removeEventListener('click', on3DObjectClick);
       threeRenderer.domElement.removeEventListener('dblclick', on3DObjectDblClick);
+      threeRenderer.domElement.removeEventListener('mousedown', on3DMousedown);
+      window.removeEventListener('mousemove', on3DMousemove);
+      window.removeEventListener('mouseup', on3DMouseup);
     }
     if (threeScene) {
       threeScene.traverse(obj => {
@@ -167,6 +170,9 @@ function init3DScene() {
   threeControls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY };
   threeRenderer.domElement.addEventListener('click', on3DObjectClick);
   threeRenderer.domElement.addEventListener('dblclick', on3DObjectDblClick);
+  threeRenderer.domElement.addEventListener('mousedown', on3DMousedown);
+  window.addEventListener('mousemove', on3DMousemove);
+  window.addEventListener('mouseup', on3DMouseup);
   threeAmbientLight = new THREE.AmbientLight(0xffffff, 0.6); threeScene.add(threeAmbientLight);
   threeDirectionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8); threeDirectionalLight1.position.set(200, 300, 400); threeScene.add(threeDirectionalLight1);
   threeDirectionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4); threeDirectionalLight2.position.set(-200, -100, 200); threeScene.add(threeDirectionalLight2);
