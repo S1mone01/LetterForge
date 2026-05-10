@@ -160,13 +160,16 @@ function init3DScene() {
   while (container.firstChild) container.removeChild(container.firstChild);
   threeScene = new THREE.Scene(); threeScene.background = new THREE.Color(0x1a1a22);
   const aspect = container.clientWidth / container.clientHeight;
-  threeCamera = new THREE.PerspectiveCamera(60, aspect, 0.1, 10000); threeCamera.position.set(0, 0, 800);
-  threeRenderer = new THREE.WebGLRenderer({ antialias: true });
+  // Increase range for "infinite" zoom: 0.01 near to 1,000,000 far
+  threeCamera = new THREE.PerspectiveCamera(60, aspect, 0.01, 1000000); threeCamera.position.set(0, 0, 800);
+  // Enable logarithmicDepthBuffer for better depth precision at huge scales
+  threeRenderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
   threeRenderer.setSize(container.clientWidth, container.clientHeight);
   threeRenderer.setPixelRatio(window.devicePixelRatio);
   container.appendChild(threeRenderer.domElement);
   threeControls = new THREE.OrbitControls(threeCamera, threeRenderer.domElement);
-  threeControls.enableDamping = true; threeControls.dampingFactor = 0.08;
+  threeControls.enableDamping = true; threeControls.dampingFactor = 0.1;
+  threeControls.zoomSpeed = 1.2;
   threeControls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY };
   threeRenderer.domElement.addEventListener('click', on3DObjectClick);
   threeRenderer.domElement.addEventListener('dblclick', on3DObjectDblClick);
@@ -177,6 +180,7 @@ function init3DScene() {
   threeDirectionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8); threeDirectionalLight1.position.set(200, 300, 400); threeScene.add(threeDirectionalLight1);
   threeDirectionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4); threeDirectionalLight2.position.set(-200, -100, 200); threeScene.add(threeDirectionalLight2);
   threeGridHelper = new THREE.GridHelper(1000, 50, 0x333344, 0x222233); threeGridHelper.rotation.x = Math.PI / 2; threeScene.add(threeGridHelper);
+  update3DGrid();
   threeTransformControls = new THREE.TransformControls(threeCamera, threeRenderer.domElement);
   threeTransformControls.setSize(0.8); threeTransformControls.setSpace('world'); threeTransformControls.setMode('translate');
   threeTransformControls.visible = false; threeScene.add(threeTransformControls);
@@ -283,6 +287,7 @@ function init3DScene() {
       saveState3D(); 
       update3DPositionInputs(); 
       update3DScaleInputs();
+      update3DGrid();
       
       // Mark that we just finished dragging to prevent on3DObjectClick from changing selection
       threeTransformControls._justFinishedDragging = true;
@@ -403,12 +408,6 @@ function start3DAnimation() {
     if (!threeControls || !threeRenderer || !threeScene || !threeCamera) return;
     threeControls.update();
     if (threeTransformControls && threeTransformControls.visible) threeTransformControls.update();
-    threeSelectionIndicator.forEach(ind => {
-      if (ind.userData.targetMesh && ind.userData.targetMesh.visible) {
-        const bbox = new THREE.Box3().setFromObject(ind.userData.targetMesh);
-        ind.position.copy(bbox.getCenter(new THREE.Vector3()));
-      }
-    });
     if (threeTransformControls && threeTransformControls._dragging) {
       update3DPositionInputs();
       update3DScaleInputs();
@@ -429,3 +428,50 @@ window.render = function() {
     if (typeof build3DObjects === 'function') setTimeout(build3DObjects, 100);
   }
 };
+
+function update3DGrid() {
+  if (!threeScene) return;
+  
+  let maxDim = 1000;
+  if (threeMeshes.length > 0) {
+    const globalBBox = new THREE.Box3();
+    let hasVisible = false;
+    threeMeshes.forEach(mesh => {
+      if (mesh.visible && !mesh.userData.hiddenByBoolean) {
+        globalBBox.union(new THREE.Box3().setFromObject(mesh));
+        hasVisible = true;
+      }
+    });
+    
+    if (hasVisible) {
+      const size = new THREE.Vector3();
+      globalBBox.getSize(size);
+      // We want the grid to cover the area. Objects are centered around (0,0) in XY.
+      maxDim = Math.max(size.x, size.y, 1000);
+      maxDim *= 1.2; // Padding
+    }
+  }
+  
+  // Snap to steps of 500
+  maxDim = Math.ceil(maxDim / 500) * 500;
+  
+  if (threeGridHelper && threeGridHelper.userData.gridSize === maxDim) return;
+
+  const isVisible = threeGridHelper ? threeGridHelper.visible : threeGraphicsSettings.gridVisible;
+  if (threeGridHelper) {
+    threeScene.remove(threeGridHelper);
+    if (threeGridHelper.geometry) threeGridHelper.geometry.dispose();
+    if (threeGridHelper.material) threeGridHelper.material.dispose();
+  }
+
+  // Keep divisions reasonable. 50 divisions for 1000 units = 20 units/square.
+  // We MUST ensure divisions is an EVEN number so the center lines are correctly drawn at (0,0).
+  let divisions = Math.max(20, Math.floor(maxDim / 20));
+  if (divisions % 2 !== 0) divisions++;
+  
+  threeGridHelper = new THREE.GridHelper(maxDim, divisions, 0x333344, 0x222233);
+  threeGridHelper.rotation.x = Math.PI / 2;
+  threeGridHelper.visible = isVisible;
+  threeGridHelper.userData.gridSize = maxDim;
+  threeScene.add(threeGridHelper);
+}

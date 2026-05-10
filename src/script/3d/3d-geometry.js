@@ -224,6 +224,7 @@ function build3DObjects() {
     threeCamera.position.set(0, 0, Math.abs(Math.max(size.x, size.y, size.z) / 2 / Math.tan(fov / 2)) * 1.3);
     threeControls.target.set(0, 0, size.z / 2); threeControls.update();
   }
+  if (typeof update3DGrid === 'function') update3DGrid();
 }
 
 function pathD_to_ThreeShapes(pathD) {
@@ -416,6 +417,7 @@ function _processImportedGeometry(name, geometryInput) {
     S.letters.push(newEl); mesh.userData.letterId = newEl.id;
   });
   initColorPresets(); buildExtrusionControlsFromState(); update3DSelectionHUD(); saveState3D(); saveState();
+  if (typeof update3DGrid === 'function') update3DGrid();
   toast(`Importati ${allComponents.length} oggetti da "${name}" ✓`);
 }
 

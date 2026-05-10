@@ -20,6 +20,7 @@ function union3DObjects() {
       resultMesh.visible = threeVisibilityState[colorAHex]; resultMesh.userData.colorHex = colorAHex;
       threeExtrusionLevels[colorAHex].meshes.push(resultMesh);
       clear3DSelection(); saveState3D();
+      if (typeof update3DGrid === 'function') update3DGrid();
       toast(`✓ Unione completata!`); return;
     }
   } catch (e) { console.error(e); toast('Errore unione: ' + e.message); }
@@ -51,6 +52,7 @@ function subtract3DObjects() {
       resultMesh.visible = threeVisibilityState[colorTargetHex];
       threeExtrusionLevels[colorTargetHex].meshes.push(resultMesh);
       clear3DSelection(); saveState3D();
+      if (typeof update3DGrid === 'function') update3DGrid();
       toast(`✓ Sottrazione completata!`);
     }
   } catch (e) { console.error(e); toast('Errore sottrazione: ' + e.message); }
@@ -253,6 +255,7 @@ function createPocket3D() {
 
     clear3DSelection();
     saveState3D();
+    if (typeof update3DGrid === 'function') update3DGrid();
     toast('✓ Tasca creata!');
 
   } catch (e) {
@@ -270,7 +273,9 @@ function duplicate3DSelection() {
     const cHex = mesh.userData.colorHex; if (threeExtrusionLevels[cHex]) threeExtrusionLevels[cHex].meshes.push(clone);
     newSels.push(clone);
   });
-  threeSelectionOrder = newSels; updateSelectionIndicators(); saveState3D(); toast(`✓ Duplicato`);
+  threeSelectionOrder = newSels; updateSelectionIndicators(); saveState3D(); 
+  if (typeof update3DGrid === 'function') update3DGrid();
+  toast(`✓ Duplicato`);
 }
 
 function delete3DSelection() {
@@ -279,7 +284,9 @@ function delete3DSelection() {
     mesh.visible = false; mesh.userData.hiddenByDelete = true;
     const cHex = mesh.userData.colorHex; if (threeExtrusionLevels[cHex]) { const idx = threeExtrusionLevels[cHex].meshes.indexOf(mesh); if (idx !== -1) threeExtrusionLevels[cHex].meshes.splice(idx, 1); }
   });
-  clear3DSelection(); saveState3D(); toast(`✓ Eliminato`);
+  clear3DSelection(); saveState3D(); 
+  if (typeof update3DGrid === 'function') update3DGrid();
+  toast(`✓ Eliminato`);
 }
 
 async function importSTL3D() {
