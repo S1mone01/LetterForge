@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LetterForge Pro - Caricamento</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Syne:wght@700;800&display=swap');
     
     * {
       box-sizing: border-box;
@@ -22,39 +22,61 @@
       --accent2: #ff6b35;
       --text: #e8e8f0;
       --muted: #5a5a7a;
+      --card-radius: 24px;
     }
     
     body {
       height: 100vh;
       width: 100vw;
-      background: var(--bg);
+      background: transparent;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-family: 'DM Mono', monospace;
+      font-family: 'Inter', sans-serif;
       overflow: hidden;
+      /* Drag disabled as requested */
     }
     
-    .splash-container {
+    .card {
+      background: var(--panel);
+      width: 420px;
+      padding: 48px 40px;
+      border-radius: var(--card-radius);
+      border: 1px solid var(--border);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 20px rgba(200, 255, 0, 0.03);
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 40px;
-      width: 100%;
-      max-width: 500px;
-      padding: 40px;
+      gap: 32px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Decorative gradient corner */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 150px;
+      height: 150px;
+      background: radial-gradient(circle at top right, rgba(200, 255, 0, 0.08), transparent 70%);
+      pointer-events: none;
     }
     
-    /* Logo styling - matches header logo but larger and centered */
+    .logo-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
     .logo {
       font-family: 'Syne', sans-serif;
       font-weight: 800;
-      font-size: 48px;
-      letter-spacing: -0.02em;
-      text-align: center;
-      white-space: nowrap;
-      padding: 0 20px;
+      font-size: 42px;
+      letter-spacing: -0.03em;
+      line-height: 1;
     }
     
     .logo .light {
@@ -65,125 +87,137 @@
       color: var(--text);
     }
     
-    .logo-subtitle {
-      font-family: 'Syne', sans-serif;
-      font-weight: 700;
-      font-size: 14px;
-      letter-spacing: 0.3em;
+    .tagline {
+      font-size: 11px;
       text-transform: uppercase;
+      letter-spacing: 0.25em;
       color: var(--muted);
-      margin-top: -30px;
-      text-align: center;
+      font-weight: 600;
+      margin-top: 4px;
     }
     
-    /* Loading bar container */
-    .loading-container {
+    .loading-section {
       width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
     }
     
-    .loading-bar-wrapper {
+    .progress-wrapper {
       width: 100%;
-      height: 4px;
+      height: 6px;
       background: var(--panel2);
-      border: 1px solid var(--border);
-      border-radius: 2px;
+      border-radius: 10px;
       overflow: hidden;
-      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.05);
     }
     
-    .loading-bar {
+    .progress-bar {
       height: 100%;
       width: 0%;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      border-radius: 2px;
-      transition: width 0.3s ease;
-      box-shadow: 0 0 10px rgba(200, 255, 0, 0.4);
+      background: linear-gradient(90deg, var(--accent), #eaff80);
+      border-radius: 10px;
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 12px rgba(200, 255, 0, 0.3);
     }
     
-    .loading-text {
+    .status-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-text {
       font-size: 11px;
       color: var(--muted);
-      text-align: center;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
+      font-weight: 500;
     }
     
-    .loading-status {
-      font-size: 10px;
-      color: var(--text);
-      text-align: center;
-      opacity: 0.7;
-      min-height: 14px;
+    .percent-text {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
-    
-    /* Subtle glow effect behind logo */
-    .logo-glow {
+
+    .version-tag {
       position: absolute;
-      width: 300px;
-      height: 300px;
-      background: radial-gradient(circle, rgba(200, 255, 0, 0.08) 0%, transparent 70%);
-      pointer-events: none;
-      z-index: -1;
+      bottom: 16px;
+      right: 20px;
+      font-size: 9px;
+      color: var(--border);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    /* Subtle pulse animation for the status text */
+    @keyframes pulse {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 0.5; }
+    }
+    
+    .status-text:not(:empty) {
+      animation: pulse 2s infinite ease-in-out;
     }
   </style>
 </head>
 <body>
-  <div class="logo-glow"></div>
-  
-  <div class="splash-container">
-    <!-- Logo -->
-    <div>
+  <div class="card">
+    <div class="logo-container">
       <div class="logo">
         <span class="light">Letter</span><span class="dark">Forge</span>
       </div>
+      <div class="tagline">Typography Studio</div>
     </div>
     
-    <!-- Loading bar -->
-    <div class="loading-container">
-      <div class="loading-bar-wrapper">
-        <div class="loading-bar" id="loading-bar"></div>
+    <div class="loading-section">
+      <div class="progress-wrapper">
+        <div class="progress-bar" id="loading-bar"></div>
       </div>
-      <div class="loading-text" id="loading-percent">0%</div>
-      <div class="loading-status" id="loading-status">Inizializzazione...</div>
+      <div class="status-container">
+        <div class="status-text" id="loading-status">Inizializzazione...</div>
+        <div class="percent-text" id="loading-percent">0%</div>
+      </div>
     </div>
+
+    <div class="version-tag">PRO EDITION</div>
   </div>
   
   <script>
-    // Listen for loading progress from main window
     let progress = 0;
     
     function updateProgress(percent, status) {
       progress = Math.min(100, Math.max(0, percent));
-      document.getElementById('loading-bar').style.width = progress + '%';
-      document.getElementById('loading-percent').textContent = Math.round(progress) + '%';
+      const bar = document.getElementById('loading-bar');
+      const percentEl = document.getElementById('loading-percent');
+      const statusEl = document.getElementById('loading-status');
+      
+      bar.style.width = progress + '%';
+      percentEl.textContent = Math.round(progress) + '%';
       if (status) {
-        document.getElementById('loading-status').textContent = status;
+        statusEl.textContent = status;
       }
     }
     
-    // Listen for messages from main window via Electron IPC
     if (window.electronAPI) {
       window.electronAPI.onSplashProgress((data) => {
         updateProgress(data.progress, data.status);
       });
       
       window.electronAPI.onSplashHide(() => {
-        // Fade out animation
-        document.body.style.transition = 'opacity 0.4s ease';
+        document.body.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
         document.body.style.opacity = '0';
+        document.body.style.transform = 'scale(0.95)';
         setTimeout(() => {
           document.body.style.display = 'none';
-        }, 400);
+        }, 600);
       });
     }
     
     // Initial animation
     setTimeout(() => {
-      updateProgress(80, 'Caricamento risorse...');
-    }, 300);
+      updateProgress(15, 'Avvio sistema...');
+    }, 100);
   </script>
 </body>
 </html>

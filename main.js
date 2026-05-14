@@ -27,18 +27,29 @@ let splashWindow = null;
 
 function createSplashWindow() {
   splashWindow = new BrowserWindow({
-    width: 500,
-    height: 400,
+    width: 600,
+    height: 500,
     frame: false,
     transparent: true,
-    backgroundColor: '#0d0d0f',
+    backgroundColor: '#00000000',
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
     center: true,
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js') // Ensure preload is available if needed, though splash.html uses window.electronAPI which is exposed by preload
+    }
   });
   
   splashWindow.loadFile(path.join(__dirname, 'src', 'splash.html'));
+  
+  splashWindow.once('ready-to-show', () => {
+    splashWindow.show();
+  });
+  
   return splashWindow;
 }
 

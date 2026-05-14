@@ -399,6 +399,14 @@ function setup3DCanvasKeyboard() {
     else if (key === 'c') {
       if (typeof createPocket3D === 'function') createPocket3D();
     }
+    else if (key === 'v') {
+      if (typeof threeSelectionOrder !== 'undefined' && threeSelectionOrder.length > 0) {
+        const colors = [...new Set(threeSelectionOrder.map(m => m.userData.colorHex || (m.material ? '#' + m.material.color.getHexString() : null)).filter(c => c))];
+        colors.forEach(color => {
+          if (typeof toggleColorVisibility === 'function') toggleColorVisibility(color);
+        });
+      }
+    }
   });
   canvas.focus();
 }

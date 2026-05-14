@@ -37,16 +37,19 @@
   </div>
 </div>
 
-<!-- ── HOME SCREEN ──────────────────────────────────────────────── -->
+<!-- ── HOME SCREEN (Redesigned) ─────────────────────────────────── -->
 <div id="home-screen" class="home-screen">
   <div class="home-content">
     <div class="home-header">
-      <div class="home-logo">Letter<span>Forge</span></div>
-      <div class="home-version-wrap">
-        <span id="home-version-display">v4.4.0</span>
-        <div id="home-update-status" class="update-status">
-          <div class="spinner" id="home-update-spinner"></div>
-          <div id="home-update-icon" style="display:none; align-items:center; gap:8px; cursor:pointer;"></div>
+      <div class="home-logo-wrap">
+        <div class="home-logo">Letter<span>Forge</span></div>
+      </div>
+      <div class="home-version-info">
+        <div class="home-version-tag" id="home-version-display">v4.5.8</div>
+        <div id="home-update-status" class="update-status-wrap">
+          <div class="spinner" id="home-update-spinner" style="display: none;"></div>
+          <div id="home-update-icon" class="update-icon" style="display: none;"></div>
+          <span id="home-update-text" class="update-text" style="display: none;"></span>
         </div>
       </div>
     </div>
@@ -54,27 +57,27 @@
     <div class="home-actions">
       <button class="home-btn" onclick="newProject()">
         <div class="home-btn-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
-        <span>Nuovo file</span>
+        <span>Nuovo Progetto</span>
       </button>
       <button class="home-btn" onclick="openProjectFromFile()">
         <div class="home-btn-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
         </div>
-        <span>Apri file</span>
+        <span>Apri File</span>
       </button>
 
-      <button class="home-btn" onclick="if(window.electronAPI && window.electronAPI.checkForUpdates) window.electronAPI.checkForUpdates(); toast('Ricerca aggiornamenti in corso...')">
+      <button class="home-btn" onclick="if(window.electronAPI && window.electronAPI.checkForUpdates) window.electronAPI.checkForUpdates(); toast('Ricerca aggiornamenti...')">
         <div class="home-btn-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
         </div>
-        <span>Controlla aggiornamenti</span>
+        <span>Aggiornamenti</span>
       </button>
     </div>
 
     <div class="home-recent">
-      <div class="sec-title" style="margin-bottom:20px;text-align:left;font-size:18px;font-weight:800;color:var(--text)">Recenti</div>
+      <div class="sec-title">Progetti Recenti</div>
       <div id="recent-grid" class="recent-grid">
         <!-- Injected by JS (home.js) -->
       </div>
