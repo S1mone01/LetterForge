@@ -1649,16 +1649,18 @@ input[type=number]:focus, input[type=text]:focus {
 
 .home-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
+    justify-content: center;
+    align-items: center;
     margin-bottom: 40px;
     flex-shrink: 0;
+    text-align: center;
 }
 
 .home-logo-wrap {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
 }
 
 .home-logo {
@@ -1685,9 +1687,10 @@ input[type=number]:focus, input[type=text]:focus {
 .home-version-info {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
-    height: 50px;
+    height: 30px;
+    margin-top: 4px;
 }
 
 .home-version-tag {
@@ -1701,10 +1704,57 @@ input[type=number]:focus, input[type=text]:focus {
     border: 1px solid var(--border);
 }
 
+.home-update-link {
+    background: rgba(229, 90, 43, 0.1);
+    border: 1px solid rgba(229, 90, 43, 0.3);
+    padding: 5px 14px;
+    border-radius: 20px;
+    color: #ff7a45;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.home-update-link.success {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: rgba(76, 175, 80, 0.3);
+    color: #66bb6a;
+}
+
+.home-update-link:hover {
+    background: rgba(229, 90, 43, 0.15);
+    border-color: rgba(229, 90, 43, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(229, 90, 43, 0.2);
+}
+
+.home-update-link.success:hover {
+    background: rgba(76, 175, 80, 0.15);
+    border-color: rgba(76, 175, 80, 0.5);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+}
+
+.home-update-link svg {
+    flex-shrink: 0;
+}
+
+.home-update-link svg {
+    flex-shrink: 0;
+}
+
 .update-status-wrap {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 6px;
     min-height: 20px;
 }

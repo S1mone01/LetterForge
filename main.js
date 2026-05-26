@@ -219,10 +219,10 @@ function createWindow() {
   createSplashWindow();
 
   const win = new BrowserWindow({
-    width: 1400,
+    width: 1420,
     height: 860,
-    minWidth: 900,
-    minHeight: 600,
+    minWidth: 1420,
+    minHeight: 800,
     title: 'LetterForge Pro',
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     backgroundColor: '#0d0d0f',

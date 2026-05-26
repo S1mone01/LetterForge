@@ -106,16 +106,34 @@ function showUpdateNotify(info) {
   updateState.available = true;
   if (info && info.version) updateState.version = info.version;
 
-  verEl.textContent = 'Versione ' + updateState.version;
-  fillEl.style.width = updateState.downloaded ? '100%' : '0%';
-  pctEl.textContent = updateState.downloaded ? '100%' : '0%';
-  downloadBtn.style.display = (updateState.downloaded || updateState.downloading) ? 'none' : 'block';
-  restartBtn.style.display = updateState.downloaded ? 'block' : 'none';
-  infoEl.style.display = updateState.downloaded ? 'block' : 'none';
-  if (updateState.downloaded) infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
+  if (verEl) verEl.textContent = 'Versione ' + updateState.version;
+  
+  // Gestione visibilità pulsanti e progressi
+  if (updateState.downloaded) {
+    if (fillEl) fillEl.style.width = '100%';
+    if (pctEl) pctEl.textContent = '100%';
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    if (restartBtn) restartBtn.style.display = 'block';
+    if (infoEl) {
+      infoEl.style.display = 'block';
+      infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
+    }
+  } else if (updateState.downloading) {
+    // Se sta già scaricando, non mostriamo il pulsante download ma lasciamo la barra
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    if (restartBtn) restartBtn.style.display = 'none';
+    if (infoEl) infoEl.style.display = 'none';
+  } else {
+    // Stato iniziale: aggiornamento disponibile ma non iniziato
+    if (fillEl) fillEl.style.width = '0%';
+    if (pctEl) pctEl.textContent = '0%';
+    if (downloadBtn) downloadBtn.style.display = 'block';
+    if (restartBtn) restartBtn.style.display = 'none';
+    if (infoEl) infoEl.style.display = 'none';
+  }
 
   if (overlay) overlay.classList.add('show');
-  panel.classList.add('show');
+  if (panel) panel.classList.add('show');
 }
 
 function hideUpdateNotify() {
@@ -190,39 +208,41 @@ function handleUpdateStatus(data) {
   const homeStatus = document.getElementById('home-update-status');
   const homeSpinner = document.getElementById('home-update-spinner');
   const homeIcon = document.getElementById('home-update-icon');
+  const homeUpdateText = document.getElementById('home-update-text');
 
   switch(data.status) {
     case 'checking':
+      if (homeVer) homeVer.style.display = 'none';
       if (homeStatus) homeStatus.style.display = 'flex';
       if (homeSpinner) homeSpinner.style.display = 'block';
       if (homeIcon) homeIcon.style.display = 'none';
+      if (homeUpdateText) homeUpdateText.style.display = 'none';
       break;
 
     case 'available':
       updateState.version = data.version;
       updateState.available = true;
-      if (homeVer) homeVer.style.display = 'block'; 
+      if (homeVer) homeVer.style.display = 'none'; 
       if (homeStatus) homeStatus.style.display = 'flex';
       if (homeSpinner) homeSpinner.style.display = 'none';
-      if (homeIcon) {
-        homeIcon.style.display = 'flex';
-        homeIcon.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:var(--accent2);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          <span style="color:var(--accent2); font-size:13px; font-weight:700; white-space:nowrap;">Download</span>
+      if (homeIcon) homeIcon.style.display = 'none';
+      if (homeUpdateText) {
+        homeUpdateText.style.display = 'flex';
+        homeUpdateText.className = 'home-update-link';
+        homeUpdateText.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>aggiorna...</span>
         `;
-        homeIcon.onclick = () => showUpdateNotify({ version: data.version });
+        homeUpdateText.onclick = () => showUpdateNotify({ version: data.version });
       }
       break;
 
     case 'not-available':
       if (homeVer) homeVer.style.display = 'block';
-      if (homeStatus) homeStatus.style.display = 'flex';
+      if (homeStatus) homeStatus.style.display = 'none';
       if (homeSpinner) homeSpinner.style.display = 'none';
-      if (homeIcon) {
-        homeIcon.style.display = 'flex';
-        homeIcon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" title="Software aggiornato"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-        homeIcon.onclick = null;
-      }
+      if (homeIcon) homeIcon.style.display = 'none';
+      if (homeUpdateText) homeUpdateText.style.display = 'none';
       break;
 
     case 'downloading':
@@ -230,15 +250,18 @@ function handleUpdateStatus(data) {
       const pct = Math.round(data.percent);
       if (fillEl) fillEl.style.width = pct + '%';
       if (pctEl) pctEl.textContent = pct + '% - Download in corso...';
-      if (homeVer) homeVer.style.display = 'block';
+      
+      if (homeVer) homeVer.style.display = 'none';
       if (homeStatus) homeStatus.style.display = 'flex';
       if (homeSpinner) homeSpinner.style.display = 'none';
-      if (homeIcon) {
-        homeIcon.style.display = 'flex';
-        homeIcon.innerHTML = `
-          <div class="spinner" style="width:12px; height:12px; border-width:2px; margin-right:5px"></div>
-          <span style="font-size:13px; font-weight:700; color:var(--accent2)">Download ${pct}%</span>
-        `;
+      if (homeUpdateText) {
+          homeUpdateText.style.display = 'flex';
+          homeUpdateText.className = 'home-update-link';
+          homeUpdateText.innerHTML = `
+            <div class="spinner" style="width:12px; height:12px; border-width:2px; margin-right:5px"></div>
+            <span>Scaricando ${pct}%...</span>
+          `;
+          homeUpdateText.onclick = null;
       }
       break;
 
@@ -257,34 +280,27 @@ function handleUpdateStatus(data) {
         infoEl.innerHTML = "L'aggiornamento verrà installato al riavvio.";
       }
 
-      if (homeVer) homeVer.style.display = 'block';
+      if (homeVer) homeVer.style.display = 'none';
       if (homeStatus) homeStatus.style.display = 'flex';
       if (homeSpinner) homeSpinner.style.display = 'none';
-      if (homeIcon) {
-        homeIcon.style.display = 'flex';
-        homeIcon.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span style="color:#4caf50; font-size:13px; font-weight:700; white-space:nowrap;">Riavvia per installare</span>
+      if (homeUpdateText) {
+        homeUpdateText.style.display = 'flex';
+        homeUpdateText.className = 'home-update-link success';
+        homeUpdateText.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>riavvia ora</span>
         `;
-        homeIcon.onclick = () => showUpdateNotify();
+        homeUpdateText.onclick = () => quitAndInstall();
       }
 
-      // Se il pannello è già aperto, lo aggiorniamo, altrimenti lo mostriamo
-      if (panel && panel.classList.contains('show')) {
-        // Già mostrato
-      } else {
-        toast('Download completato! Riavvia per installare.');
-      }
+      toast('Download completato! Riavvia per installare.');
       break;
 
     case 'error':
       updateState.downloading = false;
       console.error('[RENDERER] Update error:', data.error);
-      if (homeSpinner) homeSpinner.style.display = 'none';
-      if (homeIcon) {
-        homeIcon.style.display = 'flex';
-        homeIcon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="color:#ff4444" title="Errore aggiornamento."><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
-      }
+      if (homeVer) homeVer.style.display = 'block';
+      if (homeStatus) homeStatus.style.display = 'none';
       break;
   }
 }
